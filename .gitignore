@@ -1,0 +1,21 @@
+# Build outputs
+build/
+out/
+.cxx/
+.gradle/
+.kotlin/
+vcpkg_installed/
+/compile_commands.json
+CMakeUserPresets.json
+
+# IDE and OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Local and secret files
+local.properties
+*.jks
+*.keystore
+keystore.properties
