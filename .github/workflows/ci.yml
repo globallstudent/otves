@@ -40,7 +40,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.cache/vcpkg/archives
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('engine/vcpkg.json') }}
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('engine/vcpkg.json', 'engine/cmake/triplets/**') }}
 
       - name: Format
         run: find engine -path '*/build' -prune -o \( -name '*.h' -o -name '*.cpp' \) -print | xargs "clang-format-$LLVM" --dry-run --Werror

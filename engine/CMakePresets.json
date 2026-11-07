@@ -1,6 +1,10 @@
 {
   "version": 10,
-  "cmakeMinimumRequired": { "major": 4, "minor": 0, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 4,
+    "minor": 0,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "base",
@@ -17,29 +21,45 @@
       "name": "desktop",
       "hidden": true,
       "inherits": "base",
-      "cacheVariables": { "VCPKG_MANIFEST_FEATURES": "tests" }
+      "cacheVariables": {
+        "VCPKG_MANIFEST_FEATURES": "tests"
+      }
     },
     {
       "name": "desktop-debug",
       "inherits": "desktop",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
     },
     {
       "name": "desktop-asan",
       "displayName": "Desktop Debug with AddressSanitizer + UndefinedBehaviorSanitizer",
       "inherits": "desktop",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "OTVES_SANITIZERS": "address;undefined" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "OTVES_SANITIZERS": "address;undefined",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_TARGET_TRIPLET": "otves-asan"
+      }
     },
     {
       "name": "desktop-tsan",
       "displayName": "Desktop Debug with ThreadSanitizer",
       "inherits": "desktop",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "OTVES_SANITIZERS": "thread" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "OTVES_SANITIZERS": "thread",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_TARGET_TRIPLET": "otves-tsan"
+      }
     },
     {
       "name": "desktop-release",
       "inherits": "desktop",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     },
     {
       "name": "android-arm64",
@@ -58,31 +78,70 @@
       "name": "android-arm64-debug",
       "displayName": "Android arm64 Debug with HWAddressSanitizer",
       "inherits": "android-arm64",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "OTVES_SANITIZERS": "hwaddress" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "OTVES_SANITIZERS": "hwaddress"
+      }
     },
     {
       "name": "android-arm64-release",
       "inherits": "android-arm64",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "desktop-debug", "configurePreset": "desktop-debug" },
-    { "name": "desktop-asan", "configurePreset": "desktop-asan" },
-    { "name": "desktop-tsan", "configurePreset": "desktop-tsan" },
-    { "name": "desktop-release", "configurePreset": "desktop-release" },
-    { "name": "android-arm64-debug", "configurePreset": "android-arm64-debug" },
-    { "name": "android-arm64-release", "configurePreset": "android-arm64-release" }
+    {
+      "name": "desktop-debug",
+      "configurePreset": "desktop-debug"
+    },
+    {
+      "name": "desktop-asan",
+      "configurePreset": "desktop-asan"
+    },
+    {
+      "name": "desktop-tsan",
+      "configurePreset": "desktop-tsan"
+    },
+    {
+      "name": "desktop-release",
+      "configurePreset": "desktop-release"
+    },
+    {
+      "name": "android-arm64-debug",
+      "configurePreset": "android-arm64-debug"
+    },
+    {
+      "name": "android-arm64-release",
+      "configurePreset": "android-arm64-release"
+    }
   ],
   "testPresets": [
     {
       "name": "desktop-base",
       "hidden": true,
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error" }
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
     },
-    { "name": "desktop-debug", "inherits": "desktop-base", "configurePreset": "desktop-debug" },
-    { "name": "desktop-asan", "inherits": "desktop-base", "configurePreset": "desktop-asan" },
-    { "name": "desktop-tsan", "inherits": "desktop-base", "configurePreset": "desktop-tsan" }
+    {
+      "name": "desktop-debug",
+      "inherits": "desktop-base",
+      "configurePreset": "desktop-debug"
+    },
+    {
+      "name": "desktop-asan",
+      "inherits": "desktop-base",
+      "configurePreset": "desktop-asan"
+    },
+    {
+      "name": "desktop-tsan",
+      "inherits": "desktop-base",
+      "configurePreset": "desktop-tsan"
+    }
   ]
 }
