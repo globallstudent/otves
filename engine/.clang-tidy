@@ -1,3 +1,5 @@
+# operator[] is not flagged: libc++ hardening bounds-checks it in every build.
+# Trailing commas are clang-format's business, not a lint.
 Checks: >
   bugprone-*,
   clang-analyzer-*,
@@ -11,10 +13,14 @@ Checks: >
   -modernize-use-trailing-return-type,
   -readability-identifier-length,
   -cppcoreguidelines-avoid-do-while,
-  -portability-avoid-pragma-once
+  -portability-avoid-pragma-once,
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  -readability-trailing-comma
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*/engine/.*'
 CheckOptions:
+  # Aggregates (Wall, PointMm, ops) are plain data with public members by design (C.2).
+  misc-non-private-member-variables-in-classes.IgnoreClassesWithAllMemberVariablesBeingPublic: true
   readability-function-cognitive-complexity.Threshold: 25
   readability-identifier-naming.ClassCase: CamelCase
   readability-identifier-naming.StructCase: CamelCase

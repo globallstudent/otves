@@ -1,4 +1,12 @@
-add_library(otves_core src/assert.cpp)
+add_library(otves_core
+  src/assert.cpp
+  src/command.cpp
+  src/document.cpp
+  src/hlc.cpp
+  src/model.cpp
+  src/op.cpp
+  src/uuid.cpp
+  src/wall.cpp)
 add_library(otves::core ALIAS otves_core)
 
 target_include_directories(otves_core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
@@ -10,6 +18,12 @@ if(ANDROID)
 endif()
 
 if(OTVES_BUILD_TESTS)
-  otves_add_test(otves_core_tests tests/units_test.cpp tests/error_test.cpp)
+  otves_add_test(otves_core_tests
+    tests/document_test.cpp
+    tests/error_test.cpp
+    tests/hlc_test.cpp
+    tests/slot_map_test.cpp
+    tests/units_test.cpp
+    tests/uuid_test.cpp)
   target_link_libraries(otves_core_tests PRIVATE otves::core)
 endif()

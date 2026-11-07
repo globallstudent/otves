@@ -8,6 +8,8 @@
 
 namespace otves {
 
+inline constexpr double kMmPerMetre = 1000.0;
+
 // A length typed or measured on site, in whole millimetres.
 // Integer storage keeps measured values exact (6 400 stays 6 400 through any
 // number of edits); geometry converts to double metres with to_metres().
@@ -44,13 +46,13 @@ class Mm {
 };
 
 [[nodiscard]] constexpr double to_metres(Mm length) {
-  return static_cast<double>(length.value()) / 1000.0;
+  return static_cast<double>(length.value()) / kMmPerMetre;
 }
 
 // Rounds a computed length back to the millimetre grid used for display and storage.
 [[nodiscard]] inline Mm round_to_mm(double metres) {
   OTVES_ASSERT(std::isfinite(metres));
-  return Mm{std::llround(metres * 1000.0)};
+  return Mm{std::llround(metres * kMmPerMetre)};
 }
 
 namespace literals {
