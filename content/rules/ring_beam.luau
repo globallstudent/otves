@@ -42,7 +42,7 @@ return {
 
 		local area, length = 0, 0
 		for _, wall in input.walls do
-			if wall.thickness * 1000 >= practice.min_wall_thickness - ROUNDING then
+			if wall.thickness * 1000 >= norms.practice.walls.load_bearing_min_thickness - ROUNDING then
 				area += wall.footprint_area
 				length += wall.length
 			end

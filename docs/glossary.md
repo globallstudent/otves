@@ -21,6 +21,7 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | lintel | перемычка | peremichka | Beam over an opening (ГОСТ 948) |
 | bearing | опирание | tayanish | Length of a lintel or slab resting on the masonry on each side |
 | ring beam | армопояс | armopoyas, seysmopoyas | Seismic reinforced-concrete belt (КМК 2.01.03-19) |
+| junction mesh | сетка в узле сопряжения | tutashma to‘ri | Bed-joint mesh where walls meet, every 700 or 500 mm of height (КМК 2.01.03-19, 3.5.12) |
 | core column | сердечник | o‘zak | Reinforced-concrete core in masonry at corners and piers |
 | strip footing | ленточный фундамент | lentali poydevor | Continuous foundation under walls |
 | slab | плита | plita | Floor or roof slab |

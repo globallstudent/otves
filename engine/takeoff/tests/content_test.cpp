@@ -39,7 +39,7 @@ RuleSet content() {
                           load("norms/practice.luau"), load("norms/rebar.luau"),
                           load("norms/seismic.luau")};
   const std::vector rules{load("rules/masonry.luau"), load("rules/lintels.luau"),
-                          load("rules/ring_beam.luau")};
+                          load("rules/ring_beam.luau"), load("rules/junction_meshes.luau")};
   auto set = RuleSet::compile({.norms = norms, .rules = rules});
   EXPECT_TRUE(set.has_value()) << set.error().message;
   return *std::move(set);
@@ -241,6 +241,26 @@ TEST(Content, RingBeamRejectsValuesBelowTheNorm) {
   ASSERT_FALSE(weak.has_value());
   EXPECT_NE(weak.error().message.find("ring_beam_concrete must be at least 12.5"),
             std::string::npos);
+}
+
+TEST(Content, JunctionMeshesFollowIntensity) {
+  const RuleSet rules = content();
+  // Four corners of 2.8 m walls; the partition's T-junction with the bottom wall gets none.
+  const Room r = room(rules, {}, {wall(5, {3200_mm, 0_mm}, {3200_mm, 4000_mm}, 120_mm)});
+
+  const auto nine = rules.run(r.measurement, r.masonry, {});
+  ASSERT_TRUE(nine.has_value()) << nine.error().message;
+  // 9 points: every 500 mm below the top, 5 layers at each corner.
+  EXPECT_EQ(amount(lines_of(*nine, "junction_meshes"), "mesh.junction"), 4 * 5);
+
+  const auto eight = rules.run(r.measurement, r.masonry, {{"seismic_intensity", 8.0}});
+  ASSERT_TRUE(eight.has_value()) << eight.error().message;
+  // 8 points: every 700 mm; the layer at 2.8 m is the ring beam, so 3 layers.
+  EXPECT_EQ(amount(lines_of(*eight, "junction_meshes"), "mesh.junction"), 4 * 3);
+
+  const auto above_nine = rules.run(r.measurement, r.masonry, {{"seismic_intensity", 10.0}});
+  ASSERT_FALSE(above_nine.has_value());
+  EXPECT_NE(above_nine.error().message.find("КМК 3.5.1"), std::string::npos);
 }
 
 }  // namespace

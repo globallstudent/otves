@@ -3,7 +3,7 @@
 return {
 	source = {
 		standard = "КМК 2.01.03-19",
-		clause = "3.5.10, 3.5.11, 3.5.15",
+		clause = "3.5.10–3.5.12, 3.5.15",
 		jurisdiction = "UZ",
 		status = "mandatory",
 	},
@@ -22,6 +22,17 @@ return {
 			[8] = { count = 4, diameter = 10 },
 			[9] = { count = 4, diameter = 12 },
 			[10] = { count = 4, diameter = 14 },
+		},
+	},
+	-- Meshes laid in the bed joints where walls meet: at least 1 cm² of longitudinal bars, 1.5 m
+	-- long. Above 9 points 3.5.1 may call for denser, stronger meshes; they are not listed here.
+	junction_mesh = {
+		length = 1500,
+		min_bar_area = 100, -- mm²
+		pitch = { -- vertical spacing by design intensity in points
+			[7] = 700,
+			[8] = 700,
+			[9] = 500,
 		},
 	},
 }

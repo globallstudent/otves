@@ -23,11 +23,13 @@ return {
 		width = 120,
 		joint = 10,
 	},
+	walls = {
+		-- Thinner walls are partitions (КМК 3.9.7): no ring beam and no junction meshes, until walls
+		-- carry a load-bearing flag. Millimetres.
+		load_bearing_min_thickness = 250,
+	},
 	ring_beam = {
 		concrete_class = 15, -- B15, a common ready-mix; the КМК minimum is B12.5
 		rebar = "a500c",
-		-- Thinner walls are partitions (КМК 3.9.7), which get bed-joint bars instead of a ring beam,
-		-- until walls carry a load-bearing flag. Millimetres.
-		min_wall_thickness = 250,
 	},
 }
