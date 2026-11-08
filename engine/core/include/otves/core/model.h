@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include <otves/core/assert.h>
+#include <otves/core/opening.h>
 #include <otves/core/slot_map.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -114,7 +115,7 @@ class Model {
     return std::get<ElementStore<T>>(stores_);
   }
 
-  std::tuple<ElementStore<Wall>> stores_;
+  std::tuple<ElementStore<Wall>, ElementStore<Opening>> stores_;
 };
 
 }  // namespace otves

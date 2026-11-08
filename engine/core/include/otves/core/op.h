@@ -6,6 +6,7 @@
 
 #include <otves/core/element.h>
 #include <otves/core/hlc.h>
+#include <otves/core/opening.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 
@@ -42,8 +43,12 @@ struct SetField {
 using CreateWall = Create<Wall>;
 using DeleteWall = Delete<Wall>;
 using SetWallField = SetField<Wall>;
+using CreateOpening = Create<Opening>;
+using DeleteOpening = Delete<Opening>;
+using SetOpeningField = SetField<Opening>;
 
-using Op = std::variant<CreateWall, DeleteWall, SetWallField>;
+using Op = std::variant<CreateWall, DeleteWall, SetWallField, CreateOpening, DeleteOpening,
+                        SetOpeningField>;
 
 [[nodiscard]] Op inverse(const Op& op);
 [[nodiscard]] ElementId target(const Op& op);
@@ -56,6 +61,12 @@ enum class CommandKind : std::uint8_t {
   kSetWallHeight,
   kSetWallLocationLine,
   kRemoveWall,
+  kAddOpening,
+  kMoveOpening,
+  kResizeOpening,
+  kSetOpeningSill,
+  kSetOpeningKind,
+  kRemoveOpening,
   kUndo,
   kRedo,
 };

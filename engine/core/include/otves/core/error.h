@@ -15,6 +15,9 @@ enum class ErrorCode : std::uint8_t {
   kZeroLength,
   kThicknessNotPositive,
   kHeightNotPositive,
+  kWidthNotPositive,
+  kOffsetNegative,  // an opening's distance from its wall's start
+  kSillNegative,
   kUnitSizeNotPositive,  // a brick or block dimension
   kJointNegative,        // a mortar joint thickness
   kRuleSyntax,           // a content script does not compile or has a bad name

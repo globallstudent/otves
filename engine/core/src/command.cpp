@@ -15,6 +15,12 @@ CommandKind kind_of(const Command& command) {
           [](const SetWallHeight&) { return CommandKind::kSetWallHeight; },
           [](const SetWallLocationLine&) { return CommandKind::kSetWallLocationLine; },
           [](const RemoveWall&) { return CommandKind::kRemoveWall; },
+          [](const AddOpening&) { return CommandKind::kAddOpening; },
+          [](const MoveOpening&) { return CommandKind::kMoveOpening; },
+          [](const ResizeOpening&) { return CommandKind::kResizeOpening; },
+          [](const SetOpeningSill&) { return CommandKind::kSetOpeningSill; },
+          [](const SetOpeningKind&) { return CommandKind::kSetOpeningKind; },
+          [](const RemoveOpening&) { return CommandKind::kRemoveOpening; },
       },
       command);
 }

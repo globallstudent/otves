@@ -1,5 +1,4 @@
 #include <expected>
-#include <variant>
 
 #include <otves/core/assert.h>
 #include <otves/core/error.h>
@@ -7,21 +6,14 @@
 #include <otves/core/units.h>
 #include <otves/core/wall.h>
 
+#include "field.h"
+
 namespace otves {
 namespace {
 
 constexpr bool on_plan(PointMm point) {
   const auto within = [](Mm value) { return value >= -kMaxCoordinate && value <= kMaxCoordinate; };
   return within(point.x) && within(point.y);
-}
-
-template <typename T>
-void assign(T& target, const WallValue& value) {
-  const T* typed = std::get_if<T>(&value);
-  OTVES_ASSERT(typed != nullptr);
-  if (typed != nullptr) {
-    target = *typed;
-  }
 }
 
 }  // namespace

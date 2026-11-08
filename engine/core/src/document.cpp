@@ -1,8 +1,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <expected>
+#include <initializer_list>
 #include <optional>
 #include <ranges>
+#include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -12,7 +15,9 @@
 #include <otves/core/document.h>
 #include <otves/core/element.h>
 #include <otves/core/error.h>
+#include <otves/core/model.h>
 #include <otves/core/op.h>
+#include <otves/core/opening.h>
 #include <otves/core/overloaded.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -22,22 +27,58 @@ namespace {
 
 using Ops = std::vector<Op>;
 
-// Plans a single-field change: validates the element as it would become and records
-// before/after. Setting a field to its current value plans nothing.
 template <typename T>
-std::expected<Ops, Error> change(ElementId id, const T& current,
-                                 typename ElementTraits<T>::Field field,
-                                 const typename ElementTraits<T>::Value& value) {
-  T changed = current;
-  set_field(changed, field, value);
-  if (auto valid = validate(changed); !valid) {
-    return std::unexpected(std::move(valid.error()));
+using FieldChange = std::pair<typename ElementTraits<T>::Field, typename ElementTraits<T>::Value>;
+
+template <typename T>
+std::expected<const T*, Error> find_element(const Model& model, ElementId id) {
+  const T* element = model.find<T>(id);
+  if (element == nullptr) {
+    return make_error(ErrorCode::kNotFound, std::string{ElementTraits<T>::kName} + " not found");
   }
-  if (changed == current) {
-    return Ops{};
-  }
-  return Ops{
-      SetField<T>{.id = id, .field = field, .before = get_field(current, field), .after = value}};
+  return element;
+}
+
+// Plans changes to fields of one element: validates the element as it would become and records
+// before/after for each field that really changes.
+template <typename T>
+std::expected<Ops, Error> edit(
+    const Model& model, ElementId id,
+    std::type_identity_t<std::initializer_list<FieldChange<T>>> changes) {
+  return find_element<T>(model, id).and_then([&](const T* current) -> std::expected<Ops, Error> {
+    T changed = *current;
+    for (const auto& [field, value] : changes) {
+      set_field(changed, field, value);
+    }
+    if (auto valid = validate(changed); !valid) {
+      return std::unexpected(std::move(valid.error()));
+    }
+    Ops ops;
+    for (const auto& [field, value] : changes) {
+      auto before = get_field(*current, field);
+      if (before != value) {
+        ops.push_back(
+            SetField<T>{.id = id, .field = field, .before = std::move(before), .after = value});
+      }
+    }
+    return ops;
+  });
+}
+
+// The wall's openings are deleted first, so undo recreates the wall before them.
+std::expected<Ops, Error> remove_wall(const Model& model, ElementId id) {
+  return find_element<Wall>(model, id).transform([&model, id](const Wall* wall) {
+    std::vector<DeleteOpening> hosted;
+    model.for_each<Opening>([&hosted, id](ElementId opening_id, const Opening& opening) {
+      if (opening.wall == id) {
+        hosted.push_back({.id = opening_id, .element = opening});
+      }
+    });
+    std::ranges::sort(hosted, {}, &DeleteOpening::id);
+    Ops ops(hosted.begin(), hosted.end());
+    ops.emplace_back(DeleteWall{.id = id, .element = *wall});
+    return ops;
+  });
 }
 
 // A drag sends a command every frame. Within a gesture each field keeps its first `before` and
@@ -168,47 +209,61 @@ std::vector<ElementId> Document::take_dirty() {
 }
 
 std::expected<Ops, Error> Document::plan(const Command& command) {
-  const auto find = [this](ElementId id) -> std::expected<const Wall*, Error> {
-    const Wall* wall = model_.find<Wall>(id);
-    if (wall == nullptr) {
-      return make_error(ErrorCode::kNotFound, "wall not found");
-    }
-    return wall;
-  };
-  const auto change_field = [&find](ElementId id, WallField field,
-                                    const WallValue& value) -> std::expected<Ops, Error> {
-    return find(id).and_then([&](const Wall* wall) { return change(id, *wall, field, value); });
-  };
-
-  return std::visit(Overloaded{
-                        [this](const AddWall& add) -> std::expected<Ops, Error> {
-                          if (auto valid = validate(add.wall); !valid) {
-                            return std::unexpected(std::move(valid.error()));
-                          }
-                          return Ops{CreateWall{.id = ElementId{next_uuid()}, .element = add.wall}};
-                        },
-                        [&change_field](const MoveWallEnd& move) {
-                          const WallField field =
-                              move.end == WallEnd::kStart ? WallField::kStart : WallField::kEnd;
-                          return change_field(move.wall, field, move.to);
-                        },
-                        [&change_field](const SetWallThickness& set) {
-                          return change_field(set.wall, WallField::kThickness, set.thickness);
-                        },
-                        [&change_field](const SetWallHeight& set) {
-                          return change_field(set.wall, WallField::kHeight, set.height);
-                        },
-                        [&change_field](const SetWallLocationLine& set) {
-                          return change_field(set.wall, WallField::kLocationLine,
-                                              set.location_line);
-                        },
-                        [&find](const RemoveWall& remove) -> std::expected<Ops, Error> {
-                          return find(remove.wall).transform([&remove](const Wall* wall) {
-                            return Ops{DeleteWall{.id = remove.wall, .element = *wall}};
-                          });
-                        },
-                    },
-                    command);
+  const Model& model = model_;
+  return std::visit(
+      Overloaded{
+          [this](const AddWall& add) -> std::expected<Ops, Error> {
+            if (auto valid = validate(add.wall); !valid) {
+              return std::unexpected(std::move(valid.error()));
+            }
+            return Ops{CreateWall{.id = ElementId{next_uuid()}, .element = add.wall}};
+          },
+          [&model](const MoveWallEnd& move) {
+            const WallField field =
+                move.end == WallEnd::kStart ? WallField::kStart : WallField::kEnd;
+            return edit<Wall>(model, move.wall, {{field, move.to}});
+          },
+          [&model](const SetWallThickness& set) {
+            return edit<Wall>(model, set.wall, {{WallField::kThickness, set.thickness}});
+          },
+          [&model](const SetWallHeight& set) {
+            return edit<Wall>(model, set.wall, {{WallField::kHeight, set.height}});
+          },
+          [&model](const SetWallLocationLine& set) {
+            return edit<Wall>(model, set.wall, {{WallField::kLocationLine, set.location_line}});
+          },
+          [&model](const RemoveWall& remove) { return remove_wall(model, remove.wall); },
+          [this](const AddOpening& add) -> std::expected<Ops, Error> {
+            if (auto valid = validate(add.opening); !valid) {
+              return std::unexpected(std::move(valid.error()));
+            }
+            return find_element<Wall>(model_, add.opening.wall)
+                .transform([this, &add](const Wall*) {
+                  return Ops{CreateOpening{.id = ElementId{next_uuid()}, .element = add.opening}};
+                });
+          },
+          [&model](const MoveOpening& move) {
+            return edit<Opening>(model, move.opening, {{OpeningField::kOffset, move.offset}});
+          },
+          [&model](const ResizeOpening& resize) {
+            return edit<Opening>(
+                model, resize.opening,
+                {{OpeningField::kWidth, resize.width}, {OpeningField::kHeight, resize.height}});
+          },
+          [&model](const SetOpeningSill& set) {
+            return edit<Opening>(model, set.opening, {{OpeningField::kSill, set.sill}});
+          },
+          [&model](const SetOpeningKind& set) {
+            return edit<Opening>(model, set.opening, {{OpeningField::kKind, set.kind}});
+          },
+          [&model](const RemoveOpening& remove) {
+            return find_element<Opening>(model, remove.opening)
+                .transform([&remove](const Opening* opening) {
+                  return Ops{DeleteOpening{.id = remove.opening, .element = *opening}};
+                });
+          },
+      },
+      command);
 }
 
 void Document::apply(const Op& op) {

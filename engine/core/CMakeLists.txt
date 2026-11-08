@@ -4,6 +4,7 @@ add_library(otves_core
   src/document.cpp
   src/hlc.cpp
   src/op.cpp
+  src/opening.cpp
   src/uuid.cpp
   src/wall.cpp)
 add_library(otves::core ALIAS otves_core)
@@ -21,6 +22,7 @@ if(OTVES_BUILD_TESTS)
     tests/document_test.cpp
     tests/error_test.cpp
     tests/hlc_test.cpp
+    tests/opening_test.cpp
     tests/slot_map_test.cpp
     tests/units_test.cpp
     tests/uuid_test.cpp)

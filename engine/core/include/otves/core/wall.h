@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <string_view>
 #include <variant>
 
 #include <otves/core/element.h>
@@ -59,6 +60,7 @@ template <>
 struct ElementTraits<Wall> {
   using Field = WallField;
   using Value = WallValue;
+  static constexpr std::string_view kName = "wall";
 };
 
 }  // namespace otves

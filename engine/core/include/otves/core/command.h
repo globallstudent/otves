@@ -3,6 +3,7 @@
 #include <variant>
 
 #include <otves/core/op.h>
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
@@ -37,12 +38,44 @@ struct SetWallLocationLine {
   LocationLine location_line = LocationLine::kCenter;
 };
 
+// Removes the wall and every opening in it.
 struct RemoveWall {
   ElementId wall;
 };
 
+// The opening's wall must exist.
+struct AddOpening {
+  Opening opening;
+};
+
+struct MoveOpening {
+  ElementId opening;
+  Mm offset;
+};
+
+struct ResizeOpening {
+  ElementId opening;
+  Mm width;
+  Mm height;
+};
+
+struct SetOpeningSill {
+  ElementId opening;
+  Mm sill;
+};
+
+struct SetOpeningKind {
+  ElementId opening;
+  OpeningKind kind = OpeningKind::kWindow;
+};
+
+struct RemoveOpening {
+  ElementId opening;
+};
+
 using Command = std::variant<AddWall, MoveWallEnd, SetWallThickness, SetWallHeight,
-                             SetWallLocationLine, RemoveWall>;
+                             SetWallLocationLine, RemoveWall, AddOpening, MoveOpening,
+                             ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 
