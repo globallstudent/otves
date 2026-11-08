@@ -3,14 +3,19 @@
 #include <expected>
 #include <optional>
 #include <string>
+#include <utility>
+#include <variant>
 
 #include <flatbuffers/flatbuffers.h>
 
 #include <otves/core/command.h>
+#include <otves/core/document.h>
 #include <otves/core/error.h>
+#include <otves/core/hlc.h>
 #include <otves/core/level.h>
 #include <otves/core/model.h>
 #include <otves/core/opening.h>
+#include <otves/core/overloaded.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
@@ -25,31 +30,7 @@ std::unexpected<Error> corrupt(const std::string& what) {
   return make_error(ErrorCode::kCorruptData, what);
 }
 
-std::optional<LocationLine> from_schema(schema::LocationLine line) {
-  switch (line) {
-    case schema::LocationLine::Center:
-      return LocationLine::kCenter;
-    case schema::LocationLine::LeftFace:
-      return LocationLine::kLeftFace;
-    case schema::LocationLine::RightFace:
-      return LocationLine::kRightFace;
-  }
-  return std::nullopt;
-}
-
-std::optional<OpeningKind> from_schema(schema::OpeningKind kind) {
-  switch (kind) {
-    case schema::OpeningKind::Window:
-      return OpeningKind::kWindow;
-    case schema::OpeningKind::Door:
-      return OpeningKind::kDoor;
-    case schema::OpeningKind::Empty:
-      return OpeningKind::kEmpty;
-  }
-  return std::nullopt;
-}
-
-std::optional<WallEnd> from_schema(schema::WallEnd end) {
+std::optional<WallEnd> to_wall_end(schema::WallEnd end) {
   switch (end) {
     case schema::WallEnd::Start:
       return WallEnd::kStart;
@@ -58,22 +39,6 @@ std::optional<WallEnd> from_schema(schema::WallEnd end) {
   }
   return std::nullopt;
 }
-
-schema::LocationLine to_schema(LocationLine line) {
-  switch (line) {
-    case LocationLine::kCenter:
-      return schema::LocationLine::Center;
-    case LocationLine::kLeftFace:
-      return schema::LocationLine::LeftFace;
-    case LocationLine::kRightFace:
-      return schema::LocationLine::RightFace;
-  }
-  return schema::LocationLine::Center;
-}
-
-PointMm to_point(const schema::PointMm& point) { return {.x = Mm{point.x()}, .y = Mm{point.y()}}; }
-
-schema::PointMm to_schema(PointMm point) { return {point.x.value(), point.y.value()}; }
 
 std::expected<Level, Error> to_level(const schema::Level* level) {
   if (level == nullptr) {
@@ -143,7 +108,7 @@ std::expected<Command, Error> decode_wall(const schema::CommandEntry& entry) {
       });
     case schema::Command::MoveWallEnd: {
       const auto* move = entry.command_as_MoveWallEnd();
-      const std::optional<WallEnd> end = from_schema(move->end());
+      const std::optional<WallEnd> end = to_wall_end(move->end());
       if (!end || move->to() == nullptr) {
         return corrupt("unknown wall end or missing point");
       }
@@ -209,11 +174,55 @@ std::expected<Command, Error> decode_opening(const schema::CommandEntry& entry) 
 
 }  // namespace
 
-schema::Uuid to_schema(ElementId id) { return {id.uuid().high(), id.uuid().low()}; }
+schema::Uuid to_schema(Uuid uuid) { return {uuid.high(), uuid.low()}; }
 
-ElementId to_id(const schema::Uuid* uuid) {
-  return uuid == nullptr ? ElementId{} : ElementId{Uuid{uuid->high(), uuid->low()}};
+schema::Uuid to_schema(ElementId id) { return to_schema(id.uuid()); }
+
+Uuid to_uuid(const schema::Uuid* uuid) {
+  return uuid == nullptr ? Uuid{} : Uuid{uuid->high(), uuid->low()};
 }
+
+ElementId to_id(const schema::Uuid* uuid) { return ElementId{to_uuid(uuid)}; }
+
+std::optional<LocationLine> from_schema(schema::LocationLine line) {
+  switch (line) {
+    case schema::LocationLine::Center:
+      return LocationLine::kCenter;
+    case schema::LocationLine::LeftFace:
+      return LocationLine::kLeftFace;
+    case schema::LocationLine::RightFace:
+      return LocationLine::kRightFace;
+  }
+  return std::nullopt;
+}
+
+std::optional<OpeningKind> from_schema(schema::OpeningKind kind) {
+  switch (kind) {
+    case schema::OpeningKind::Window:
+      return OpeningKind::kWindow;
+    case schema::OpeningKind::Door:
+      return OpeningKind::kDoor;
+    case schema::OpeningKind::Empty:
+      return OpeningKind::kEmpty;
+  }
+  return std::nullopt;
+}
+
+schema::LocationLine to_schema(LocationLine line) {
+  switch (line) {
+    case LocationLine::kCenter:
+      return schema::LocationLine::Center;
+    case LocationLine::kLeftFace:
+      return schema::LocationLine::LeftFace;
+    case LocationLine::kRightFace:
+      return schema::LocationLine::RightFace;
+  }
+  return schema::LocationLine::Center;
+}
+
+PointMm to_point(const schema::PointMm& point) { return {.x = Mm{point.x()}, .y = Mm{point.y()}}; }
+
+schema::PointMm to_schema(PointMm point) { return {point.x.value(), point.y.value()}; }
 
 schema::OpeningKind to_schema(OpeningKind kind) {
   switch (kind) {
@@ -324,30 +333,85 @@ std::expected<OpeningPlacement, Error> decode(const schema::PlaceOpening* place)
                                       .kind = *kind}};
 }
 
+EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Level& level) {
+  return {
+      .type = schema::Element::Level,
+      .value = schema::CreateLevel(builder, level.elevation.value(), level.height.value()).Union()};
+}
+
+EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Wall& wall) {
+  const schema::Uuid level = to_schema(wall.level);
+  const schema::PointMm start = to_schema(wall.start);
+  const schema::PointMm end = to_schema(wall.end);
+  return {.type = schema::Element::Wall,
+          .value = schema::CreateWall(builder, &level, &start, &end, wall.thickness.value(),
+                                      wall.height.value(), to_schema(wall.location_line))
+                       .Union()};
+}
+
+EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Opening& opening) {
+  const schema::Uuid wall = to_schema(opening.wall);
+  return {.type = schema::Element::Opening,
+          .value = schema::CreateOpening(builder, &wall, opening.offset.value(),
+                                         opening.width.value(), opening.height.value(),
+                                         opening.sill.value(), to_schema(opening.kind))
+                       .Union()};
+}
+
+std::expected<Element, Error> decode(schema::Element type, const void* value) {
+  if (value == nullptr) {
+    return corrupt("element is missing");
+  }
+  switch (type) {
+    case schema::Element::Level:
+      return to_level(static_cast<const schema::Level*>(value));
+    case schema::Element::Wall:
+      return to_wall(static_cast<const schema::Wall*>(value));
+    case schema::Element::Opening:
+      return to_opening(static_cast<const schema::Opening*>(value));
+    case schema::Element::NONE:
+      break;
+  }
+  return corrupt("unknown element type");
+}
+
+std::expected<Snapshot, Error> decode(const schema::OpenModel* open) {
+  Snapshot snapshot;
+  if (open == nullptr) {
+    return corrupt("open command is missing");
+  }
+  snapshot.clock = Hlc{.value = open->clock()};
+  if (open->elements() == nullptr) {
+    return snapshot;
+  }
+  for (const schema::ElementChange* saved : *open->elements()) {
+    auto element = decode(saved->element_type(), saved->element());
+    if (!element) {
+      return std::unexpected{std::move(element).error()};
+    }
+    const ElementId id = to_id(saved->id());
+    std::visit(Overloaded{
+                   [&](const Level& level) { snapshot.levels.emplace_back(id, level); },
+                   [&](const Wall& wall) { snapshot.walls.emplace_back(id, wall); },
+                   [&](const Opening& opening) { snapshot.openings.emplace_back(id, opening); },
+               },
+               *element);
+  }
+  return snapshot;
+}
+
 flatbuffers::Offset<schema::ElementChange> encode_change(flatbuffers::FlatBufferBuilder& builder,
                                                          const Model& model, ElementId id) {
   const schema::Uuid key = to_schema(id);
+  EncodedElement value;
   if (const auto* level = model.find<Level>(id)) {
-    const auto value =
-        schema::CreateLevel(builder, level->elevation.value(), level->height.value());
-    return schema::CreateElementChange(builder, &key, schema::Element::Level, value.Union());
+    value = encode(builder, *level);
+  } else if (const auto* wall = model.find<Wall>(id)) {
+    value = encode(builder, *wall);
+  } else if (const auto* opening = model.find<Opening>(id)) {
+    value = encode(builder, *opening);
   }
-  if (const auto* wall = model.find<Wall>(id)) {
-    const schema::Uuid level = to_schema(wall->level);
-    const schema::PointMm start = to_schema(wall->start);
-    const schema::PointMm end = to_schema(wall->end);
-    const auto value = schema::CreateWall(builder, &level, &start, &end, wall->thickness.value(),
-                                          wall->height.value(), to_schema(wall->location_line));
-    return schema::CreateElementChange(builder, &key, schema::Element::Wall, value.Union());
-  }
-  if (const auto* opening = model.find<Opening>(id)) {
-    const schema::Uuid wall = to_schema(opening->wall);
-    const auto value = schema::CreateOpening(builder, &wall, opening->offset.value(),
-                                             opening->width.value(), opening->height.value(),
-                                             opening->sill.value(), to_schema(opening->kind));
-    return schema::CreateElementChange(builder, &key, schema::Element::Opening, value.Union());
-  }
-  return schema::CreateElementChange(builder, &key);
+  return schema::CreateElementChange(builder, &key, value.type, value.value);
 }
 
 }  // namespace otves::bridge

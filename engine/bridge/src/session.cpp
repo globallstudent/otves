@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
@@ -16,12 +17,14 @@
 #include <otves/core/command.h>
 #include <otves/core/document.h>
 #include <otves/core/error.h>
+#include <otves/core/op.h>
 #include <otves/core/uuid.h>
 #include <otves/takeoff/rules.h>
 
 #include "convert.h"
 #include "derived.h"
 #include "engine_generated.h"
+#include "oplog.h"
 #include "placement.h"
 
 namespace otves::bridge {
@@ -64,6 +67,10 @@ struct Session::Impl {
         return document.redo().transform([] { return std::optional<ElementId>{}; });
       case schema::Command::LoadContent:
         return load(entry.command_as_LoadContent());
+      case schema::Command::OpenModel:
+        return decode(entry.command_as_OpenModel())
+            .and_then([this](const Snapshot& snapshot) { return open(snapshot); })
+            .transform([] { return std::optional<ElementId>{}; });
       case schema::Command::PlaceOpening:
         return decode(entry.command_as_PlaceOpening())
             .and_then([this](const OpeningPlacement& placement) {
@@ -74,6 +81,18 @@ struct Session::Impl {
         return decode(entry).and_then(
             [this](const Command& command) { return document.execute(command); });
     }
+  }
+
+  // The log starts over with the opened job, so groups not yet reported are kept aside first.
+  std::expected<void, Error> open(const Snapshot& snapshot) {
+    const std::span<const OpGroup> log = document.log();
+    std::vector<OpGroup> waiting{log.begin() + static_cast<std::ptrdiff_t>(reported), log.end()};
+    auto opened = document.open(snapshot);
+    if (opened) {
+      unreported.insert(unreported.end(), waiting.begin(), waiting.end());
+      reported = 0;
+    }
+    return opened;
   }
 
   // Compiles first, so a broken bundle keeps the content that ran before it.
@@ -154,14 +173,28 @@ struct Session::Impl {
       takeoff = encode_takeoff(builder, document.model(), rules);
       content_changed = false;
     }
-    const auto response = schema::CreateResponse(builder, kVersion, builder.CreateVector(results),
-                                                 builder.CreateVector(changes), document.can_undo(),
-                                                 document.can_redo(), outlines, takeoff.lines,
-                                                 takeoff.error, takeoff.message, openings);
+    const std::span<const OpGroup> log = document.log().subspan(reported);
+    std::vector<flatbuffers::Offset<schema::LogEntry>> entries;
+    entries.reserve(unreported.size() + log.size());
+    for (const OpGroup& group : unreported) {
+      entries.push_back(encode_log_entry(builder, group));
+    }
+    for (const OpGroup& group : log) {
+      entries.push_back(encode_log_entry(builder, group));
+    }
+    const auto response = schema::CreateResponse(
+        builder, kVersion, builder.CreateVector(results), builder.CreateVector(changes),
+        document.can_undo(), document.can_redo(), outlines, takeoff.lines, takeoff.error,
+        takeoff.message, openings, builder.CreateVector(entries));
     builder.Finish(response, kIdentifier);
+    // Only a finished response counts as reported; after a failure the next one repeats them.
+    unreported.clear();
+    reported = document.log().size();
   }
 
   Document document;
+  std::size_t reported = 0;         // log groups already sent to the app
+  std::vector<OpGroup> unreported;  // groups of a log that an open replaced, not yet sent
   std::optional<takeoff::RuleSet> rules;
   bool content_changed = false;
   flatbuffers::FlatBufferBuilder builder;

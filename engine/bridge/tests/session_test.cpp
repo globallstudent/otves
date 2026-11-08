@@ -6,15 +6,19 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <flatbuffers/flatbuffers.h>
 #include <gtest/gtest.h>
 
 #include <otves/bridge/session.h>
+#include <otves/core/error.h>
+#include <otves/core/op.h>
 #include <otves/core/uuid.h>
 
 #include "engine_generated.h"
+#include "oplog.h"
 
 namespace otves::bridge {
 namespace {
@@ -71,6 +75,33 @@ class Request {
   Request& remove_wall(ElementId wall) {
     const schema::Uuid id = key(wall);
     return add(Command::RemoveWall, schema::CreateRemoveWall(builder_, &id).Union());
+  }
+
+  // A saved ground floor (Uuid{10, 1}) with a 6.4 m wall (Uuid{10, 2}) and, if asked, a window
+  // in it (Uuid{10, 3}) or one in a wall that is not saved.
+  enum class Window : std::uint8_t { kNone, kInWall, kOrphan };
+
+  Request& open_model(std::uint64_t clock, Window window = Window::kInWall) {
+    std::vector<flatbuffers::Offset<schema::ElementChange>> saved;
+    const schema::Uuid level{10, 1};
+    const schema::Uuid wall{10, 2};
+    const schema::Uuid opening{10, 3};
+    const schema::Uuid missing{10, 9};
+    saved.push_back(schema::CreateElementChange(builder_, &level, schema::Element::Level,
+                                                schema::CreateLevel(builder_, 0, 3000).Union()));
+    const schema::PointMm start{0, 0};
+    const schema::PointMm end{6400, 0};
+    saved.push_back(schema::CreateElementChange(
+        builder_, &wall, schema::Element::Wall,
+        schema::CreateWall(builder_, &level, &start, &end, 380, 2800).Union()));
+    if (window != Window::kNone) {
+      const schema::Uuid* host = window == Window::kInWall ? &wall : &missing;
+      saved.push_back(schema::CreateElementChange(
+          builder_, &opening, schema::Element::Opening,
+          schema::CreateOpening(builder_, host, 1200, 1500, 1500, 900).Union()));
+    }
+    return add(Command::OpenModel,
+               schema::CreateOpenModel(builder_, builder_.CreateVector(saved), clock).Union());
   }
 
   Request& begin_gesture() {
@@ -342,6 +373,96 @@ TEST(Session, PlacingAnOpeningAwayFromAWallOrTooWideFails) {
   EXPECT_EQ(response.results()->Get(2)->error(), schema::ErrorCode::NotFound);
   EXPECT_EQ(response.results()->Get(3)->error(), schema::ErrorCode::WidthNotPositive);
   EXPECT_EQ(response.changes()->size(), 0U);
+}
+
+Result<OpGroup> group_of(const schema::LogEntry& entry) {
+  return decode_group({entry.ops()->data(), entry.ops()->size()});
+}
+
+TEST(Session, ResponsesCarryTheGroupsAddedToTheLog) {
+  Session session{kDevice};
+
+  const auto& added = respond(session, Request{}.add_level(0, 3000).bytes());
+  ASSERT_NE(added.log(), nullptr);
+  ASSERT_EQ(added.log()->size(), 1U);
+  const auto* entry = added.log()->Get(0);
+  EXPECT_EQ(entry->kind(), schema::CommandKind::AddLevel);
+  EXPECT_EQ(to_id(entry->device()).uuid(), kDevice.uuid());
+  const Result<OpGroup> group = group_of(*entry);
+  ASSERT_TRUE(group.has_value());
+  EXPECT_EQ(group->stamp.hlc.value, entry->hlc());
+  const std::uint64_t added_at = entry->hlc();  // the next call reuses the response
+  ASSERT_EQ(group->ops.size(), 1U);
+  EXPECT_TRUE(std::holds_alternative<CreateLevel>(group->ops.front()));
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  ASSERT_EQ(undone.log()->size(), 1U);
+  EXPECT_EQ(undone.log()->Get(0)->kind(), schema::CommandKind::Undo);
+  EXPECT_EQ(to_id(undone.log()->Get(0)->origin()).uuid(), group->id.uuid());
+  EXPECT_GT(undone.log()->Get(0)->hlc(), added_at);
+
+  const auto& idle = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(idle.log()->size(), 0U);
+}
+
+std::vector<ElementId> deleted(const schema::Response& response) {
+  std::vector<ElementId> ids;
+  for (const schema::ElementChange* change : *response.changes()) {
+    if (change->element_type() == schema::Element::NONE) {
+      ids.push_back(to_id(change->id()));
+    }
+  }
+  return ids;
+}
+
+TEST(Session, OpeningASavedJobReplacesTheModel) {
+  Session session{kDevice};
+  const ElementId old_level = add_level(session);
+
+  const auto& opened = respond(session, Request{}.open_model(0).bytes());
+
+  ASSERT_EQ(opened.results()->Get(0)->error(), schema::ErrorCode::None);
+  ASSERT_EQ(opened.changes()->size(), 4U);  // the old level gone and three saved elements
+  EXPECT_EQ(deleted(opened), std::vector{old_level});
+  EXPECT_EQ(opened.outlines()->size(), 1U);
+  EXPECT_EQ(opened.openings()->size(), 1U);
+  EXPECT_FALSE(opened.can_undo());
+  EXPECT_EQ(opened.log()->size(), 0U);
+}
+
+TEST(Session, EditsAfterOpeningStampAfterTheSavedClock) {
+  Session session{kDevice};
+  const std::uint64_t saved_clock = 0x0100'0000'0000'0000ULL;
+  respond(session, Request{}.open_model(saved_clock).bytes());
+
+  const auto& added = respond(session, Request{}.add_wall(ElementId{Uuid{10, 1}}, 3000).bytes());
+
+  ASSERT_EQ(added.results()->Get(0)->error(), schema::ErrorCode::None);
+  ASSERT_EQ(added.log()->size(), 1U);
+  EXPECT_GT(added.log()->Get(0)->hlc(), saved_clock);
+}
+
+TEST(Session, GroupsBeforeAnOpenInTheSameRequestAreStillReported) {
+  Session session{kDevice};
+
+  const auto& response =
+      respond(session, Request{}.add_level(0, 3000).open_model(0, Request::Window::kNone).bytes());
+
+  ASSERT_EQ(response.log()->size(), 1U);
+  EXPECT_EQ(response.log()->Get(0)->kind(), schema::CommandKind::AddLevel);
+}
+
+TEST(Session, BrokenSavedJobChangesNothing) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+
+  const auto& response =
+      respond(session, Request{}.open_model(0, Request::Window::kOrphan).bytes());
+
+  EXPECT_EQ(response.results()->Get(0)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(response.changes()->size(), 0U);
+  EXPECT_TRUE(response.can_undo());
+  EXPECT_EQ(to_id(respond(session, Request{}.undo().bytes()).changes()->Get(0)->id()), level);
 }
 
 std::pair<std::string, std::string> content_file(std::string_view folder, std::string_view name) {

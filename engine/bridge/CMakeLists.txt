@@ -25,6 +25,7 @@ add_dependencies(otves_schema otves_schema_code)
 add_library(otves_bridge
   src/convert.cpp
   src/derived.cpp
+  src/oplog.cpp
   src/placement.cpp
   src/session.cpp)
 add_library(otves::bridge ALIAS otves_bridge)
@@ -51,7 +52,11 @@ if(ANDROID OR JNI_FOUND)
 endif()
 
 if(OTVES_BUILD_TESTS)
-  otves_add_test(otves_bridge_tests tests/session_test.cpp)
+  otves_add_test(otves_bridge_tests
+    tests/oplog_test.cpp
+    tests/session_test.cpp)
+  # The op log tests reach the private codecs.
+  target_include_directories(otves_bridge_tests PRIVATE src)
   target_link_libraries(otves_bridge_tests PRIVATE otves::bridge otves::schema)
   target_compile_definitions(otves_bridge_tests PRIVATE
     OTVES_CONTENT_DIR="${PROJECT_SOURCE_DIR}/../content")

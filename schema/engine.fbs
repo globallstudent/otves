@@ -91,6 +91,15 @@ table PlaceOpening {
   kind:OpeningKind = Window;
 }
 
+// Replaces the open model with a saved job's elements (docs/adr/0007) and starts an empty log
+// with no undo or redo. `clock` is the newest stamp in the job's log; later stamps sort after it.
+// Fails with CorruptData, changing nothing, when an element is invalid, an id repeats, or a wall
+// or opening refers to a missing level or wall.
+table OpenModel {
+  elements:[ElementChange];
+  clock:ulong;
+}
+
 // Commands between BeginGesture and EndGesture fold into one undo step.
 table BeginGesture {}
 table EndGesture {}
@@ -120,6 +129,7 @@ union Command {
   Redo,
   LoadContent,
   PlaceOpening,
+  OpenModel,
 }
 
 table CommandEntry {
@@ -165,6 +175,77 @@ table CommandResult {
 }
 
 union Element { Level, Wall, Opening }
+
+// What produced an operation-log group (engine/core/op.h).
+enum CommandKind:ubyte {
+  AddLevel = 0,
+  SetLevelElevation = 1,
+  SetLevelHeight = 2,
+  RemoveLevel = 3,
+  AddWall = 4,
+  MoveWallEnd = 5,
+  SetWallThickness = 6,
+  SetWallHeight = 7,
+  SetWallLocationLine = 8,
+  RemoveWall = 9,
+  AddOpening = 10,
+  MoveOpening = 11,
+  ResizeOpening = 12,
+  SetOpeningSill = 13,
+  SetOpeningKind = 14,
+  RemoveOpening = 15,
+  Undo = 16,
+  Redo = 17,
+}
+
+enum LevelField:ubyte { Elevation = 0, Height = 1 }
+enum WallField:ubyte { Start = 0, End = 1, Thickness = 2, Height = 3, LocationLine = 4 }
+enum OpeningField:ubyte { Offset = 0, Width = 1, Height = 2, Sill = 3, Kind = 4 }
+
+// Property-level changes (engine/core/op.h). Create and delete carry the whole element.
+table CreateOp { id:Uuid; element:Element; }
+table DeleteOp { id:Uuid; element:Element; }
+table SetLevelFieldOp { id:Uuid; field:LevelField; before:long; after:long; }
+// Start and End use the points; Thickness and Height millimetres and LocationLine its code in
+// before and after.
+table SetWallFieldOp {
+  id:Uuid;
+  field:WallField;
+  before:long;
+  after:long;
+  before_point:PointMm;
+  after_point:PointMm;
+}
+// Kind uses its code; the other fields millimetres.
+table SetOpeningFieldOp { id:Uuid; field:OpeningField; before:long; after:long; }
+
+union Op { CreateOp, DeleteOp, SetLevelFieldOp, SetWallFieldOp, SetOpeningFieldOp }
+
+table OpEntry {
+  op:Op;
+}
+
+// One group of the operation log, as the job file stores it: a buffer of its own with the
+// identifier "OTVG" (docs/adr/0007). `origin` is the group an undo reverts or a redo repeats.
+table OpGroup {
+  version:uint = 1;
+  id:Uuid;
+  kind:CommandKind = AddLevel;
+  hlc:ulong;
+  device:Uuid;
+  origin:Uuid;
+  ops:[OpEntry];
+}
+
+// A group the request appended to the log, with the columns the job file indexes.
+table LogEntry {
+  id:Uuid;
+  kind:CommandKind = AddLevel;
+  hlc:ulong;
+  device:Uuid;
+  origin:Uuid;
+  ops:[ubyte] (nested_flatbuffer: "OpGroup", force_align: 8);
+}
 
 // A point of derived geometry, in metres.
 struct PointM {
@@ -215,6 +296,7 @@ table Response {
   takeoff_error:ErrorCode = None;
   takeoff_message:string;
   openings:[OpeningOutline];  // with the outlines: every opening in a wall
+  log:[LogEntry];             // groups appended to the operation log, in order
 }
 
 root_type Request;
