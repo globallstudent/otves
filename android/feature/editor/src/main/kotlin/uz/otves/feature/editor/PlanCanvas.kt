@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -23,21 +24,26 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.model.Mm
+import uz.otves.engine.OpeningKind
+import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointMm
 import uz.otves.engine.WallOutline
+import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToLong
 
 /**
- * The plan as the engine derived it: wall outlines in metres, drawn with y up. Pinch to zoom,
- * drag to pan, tap to place a wall end. Taps go out in plan millimetres.
+ * The plan as the engine derived it: wall and opening outlines in metres, drawn with y up. Pinch
+ * to zoom, drag to pan, tap to build. Taps go out in plan millimetres, with how far around the
+ * finger still counts as touched at the current zoom.
  */
 @Composable
 internal fun PlanCanvas(
     outlines: List<WallOutline>,
+    openings: List<OpeningOutline>,
     wallStart: PointMm?,
-    onTap: (PointMm) -> Unit,
+    onTap: (at: PointMm, reach: Mm) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -46,6 +52,7 @@ internal fun PlanCanvas(
     val colors = OtvesTheme.colors
     val wallStroke = with(density) { 1.dp.toPx() }
     val markRadius = with(density) { 6.dp.toPx() }
+    val touchReach = with(density) { TOUCH_REACH.dp.toPx() }
 
     Canvas(
         modifier =
@@ -55,7 +62,7 @@ internal fun PlanCanvas(
                 .pointerInput(Unit) {
                     detectTransformGestures { centroid, pan, zoom, _ -> view.move(centroid, pan, zoom) }
                 }.pointerInput(Unit) {
-                    detectTapGestures { offset -> tap(view.toPlan(offset)) }
+                    detectTapGestures { offset -> tap(view.toPlan(offset), view.toPlanLength(touchReach)) }
                 },
     ) {
         grid(view, colors.divider, colors.border)
@@ -70,6 +77,9 @@ internal fun PlanCanvas(
                 }
             drawPath(path, colors.inkTertiary)
             drawPath(path, colors.ink, style = Stroke(width = wallStroke))
+        }
+        for (opening in openings) {
+            opening(view, opening, colors.canvas, colors.ink, wallStroke)
         }
         if (wallStart != null) {
             val at = view.toScreen(wallStart.x.value / MM_PER_METRE, wallStart.y.value / MM_PER_METRE)
@@ -110,12 +120,80 @@ private class PlanView(
         y: Double,
     ): Offset = Offset(origin.x + (x * scale).toFloat(), origin.y - (y * scale).toFloat())
 
+    fun toPlanLength(pixels: Float): Mm = Mm((pixels / scale * MM_PER_METRE).roundToLong())
+
     fun toPlan(offset: Offset): PointMm {
         val x = (offset.x - origin.x) / scale
         val y = (origin.y - offset.y) / scale
         return PointMm(Mm((x * MM_PER_METRE).roundToLong()), Mm((y * MM_PER_METRE).roundToLong()))
     }
 }
+
+// The gap an opening leaves in its wall, with the usual plan symbol: a window's glazing line, a
+// door's leaf and swing. Corners come counter-clockwise: near and far end on the right face, then
+// far and near end on the left face.
+private fun DrawScope.opening(
+    view: PlanView,
+    opening: OpeningOutline,
+    gap: Color,
+    ink: Color,
+    stroke: Float,
+) {
+    if (opening.points.size != OUTLINE_CORNERS) return
+    val (nearRight, farRight, farLeft, nearLeft) = opening.points.map { view.toScreen(it.x, it.y) }
+    val path =
+        Path().apply {
+            moveTo(nearRight.x, nearRight.y)
+            lineTo(farRight.x, farRight.y)
+            lineTo(farLeft.x, farLeft.y)
+            lineTo(nearLeft.x, nearLeft.y)
+            close()
+        }
+    drawPath(path, gap)
+    drawLine(ink, nearRight, nearLeft, stroke)
+    drawLine(ink, farRight, farLeft, stroke)
+    when (opening.kind) {
+        OpeningKind.WINDOW -> {
+            drawLine(ink, nearRight, farRight, stroke)
+            drawLine(ink, nearLeft, farLeft, stroke)
+            drawLine(ink, (nearRight + nearLeft) / 2f, (farRight + farLeft) / 2f, stroke)
+        }
+
+        OpeningKind.DOOR -> {
+            // The leaf stands open at right angles to the wall, hinged at the near left corner.
+            val width = (farLeft - nearLeft).getDistance()
+            val across = nearLeft - nearRight
+            val leaf = nearLeft + across / across.getDistance() * width
+            drawLine(ink, nearLeft, leaf, stroke)
+            val start = angle(leaf - nearLeft)
+            val sweep = normalised(angle(farLeft - nearLeft) - start)
+            drawArc(
+                color = ink,
+                startAngle = start,
+                sweepAngle = sweep,
+                useCenter = false,
+                topLeft = nearLeft - Offset(width, width),
+                size = Size(width * 2, width * 2),
+                style = Stroke(width = stroke),
+            )
+        }
+
+        OpeningKind.EMPTY -> {
+            // The jambs alone.
+        }
+    }
+}
+
+// Degrees clockwise from +x on screen, as drawArc measures them.
+private fun angle(direction: Offset): Float = Math.toDegrees(atan2(direction.y, direction.x).toDouble()).toFloat()
+
+// The shorter way round, in (-180°, 180°].
+private fun normalised(degrees: Float): Float =
+    when {
+        degrees > HALF_TURN -> degrees - FULL_TURN
+        degrees <= -HALF_TURN -> degrees + FULL_TURN
+        else -> degrees
+    }
 
 // One line a metre, with the axes a shade darker.
 private fun DrawScope.grid(
@@ -144,3 +222,7 @@ private const val MIN_SCALE = 8f
 private const val MAX_SCALE = 2_000f
 private const val START_LEFT = 0.15f
 private const val START_BOTTOM = 0.8f
+private const val TOUCH_REACH = 12f
+private const val OUTLINE_CORNERS = 4
+private const val HALF_TURN = 180f
+private const val FULL_TURN = 360f

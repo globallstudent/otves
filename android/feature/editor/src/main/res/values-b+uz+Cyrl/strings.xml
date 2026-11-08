@@ -29,4 +29,11 @@
     <string name="unit_square_metre">м²</string>
     <string name="unit_cubic_metre">м³</string>
     <string name="unit_kilogram">кг</string>
+    <string name="tool_wall">Девор</string>
+    <string name="tool_window">Дераза</string>
+    <string name="tool_door">Эшик</string>
+    <string name="editor_hint_window">Дераза қўйиш учун деворга босинг</string>
+    <string name="editor_hint_door">Эшик қўйиш учун деворга босинг</string>
+    <string name="refused_no_wall">Бу ерда девор йўқ</string>
+    <string name="refused_does_not_fit">Тешик девордан кенг</string>
 </resources>

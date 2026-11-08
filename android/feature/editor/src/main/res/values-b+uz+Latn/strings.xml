@@ -29,4 +29,11 @@
     <string name="unit_square_metre">m²</string>
     <string name="unit_cubic_metre">m³</string>
     <string name="unit_kilogram">kg</string>
+    <string name="tool_wall">Devor</string>
+    <string name="tool_window">Deraza</string>
+    <string name="tool_door">Eshik</string>
+    <string name="editor_hint_window">Deraza qo‘yish uchun devorga bosing</string>
+    <string name="editor_hint_door">Eshik qo‘yish uchun devorga bosing</string>
+    <string name="refused_no_wall">Bu yerda devor yo‘q</string>
+    <string name="refused_does_not_fit">Teshik devordan keng</string>
 </resources>

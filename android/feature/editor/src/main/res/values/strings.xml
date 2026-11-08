@@ -29,4 +29,12 @@
     <string name="unit_square_metre">м²</string>
     <string name="unit_cubic_metre">м³</string>
     <string name="unit_kilogram">кг</string>
+    <string name="tool_wall">Стена</string>
+    <string name="tool_window">Окно</string>
+    <string name="tool_door">Дверь</string>
+    <string name="editor_hint_window">Нажмите на стену, чтобы поставить окно</string>
+    <string name="editor_hint_door">Нажмите на стену, чтобы поставить дверь</string>
+    <string name="opening_size" translatable="false">%1$d × %2$d</string>
+    <string name="refused_no_wall">Здесь нет стены</string>
+    <string name="refused_does_not_fit">Проём шире стены</string>
 </resources>

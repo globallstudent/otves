@@ -34,12 +34,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import uz.otves.core.designsystem.OtvesDimens
 import uz.otves.core.designsystem.OtvesTheme
+import uz.otves.core.designsystem.SegmentedControl
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
+import uz.otves.engine.OpeningKind
+import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
@@ -58,23 +61,37 @@ fun EditorRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     EditorScreen(
         state = state,
-        onTap = viewModel::tap,
-        onCancelWall = viewModel::cancelWall,
-        onThickness = viewModel::selectThickness,
-        onUndo = viewModel::undo,
-        onRedo = viewModel::redo,
+        actions =
+            EditorActions(
+                onTap = viewModel::tap,
+                onCancelWall = viewModel::cancelWall,
+                onTool = viewModel::selectTool,
+                onThickness = viewModel::selectThickness,
+                onWindowSize = viewModel::selectWindowSize,
+                onDoorSize = viewModel::selectDoorSize,
+                onUndo = viewModel::undo,
+                onRedo = viewModel::redo,
+            ),
         modifier = modifier,
     )
 }
 
+/** What the editor's controls do; the route wires them to the ViewModel. */
+internal data class EditorActions(
+    val onTap: (at: PointMm, reach: Mm) -> Unit = { _, _ -> },
+    val onCancelWall: () -> Unit = {},
+    val onTool: (Tool) -> Unit = {},
+    val onThickness: (Mm) -> Unit = {},
+    val onWindowSize: (OpeningSize) -> Unit = {},
+    val onDoorSize: (OpeningSize) -> Unit = {},
+    val onUndo: () -> Unit = {},
+    val onRedo: () -> Unit = {},
+)
+
 @Composable
 internal fun EditorScreen(
     state: EditorUiState,
-    onTap: (PointMm) -> Unit,
-    onCancelWall: () -> Unit,
-    onThickness: (Mm) -> Unit,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
+    actions: EditorActions,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
@@ -92,41 +109,26 @@ internal fun EditorScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onUndo, enabled = state.canUndo, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
+                TextButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
                     Text(stringResource(R.string.editor_undo))
                 }
-                TextButton(onClick = onRedo, enabled = state.canRedo, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
+                TextButton(onClick = actions.onRedo, enabled = state.canRedo, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
                     Text(stringResource(R.string.editor_redo))
                 }
             }
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = OtvesDimens.gutter),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                val chipColors =
-                    FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = OtvesTheme.colors.ink,
-                        selectedLabelColor = OtvesTheme.colors.surface,
-                    )
-                WallThicknesses.forEach { thickness ->
-                    FilterChip(
-                        selected = thickness == state.thickness,
-                        onClick = { onThickness(thickness) },
-                        label = { Text(thicknessName(thickness), maxLines = 1) },
-                        colors = chipColors,
-                        modifier = Modifier.heightIn(min = OtvesDimens.minTarget),
-                    )
-                }
-            }
+            SegmentedControl(
+                options = Tool.entries.map { toolName(it) },
+                selected = state.tool.ordinal,
+                onSelect = { actions.onTool(Tool.entries[it]) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = OtvesDimens.gutter),
+            )
+            ToolOptions(state, actions)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 PlanCanvas(
                     outlines = state.outlines,
+                    openings = state.openings,
                     wallStart = state.wallStart,
-                    onTap = onTap,
+                    onTap = actions.onTap,
                     modifier = Modifier.fillMaxSize(),
                 )
                 val notice =
@@ -134,6 +136,8 @@ internal fun EditorScreen(
                         !state.ready -> stringResource(R.string.editor_loading)
                         state.refused != null -> refusalText(state.refused)
                         state.wallStart != null -> stringResource(R.string.editor_hint_end)
+                        state.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
+                        state.tool == Tool.DOOR -> stringResource(R.string.editor_hint_door)
                         state.outlines.isEmpty() -> stringResource(R.string.editor_hint_start)
                         else -> null
                     }
@@ -149,7 +153,7 @@ internal fun EditorScreen(
                         )
                     }
                     if (state.wallStart != null) {
-                        TextButton(onClick = onCancelWall, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
+                        TextButton(onClick = actions.onCancelWall, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
                             Text(stringResource(R.string.editor_cancel_wall))
                         }
                     }
@@ -158,6 +162,63 @@ internal fun EditorScreen(
             TakeoffPanel(state)
         }
     }
+}
+
+// Options of the chosen tool, in one row of the same height for every tool, so the plan below
+// never moves.
+@Composable
+private fun ToolOptions(
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = OtvesDimens.gutter),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when (state.tool) {
+            Tool.WALL -> {
+                WallThicknesses.forEach { thickness ->
+                    OptionChip(thicknessName(thickness), thickness == state.thickness) { actions.onThickness(thickness) }
+                }
+            }
+
+            Tool.WINDOW -> {
+                WindowSizes.forEach { size ->
+                    OptionChip(sizeName(size), size == state.windowSize) { actions.onWindowSize(size) }
+                }
+            }
+
+            Tool.DOOR -> {
+                DoorSizes.forEach { size ->
+                    OptionChip(sizeName(size), size == state.doorSize) { actions.onDoorSize(size) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptionChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, maxLines = 1) },
+        colors =
+            FilterChipDefaults.filterChipColors(
+                selectedContainerColor = OtvesTheme.colors.ink,
+                selectedLabelColor = OtvesTheme.colors.surface,
+            ),
+        modifier = Modifier.heightIn(min = OtvesDimens.minTarget),
+    )
 }
 
 @Composable
@@ -201,10 +262,24 @@ private fun thicknessName(thickness: Mm): String =
     }
 
 @Composable
+private fun toolName(tool: Tool): String =
+    when (tool) {
+        Tool.WALL -> stringResource(R.string.tool_wall)
+        Tool.WINDOW -> stringResource(R.string.tool_window)
+        Tool.DOOR -> stringResource(R.string.tool_door)
+    }
+
+// Millimetres, as on drawings: «1500 × 1500».
+@Composable
+private fun sizeName(size: OpeningSize): String = stringResource(R.string.opening_size, size.width.value, size.height.value)
+
+@Composable
 private fun refusalText(error: EngineError): String =
     when (error) {
         EngineError.ZERO_LENGTH -> stringResource(R.string.refused_zero_length)
         EngineError.OFF_PLAN -> stringResource(R.string.refused_off_plan)
+        EngineError.NO_WALL -> stringResource(R.string.refused_no_wall)
+        EngineError.DOES_NOT_FIT -> stringResource(R.string.refused_does_not_fit)
         else -> stringResource(R.string.refused_other)
     }
 
@@ -213,6 +288,7 @@ private fun refusalText(error: EngineError): String =
 private fun EditorScreenPreview() {
     val level = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000001"))
     val wall = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000002"))
+    val window = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000003"))
     OtvesTheme {
         EditorScreen(
             state =
@@ -234,13 +310,19 @@ private fun EditorScreenPreview() {
                             QuantityLine("lintels", "lintel.bar.l20", QuantityUnit.PIECE, 3.0),
                             QuantityLine("ring_beam", "concrete.b15", QuantityUnit.CUBIC_METRE, 0.37),
                         ),
+                    openings =
+                        listOf(
+                            OpeningOutline(
+                                window,
+                                level,
+                                OpeningKind.WINDOW,
+                                listOf(PointM(2.25, -0.19), PointM(3.75, -0.19), PointM(3.75, 0.19), PointM(2.25, 0.19)),
+                            ),
+                        ),
+                    tool = Tool.WINDOW,
                     canUndo = true,
                 ),
-            onTap = {},
-            onCancelWall = {},
-            onThickness = {},
-            onUndo = {},
-            onRedo = {},
+            actions = EditorActions(),
         )
     }
 }

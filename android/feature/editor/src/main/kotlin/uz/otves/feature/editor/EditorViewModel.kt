@@ -17,6 +17,8 @@ import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
 import uz.otves.engine.Level
+import uz.otves.engine.OpeningKind
+import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.Takeoff
@@ -28,15 +30,34 @@ import kotlin.math.roundToLong
 /** Wall thicknesses a builder picks from: half a brick to two bricks with 10 mm joints. */
 internal val WallThicknesses: List<Mm> = listOf(120.mm, 250.mm, 380.mm, 510.mm)
 
+/** What a tap on the plan builds. */
+internal enum class Tool { WALL, WINDOW, DOOR }
+
+/** A window or door size a builder picks from. */
+internal data class OpeningSize(
+    val width: Mm,
+    val height: Mm,
+)
+
+internal val WindowSizes: List<OpeningSize> =
+    listOf(OpeningSize(1200.mm, 1500.mm), OpeningSize(1500.mm, 1500.mm), OpeningSize(1800.mm, 1500.mm))
+
+internal val DoorSizes: List<OpeningSize> =
+    listOf(OpeningSize(800.mm, 2100.mm), OpeningSize(900.mm, 2100.mm), OpeningSize(1200.mm, 2100.mm))
+
 @Immutable
 internal data class EditorUiState(
     val ready: Boolean = false,
     val outlines: List<WallOutline> = emptyList(),
+    val openings: List<OpeningOutline> = emptyList(),
     val takeoff: List<QuantityLine> = emptyList(),
     val takeoffFailed: Boolean = false,
     /** The first tap of a wall still waiting for its second. */
     val wallStart: PointMm? = null,
+    val tool: Tool = Tool.WALL,
     val thickness: Mm = 380.mm,
+    val windowSize: OpeningSize = WindowSizes[1],
+    val doorSize: OpeningSize = DoorSizes[1],
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
     /** Why the engine refused the last command, until the next one. */
@@ -69,10 +90,44 @@ internal class EditorViewModel(
         }
     }
 
-    /** A tap on the plan: the first one starts a wall, the second one builds it. */
-    fun tap(at: PointMm) {
+    /**
+     * A tap on the plan. With the wall tool the first tap starts a wall and the second builds it;
+     * a window or door goes into the wall the user tapped. [reach] is how far from the finger, in
+     * plan millimetres, a wall end or wall still counts as touched.
+     */
+    fun tap(
+        at: PointMm,
+        reach: Mm,
+    ) {
         val onLevel = level ?: return
-        val point = snap(at)
+        val current = state.value
+        when (current.tool) {
+            Tool.WALL -> tapWall(onLevel, at, reach)
+            Tool.WINDOW -> place(onLevel, at, reach, OpeningKind.WINDOW, current.windowSize, WindowSill)
+            Tool.DOOR -> place(onLevel, at, reach, OpeningKind.DOOR, current.doorSize, 0.mm)
+        }
+    }
+
+    fun cancelWall() = state.update { it.copy(wallStart = null) }
+
+    fun selectTool(tool: Tool) = state.update { it.copy(tool = tool, wallStart = null, refused = null) }
+
+    fun selectThickness(thickness: Mm) = state.update { it.copy(thickness = thickness) }
+
+    fun selectWindowSize(size: OpeningSize) = state.update { it.copy(windowSize = size) }
+
+    fun selectDoorSize(size: OpeningSize) = state.update { it.copy(doorSize = size) }
+
+    fun undo() = send(EngineCommand.Undo)
+
+    fun redo() = send(EngineCommand.Redo)
+
+    private fun tapWall(
+        onLevel: ElementId,
+        at: PointMm,
+        reach: Mm,
+    ) {
+        val point = snap(at, reach)
         val start = state.value.wallStart
         if (start == null) {
             state.update { it.copy(wallStart = point, refused = null) }
@@ -83,13 +138,14 @@ internal class EditorViewModel(
         send(EngineCommand.AddWall(wall))
     }
 
-    fun cancelWall() = state.update { it.copy(wallStart = null) }
-
-    fun selectThickness(thickness: Mm) = state.update { it.copy(thickness = thickness) }
-
-    fun undo() = send(EngineCommand.Undo)
-
-    fun redo() = send(EngineCommand.Redo)
+    private fun place(
+        onLevel: ElementId,
+        at: PointMm,
+        reach: Mm,
+        kind: OpeningKind,
+        size: OpeningSize,
+        sill: Mm,
+    ) = send(EngineCommand.PlaceOpening(onLevel, at, reach, size.width, size.height, sill, kind))
 
     private fun send(command: EngineCommand) {
         viewModelScope.launch {
@@ -98,7 +154,7 @@ internal class EditorViewModel(
                 userSteps +=
                     when (command) {
                         EngineCommand.Undo -> -1
-                        EngineCommand.Redo, is EngineCommand.AddWall -> 1
+                        EngineCommand.Redo, is EngineCommand.AddWall, is EngineCommand.PlaceOpening -> 1
                         else -> 0
                     }
             }
@@ -117,6 +173,7 @@ internal class EditorViewModel(
         state.update { current ->
             current.copy(
                 outlines = response.outlines ?: current.outlines,
+                openings = response.openings ?: current.openings,
                 takeoff =
                     when (val takeoff = response.takeoff) {
                         is Takeoff.Lines -> takeoff.lines
@@ -135,14 +192,17 @@ internal class EditorViewModel(
         }
     }
 
-    // Ends join only where points are equal to the millimetre, so a tap near a wall end lands on
-    // it; elsewhere it lands on the 100 mm grid.
-    private fun snap(at: PointMm): PointMm {
+    // Ends join only where points are equal to the millimetre, so a tap within reach of a wall
+    // end lands on it; elsewhere it lands on the 100 mm grid.
+    private fun snap(
+        at: PointMm,
+        reach: Mm,
+    ): PointMm {
         val end =
             walls.values
                 .flatMap { listOf(it.start, it.end) }
                 .minByOrNull { distance(it, at) }
-        if (end != null && distance(end, at) <= SnapReach.value) {
+        if (end != null && distance(end, at) <= reach.value) {
             return end
         }
         return PointMm(onGrid(at.x), onGrid(at.y))
@@ -159,6 +219,8 @@ internal class EditorViewModel(
         val Ground = Level(elevation = 0.mm, height = 3000.mm)
         val WallHeight = 2800.mm
         val Grid = 100.mm
-        val SnapReach = 300.mm
+
+        // A common sill height for living rooms; the user changes it per window later.
+        val WindowSill = 900.mm
     }
 }
