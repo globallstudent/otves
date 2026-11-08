@@ -48,6 +48,8 @@ import uz.otves.data.project.JobStore
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
+import uz.otves.engine.Issue
+import uz.otves.engine.IssueKind
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointM
@@ -155,15 +157,18 @@ internal fun EditorScreen(
                     openings = state.openings,
                     below = state.below,
                     selected = state.selected?.id,
+                    issues = state.issues,
                     wallStart = state.wallStart,
                     onTap = actions.onTap,
                     modifier = Modifier.fillMaxSize(),
                 )
+                val joinIssue = state.issues.firstOrNull { it.element == null }
                 val notice =
                     when {
                         !state.ready -> stringResource(R.string.editor_loading)
                         state.refused != null -> refusalText(state.refused)
                         state.wallStart != null -> stringResource(R.string.editor_hint_end)
+                        joinIssue != null -> issueText(joinIssue.kind)
                         state.tool == Tool.SELECT && state.selected == null -> stringResource(R.string.editor_hint_select)
                         state.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
                         state.tool == Tool.DOOR -> stringResource(R.string.editor_hint_door)
@@ -178,7 +183,12 @@ internal fun EditorScreen(
                         Text(
                             text = notice,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (state.refused != null) OtvesTheme.colors.warning else OtvesTheme.colors.inkSecondary,
+                            color =
+                                if (state.refused != null || (state.wallStart == null && joinIssue != null)) {
+                                    OtvesTheme.colors.warning
+                                } else {
+                                    OtvesTheme.colors.inkSecondary
+                                },
                         )
                     }
                     if (state.wallStart != null) {
@@ -198,7 +208,7 @@ internal fun EditorScreen(
                 }
             }
             val selected = state.selected
-            if (selected != null) Inspector(selected, actions) else TakeoffPanel(state)
+            if (selected != null) Inspector(selected, state.issues, actions) else TakeoffPanel(state)
         }
     }
 }
@@ -323,6 +333,7 @@ private fun OptionChip(
 @Composable
 private fun Inspector(
     selected: Selected,
+    issues: List<Issue>,
     actions: EditorActions,
 ) {
     Surface(color = OtvesTheme.colors.surface, modifier = Modifier.fillMaxWidth().height(TakeoffHeight)) {
@@ -354,6 +365,13 @@ private fun Inspector(
 
                 is Selected.OpeningPart -> {
                     val opening = selected.opening
+                    issues
+                        .filter { it.element == selected.id }
+                        .map { it.kind }
+                        .distinct()
+                        .forEach { kind ->
+                            Text(issueText(kind), style = MaterialTheme.typography.bodyMedium, color = OtvesTheme.colors.warning)
+                        }
                     SegmentedControl(
                         options = OpeningKind.entries.map { kindName(it) },
                         selected = opening.kind.ordinal,
@@ -432,6 +450,21 @@ private fun thicknessName(thickness: Mm): String =
         380.mm -> stringResource(R.string.thickness_one_and_half_bricks)
         else -> stringResource(R.string.thickness_two_bricks)
     }
+
+@Composable
+private fun issueText(kind: IssueKind): String =
+    stringResource(
+        when (kind) {
+            IssueKind.OPENING_OUTSIDE_WALL -> R.string.issue_outside_wall
+            IssueKind.OPENING_OVERLAP -> R.string.issue_overlap
+            IssueKind.OPENING_WITHOUT_WALL -> R.string.issue_without_wall
+            IssueKind.SHORT_BEARING -> R.string.issue_short_bearing
+            IssueKind.NO_ROOM_FOR_LINTEL -> R.string.issue_no_room_for_lintel
+            IssueKind.WALL_OVERLAP -> R.string.issue_wall_overlap
+            IssueKind.SHARP_ANGLE -> R.string.issue_sharp_angle
+            IssueKind.UNKNOWN -> R.string.issue_unknown
+        },
+    )
 
 @Composable
 private fun kindName(kind: OpeningKind): String =

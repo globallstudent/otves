@@ -45,4 +45,12 @@
     <string name="inspector_size">Ўлчами</string>
     <string name="inspector_done">Тайёр</string>
     <string name="inspector_delete">Ўчириш</string>
+    <string name="issue_outside_wall">Тешик девордан чиқиб кетган</string>
+    <string name="issue_overlap">Тешик бошқасининг устига тушган</string>
+    <string name="issue_without_wall">Тешик деворсиз</string>
+    <string name="issue_short_bearing">Перемичкага таянч етмайди: девор бўлаги жуда тор</string>
+    <string name="issue_no_room_for_lintel">Перемичка девор тепасига сиғмайди</string>
+    <string name="issue_wall_overlap">Деворлар бир-бирининг устига тушган</string>
+    <string name="issue_sharp_angle">Деворлар жуда ўткир бурчак остида туташган</string>
+    <string name="issue_unknown">Моделда хато</string>
 </resources>

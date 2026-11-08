@@ -25,6 +25,8 @@ import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineElement
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
+import uz.otves.engine.Issue
+import uz.otves.engine.IssueKind
 import uz.otves.engine.Level
 import uz.otves.engine.LogEntry
 import uz.otves.engine.Opening
@@ -56,6 +58,7 @@ class EditorViewModelTest {
         val sent = mutableListOf<List<EngineCommand>>()
         var refuseNext: EngineError? = null
         var pickNext: ElementId? = null
+        var issues: List<Issue> = emptyList()
         private var next = 1L
         private val elements = linkedMapOf<ElementId, EngineElement>()
         private val steps = ArrayDeque<ElementId>()
@@ -196,6 +199,7 @@ class EditorViewModelTest {
                         Takeoff.Lines(listOf(QuantityLine("masonry", "masonry_unit", QuantityUnit.PIECE, 100.0)))
                     },
                 log = log,
+                issues = if (changed) issues else null,
             )
         }
 
@@ -543,6 +547,18 @@ class EditorViewModelTest {
         assertThat(viewModel.uiState.value.selected).isNull()
         assertThat(viewModel.uiState.value.outlines).isEmpty()
         assertThat(viewModel.uiState.value.canUndo).isTrue()
+    }
+
+    @Test
+    fun onlyTheIssuesOfTheShownStoreyAreDrawn() {
+        val viewModel = EditorViewModel(engine, { content }, store)
+        val here = Issue(IssueKind.WALL_OVERLAP, element = null, level, PointMm(0.mm, 0.mm))
+        val upstairs = Issue(IssueKind.SHARP_ANGLE, element = null, ElementId(Uuid.fromLongs(9, 9)), PointMm(0.mm, 0.mm))
+        engine.issues = listOf(here, upstairs)
+
+        viewModel.buildWall()
+
+        assertThat(viewModel.uiState.value.issues).containsExactly(here)
     }
 
     @Test

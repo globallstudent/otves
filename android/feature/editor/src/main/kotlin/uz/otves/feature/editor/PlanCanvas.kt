@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
+import uz.otves.engine.Issue
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointM
@@ -46,6 +47,7 @@ internal fun PlanCanvas(
     openings: List<OpeningOutline>,
     below: List<WallOutline>,
     selected: ElementId?,
+    issues: List<Issue>,
     wallStart: PointMm?,
     onTap: (at: PointMm, reach: Mm) -> Unit,
     modifier: Modifier = Modifier,
@@ -87,6 +89,16 @@ internal fun PlanCanvas(
         }
         for (opening in openings) {
             opening(view, opening, colors.canvas, colors.ink, wallStroke)
+        }
+        // What to fix, in the warning colour: openings that do not fit, and points where walls
+        // meet wrongly.
+        val faulty = issues.mapNotNull { it.element }.toSet()
+        for (opening in openings.filter { it.opening in faulty }) {
+            drawPath(path(view, opening.points), colors.warning, style = Stroke(width = selectionStroke))
+        }
+        for (at in issues.mapNotNull { it.at }) {
+            val centre = view.toScreen(at.x.value / MM_PER_METRE, at.y.value / MM_PER_METRE)
+            drawCircle(colors.warning, radius = markRadius, center = centre, style = Stroke(width = selectionStroke))
         }
         openings.find { it.opening == selected }?.let { opening ->
             drawPath(path(view, opening.points), colors.selection, style = Stroke(width = selectionStroke))

@@ -45,4 +45,12 @@
     <string name="inspector_size">O‘lchami</string>
     <string name="inspector_done">Tayyor</string>
     <string name="inspector_delete">O‘chirish</string>
+    <string name="issue_outside_wall">Teshik devordan chiqib ketgan</string>
+    <string name="issue_overlap">Teshik boshqasining ustiga tushgan</string>
+    <string name="issue_without_wall">Teshik devorsiz</string>
+    <string name="issue_short_bearing">Peremichkaga tayanch yetmaydi: devor bo‘lagi juda tor</string>
+    <string name="issue_no_room_for_lintel">Peremichka devor tepasiga sig‘maydi</string>
+    <string name="issue_wall_overlap">Devorlar bir-birining ustiga tushgan</string>
+    <string name="issue_sharp_angle">Devorlar juda o‘tkir burchak ostida tutashgan</string>
+    <string name="issue_unknown">Modelda xato</string>
 </resources>

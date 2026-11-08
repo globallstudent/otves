@@ -46,4 +46,12 @@
     <string name="inspector_size">Размер</string>
     <string name="inspector_done">Готово</string>
     <string name="inspector_delete">Удалить</string>
+    <string name="issue_outside_wall">Проём выходит за пределы стены</string>
+    <string name="issue_overlap">Проём накладывается на другой</string>
+    <string name="issue_without_wall">Проём без стены</string>
+    <string name="issue_short_bearing">Перемычке не хватает опоры: простенок слишком узкий</string>
+    <string name="issue_no_room_for_lintel">Перемычка не помещается под верхом стены</string>
+    <string name="issue_wall_overlap">Стены накладываются друг на друга</string>
+    <string name="issue_sharp_angle">Стены сходятся под слишком острым углом</string>
+    <string name="issue_unknown">Ошибка в модели</string>
 </resources>

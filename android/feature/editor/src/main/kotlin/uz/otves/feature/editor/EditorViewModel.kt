@@ -19,6 +19,7 @@ import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
+import uz.otves.engine.Issue
 import uz.otves.engine.Level
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
@@ -78,6 +79,8 @@ internal data class EditorUiState(
     val openings: List<OpeningOutline> = emptyList(),
     /** The walls of the storey below, drawn faintly to build on. */
     val below: List<WallOutline> = emptyList(),
+    /** What to fix on the current storey. */
+    val issues: List<Issue> = emptyList(),
     val takeoff: List<QuantityLine> = emptyList(),
     val takeoffFailed: Boolean = false,
     /** The first tap of a wall still waiting for its second. */
@@ -114,6 +117,7 @@ internal class EditorViewModel(
     private val openings = mutableMapOf<ElementId, Opening>()
     private var wallOutlines: List<WallOutline> = emptyList()
     private var openingOutlines: List<OpeningOutline> = emptyList()
+    private var allIssues: List<Issue> = emptyList()
 
     // One request at a time from send to file, so the log keeps the engine's order.
     private val turn = Mutex()
@@ -322,6 +326,7 @@ internal class EditorViewModel(
         }
         wallOutlines = response.outlines ?: wallOutlines
         openingOutlines = response.openings ?: openingOutlines
+        allIssues = response.issues ?: allIssues
         state.update { current ->
             current.copy(
                 takeoff =
@@ -360,6 +365,7 @@ internal class EditorViewModel(
                 outlines = wallOutlines.filter { it.level == shown },
                 openings = openingOutlines.filter { it.level == shown },
                 below = if (below == null) emptyList() else wallOutlines.filter { it.level == below },
+                issues = allIssues.filter { it.level == shown },
                 wallStart = if (sameLevel) current.wallStart else null,
                 selected = if (sameLevel) current.selected else null,
             )
