@@ -9,6 +9,11 @@
     <string name="projects_name">Название</string>
     <string name="projects_create">Создать</string>
     <string name="projects_cancel">Отмена</string>
+    <string name="projects_rename">Переименовать</string>
+    <string name="projects_delete">Удалить</string>
+    <string name="projects_save">Сохранить</string>
+    <string name="projects_delete_title">Удалить «%1$s»?</string>
+    <string name="projects_delete_body">Объект и все его данные будут удалены с телефона.</string>
     <!-- The locale these strings are in, so dates match the text. -->
     <string name="projects_date_locale">ru</string>
 </resources>

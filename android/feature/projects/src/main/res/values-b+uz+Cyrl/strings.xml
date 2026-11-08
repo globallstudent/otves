@@ -9,6 +9,11 @@
     <string name="projects_name">Номи</string>
     <string name="projects_create">Яратиш</string>
     <string name="projects_cancel">Бекор қилиш</string>
+    <string name="projects_rename">Номини ўзгартириш</string>
+    <string name="projects_delete">Ўчириш</string>
+    <string name="projects_save">Сақлаш</string>
+    <string name="projects_delete_title">«%1$s» ўчирилсинми?</string>
+    <string name="projects_delete_body">Объект ва унинг барча маълумотлари телефондан ўчирилади.</string>
     <!-- The locale these strings are in, so dates match the text. -->
     <string name="projects_date_locale">uz-Cyrl</string>
 </resources>

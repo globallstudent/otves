@@ -46,6 +46,14 @@ public interface Jobs {
 
     public suspend fun create(name: String): JobSummary
 
+    public suspend fun rename(
+        id: Uuid,
+        name: String,
+    )
+
+    /** Removes the job from this phone; it must not be open. */
+    public suspend fun delete(id: Uuid)
+
     /** The job for editing; close it when done. */
     public fun open(id: Uuid): JobStore
 }
@@ -76,6 +84,21 @@ public class JobFiles(
             val job = JobRow(uuidV7(created).toString(), name, createdAt = created, updatedAt = created)
             database(file(job.id)).using { it.jobs().insertJob(job) }
             JobSummary(Uuid.parse(job.id), name, created)
+        }
+
+    override suspend fun rename(
+        id: Uuid,
+        name: String,
+    ): Unit =
+        withContext(io) {
+            database(file(id.toString())).using { it.jobs().rename(name, now()) }
+        }
+
+    // SQLite and Room keep a write-ahead log, its index and a lock file beside the job; all go.
+    override suspend fun delete(id: Uuid): Unit =
+        withContext(io) {
+            val name = file(id.toString()).name
+            directory.listFiles { file -> file.name.startsWith(name) }.orEmpty().forEach { it.delete() }
         }
 
     override fun open(id: Uuid): OpenJob = OpenJob(database(file(id.toString())), now)

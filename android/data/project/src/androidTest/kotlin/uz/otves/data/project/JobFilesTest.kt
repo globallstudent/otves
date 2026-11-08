@@ -83,6 +83,19 @@ class JobFilesTest {
         }
 
     @Test
+    fun aJobCanBeRenamedAndDeleted() =
+        runTest {
+            val kept = files.create("Дом")
+            val gone = files.create("Баня")
+
+            files.rename(kept.id, "Дом на Чиланзаре")
+            files.delete(gone.id)
+
+            assertThat(files.list().map { it.name }).containsExactly("Дом на Чиланзаре")
+            assertThat(directory.list().orEmpty().filter { it.startsWith(gone.id.toString()) }).isEmpty()
+        }
+
+    @Test
     fun theLogKeepsItsOrderAndBytes() =
         runTest {
             val created = files.create("Забор")

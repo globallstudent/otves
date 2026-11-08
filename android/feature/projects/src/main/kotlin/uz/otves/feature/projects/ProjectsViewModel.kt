@@ -43,4 +43,21 @@ internal class ProjectsViewModel(
     }
 
     fun createdOpened() = state.update { it.copy(created = null) }
+
+    fun rename(
+        id: Uuid,
+        name: String,
+    ) {
+        viewModelScope.launch {
+            jobs.rename(id, name.trim())
+            state.update { it.copy(jobs = jobs.list()) }
+        }
+    }
+
+    fun delete(id: Uuid) {
+        viewModelScope.launch {
+            jobs.delete(id)
+            state.update { current -> current.copy(jobs = current.jobs.filter { it.id != id }) }
+        }
+    }
 }

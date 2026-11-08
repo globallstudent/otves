@@ -1,7 +1,7 @@
 package uz.otves.feature.projects
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -27,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,7 +71,14 @@ fun ProjectsRoute(
             onOpen(created)
         }
     }
-    ProjectsScreen(state = state, onOpen = onOpen, onCreate = viewModel::create, modifier = modifier)
+    ProjectsScreen(
+        state = state,
+        onOpen = onOpen,
+        onCreate = viewModel::create,
+        onRename = viewModel::rename,
+        onDelete = viewModel::delete,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -76,9 +86,14 @@ internal fun ProjectsScreen(
     state: ProjectsUiState,
     onOpen: (Uuid) -> Unit,
     onCreate: (String) -> Unit,
+    onRename: (Uuid, String) -> Unit,
+    onDelete: (Uuid) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var naming by rememberSaveable { mutableStateOf(false) }
+    // Ids as text, so they survive recreation.
+    var renaming by rememberSaveable { mutableStateOf<String?>(null) }
+    var deleting by rememberSaveable { mutableStateOf<String?>(null) }
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
         Column(modifier = Modifier.safeDrawingPadding()) {
             Text(
@@ -88,9 +103,22 @@ internal fun ProjectsScreen(
             )
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when {
-                    state.loading -> Unit
-                    state.jobs.isEmpty() -> EmptyProjects(modifier = Modifier.align(Alignment.Center))
-                    else -> JobList(jobs = state.jobs, onOpen = onOpen)
+                    state.loading -> {
+                        // Nothing until the list is read.
+                    }
+
+                    state.jobs.isEmpty() -> {
+                        EmptyProjects(modifier = Modifier.align(Alignment.Center))
+                    }
+
+                    else -> {
+                        JobList(
+                            jobs = state.jobs,
+                            onOpen = onOpen,
+                            onRename = { renaming = it.toString() },
+                            onDelete = { deleting = it.toString() },
+                        )
+                    }
                 }
             }
             Button(
@@ -109,12 +137,42 @@ internal fun ProjectsScreen(
     }
     if (naming) {
         NameDialog(
+            title = stringResource(R.string.projects_new),
+            confirm = stringResource(R.string.projects_create),
             suggested = stringResource(R.string.projects_default_name, state.jobs.size + 1),
-            onCreate = { name ->
+            onConfirm = { name ->
                 naming = false
                 onCreate(name)
             },
             onDismiss = { naming = false },
+        )
+    }
+    state.jobs.find { it.id.toString() == renaming }?.let { job ->
+        NameDialog(
+            title = stringResource(R.string.projects_rename),
+            confirm = stringResource(R.string.projects_save),
+            suggested = job.name,
+            onConfirm = { name ->
+                renaming = null
+                onRename(job.id, name)
+            },
+            onDismiss = { renaming = null },
+        )
+    }
+    state.jobs.find { it.id.toString() == deleting }?.let { job ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text(stringResource(R.string.projects_delete_title, job.name)) },
+            text = { Text(stringResource(R.string.projects_delete_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    onDelete(job.id)
+                }) { Text(stringResource(R.string.projects_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.projects_cancel)) }
+            },
         )
     }
 }
@@ -143,32 +201,38 @@ private fun EmptyProjects(modifier: Modifier = Modifier) {
     }
 }
 
+// A tap opens a job; a long press offers to rename or delete it.
 @Composable
 private fun JobList(
     jobs: List<JobSummary>,
     onOpen: (Uuid) -> Unit,
+    onRename: (Uuid) -> Unit,
+    onDelete: (Uuid) -> Unit,
 ) {
     // The language of the strings, not of the phone: Russian text gets a Russian date.
     val locale = Locale.forLanguageTag(stringResource(R.string.projects_date_locale))
     val dates = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
+    var menuFor by remember { mutableStateOf<Uuid?>(null) }
     LazyColumn {
         items(jobs, key = { it.id.toString() }) { job ->
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = RowHeight)
-                        .clickable { onOpen(job.id) }
-                        .padding(horizontal = OtvesDimens.gutter, vertical = 12.dp),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(job.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val changed = Instant.ofEpochMilli(job.updatedAt).atZone(ZoneId.systemDefault()).format(dates)
-                Text(
-                    text = stringResource(R.string.projects_changed, changed),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = OtvesTheme.colors.inkSecondary,
-                )
+            Box {
+                JobRow(job, dates, onOpen = { onOpen(job.id) }, onMenu = { menuFor = job.id })
+                DropdownMenu(expanded = menuFor == job.id, onDismissRequest = { menuFor = null }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.projects_rename)) },
+                        onClick = {
+                            menuFor = null
+                            onRename(job.id)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.projects_delete)) },
+                        onClick = {
+                            menuFor = null
+                            onDelete(job.id)
+                        },
+                    )
+                }
             }
             HorizontalDivider(color = OtvesTheme.colors.divider, modifier = Modifier.padding(horizontal = OtvesDimens.gutter))
         }
@@ -176,15 +240,43 @@ private fun JobList(
 }
 
 @Composable
+private fun JobRow(
+    job: JobSummary,
+    dates: DateTimeFormatter,
+    onOpen: () -> Unit,
+    onMenu: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = RowHeight)
+                .combinedClickable(onClick = onOpen, onLongClick = onMenu)
+                .padding(horizontal = OtvesDimens.gutter, vertical = 12.dp),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(job.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val changed = Instant.ofEpochMilli(job.updatedAt).atZone(ZoneId.systemDefault()).format(dates)
+        Text(
+            text = stringResource(R.string.projects_changed, changed),
+            style = MaterialTheme.typography.bodyMedium,
+            color = OtvesTheme.colors.inkSecondary,
+        )
+    }
+}
+
+@Composable
 private fun NameDialog(
+    title: String,
+    confirm: String,
     suggested: String,
-    onCreate: (String) -> Unit,
+    onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by rememberSaveable { mutableStateOf(suggested) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.projects_new)) },
+        title = { Text(title) },
         text = {
             OutlinedTextField(
                 value = name,
@@ -194,8 +286,8 @@ private fun NameDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onCreate(name) }, enabled = name.isNotBlank()) {
-                Text(stringResource(R.string.projects_create))
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+                Text(confirm)
             }
         },
         dismissButton = {
@@ -222,6 +314,8 @@ private fun ProjectsScreenPreview() {
                 ),
             onOpen = {},
             onCreate = {},
+            onRename = { _, _ -> },
+            onDelete = {},
         )
     }
 }
@@ -230,6 +324,6 @@ private fun ProjectsScreenPreview() {
 @Composable
 private fun EmptyProjectsPreview() {
     OtvesTheme {
-        ProjectsScreen(state = ProjectsUiState(loading = false), onOpen = {}, onCreate = {})
+        ProjectsScreen(state = ProjectsUiState(loading = false), onOpen = {}, onCreate = {}, onRename = { _, _ -> }, onDelete = {})
     }
 }

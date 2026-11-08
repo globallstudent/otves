@@ -25,6 +25,19 @@ class ProjectsViewModelTest {
         override suspend fun create(name: String): JobSummary =
             JobSummary(Uuid.fromLongs(2, saved.size.toLong()), name, 2_000L).also { saved.add(0, it) }
 
+        override suspend fun rename(
+            id: Uuid,
+            name: String,
+        ) {
+            val index = saved.indexOfFirst { it.id == id }
+            saved[index] = saved[index].copy(name = name, updatedAt = 3_000L)
+            saved.sortByDescending { it.updatedAt }
+        }
+
+        override suspend fun delete(id: Uuid) {
+            saved.removeAll { it.id == id }
+        }
+
         override fun open(id: Uuid): JobStore = error("not opened in these tests")
     }
 
@@ -48,6 +61,29 @@ class ProjectsViewModelTest {
             viewModel.uiState.value.jobs
                 .map { it.name },
         ).containsExactly("Баня")
+    }
+
+    @Test
+    fun aRenamedJobLeadsTheListAndADeletedOneLeavesIt() {
+        val viewModel = ProjectsViewModel(jobs)
+        viewModel.refresh()
+        viewModel.create("Забор")
+        val bath =
+            viewModel.uiState.value.jobs
+                .last()
+                .id
+
+        viewModel.rename(bath, " Баня у реки ")
+        assertThat(
+            viewModel.uiState.value.jobs
+                .map { it.name },
+        ).containsExactly("Баня у реки", "Забор").inOrder()
+
+        viewModel.delete(bath)
+        assertThat(
+            viewModel.uiState.value.jobs
+                .map { it.name },
+        ).containsExactly("Забор")
     }
 
     @Test

@@ -74,6 +74,12 @@ internal abstract class JobDao {
     @Query("UPDATE job SET updated_at = :at")
     abstract suspend fun touch(at: Long)
 
+    @Query("UPDATE job SET name = :name, updated_at = :at")
+    abstract suspend fun rename(
+        name: String,
+        at: Long,
+    )
+
     // All or nothing, so the rows and the log never disagree.
     @Transaction
     open suspend fun record(

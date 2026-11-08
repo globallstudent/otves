@@ -9,6 +9,11 @@
     <string name="projects_name">Nomi</string>
     <string name="projects_create">Yaratish</string>
     <string name="projects_cancel">Bekor qilish</string>
+    <string name="projects_rename">Nomini o‘zgartirish</string>
+    <string name="projects_delete">O‘chirish</string>
+    <string name="projects_save">Saqlash</string>
+    <string name="projects_delete_title">«%1$s» o‘chirilsinmi?</string>
+    <string name="projects_delete_body">Obyekt va uning barcha ma’lumotlari telefondan o‘chiriladi.</string>
     <!-- The locale these strings are in, so dates match the text. -->
     <string name="projects_date_locale">uz-Latn</string>
 </resources>
