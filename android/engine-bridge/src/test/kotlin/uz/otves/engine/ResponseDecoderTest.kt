@@ -70,7 +70,7 @@ class ResponseDecoderTest {
         val decoded = ResponseDecoder.decode(derivedResponse(takeoffError = ErrorCode.None))
 
         assertThat(decoded.outlines)
-            .containsExactly(WallOutline(wall, level, listOf(PointM(0.0, -0.19), PointM(6.4, -0.19), PointM(6.4, 0.19))))
+            .containsExactly(WallOutline(wall, level, listOf(PointM(0.0, -0.19), PointM(6.4, -0.19), PointM(6.4, 0.19)), 6400.mm))
         assertThat(decoded.takeoff)
             .isEqualTo(Takeoff.Lines(listOf(QuantityLine("masonry", "masonry_unit", QuantityUnit.PIECE, 2767.0))))
         assertThat(decoded.openings)
@@ -204,6 +204,7 @@ class ResponseDecoderTest {
         OutlineTable.addWall(builder, builder.uuid(wall))
         OutlineTable.addLevel(builder, builder.uuid(level))
         OutlineTable.addPoints(builder, points)
+        OutlineTable.addLength(builder, 6400)
         val outline = OutlineTable.endWallOutline(builder)
         OpeningOutlineTable.startPointsVector(builder, 2)
         for ((x, y) in listOf(1.9 to -0.19, 1.0 to -0.19)) {

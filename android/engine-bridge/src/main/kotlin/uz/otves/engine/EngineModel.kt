@@ -27,6 +27,8 @@ public data class WallOutline(
     public val wall: ElementId,
     public val level: ElementId,
     public val points: List<PointM>,
+    /** Along the location line, for dimensions. */
+    public val length: Mm = Mm(0),
 )
 
 /** The rectangle an opening cuts through its wall on the plan, counter-clockwise. */

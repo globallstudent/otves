@@ -71,6 +71,7 @@ internal object ResponseDecoder {
                     val point = outline.points(PointMStruct(), it)
                     PointM(point.x(), point.y())
                 },
+            length = Mm(outline.length()),
         )
 
     private fun opening(outline: OpeningOutlineTable): OpeningOutline =
