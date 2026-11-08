@@ -9,4 +9,6 @@
     <string name="projects_name">Nomi</string>
     <string name="projects_create">Yaratish</string>
     <string name="projects_cancel">Bekor qilish</string>
+    <!-- The locale these strings are in, so dates match the text. -->
+    <string name="projects_date_locale">uz-Latn</string>
 </resources>

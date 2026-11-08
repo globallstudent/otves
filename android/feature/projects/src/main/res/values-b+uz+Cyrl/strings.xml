@@ -9,4 +9,6 @@
     <string name="projects_name">Номи</string>
     <string name="projects_create">Яратиш</string>
     <string name="projects_cancel">Бекор қилиш</string>
+    <!-- The locale these strings are in, so dates match the text. -->
+    <string name="projects_date_locale">uz-Cyrl</string>
 </resources>

@@ -9,4 +9,6 @@
     <string name="projects_name">Название</string>
     <string name="projects_create">Создать</string>
     <string name="projects_cancel">Отмена</string>
+    <!-- The locale these strings are in, so dates match the text. -->
+    <string name="projects_date_locale">ru</string>
 </resources>

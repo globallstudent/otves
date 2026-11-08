@@ -31,7 +31,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -48,6 +47,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import java.util.Locale
 import kotlin.uuid.Uuid
 import uz.otves.core.designsystem.R as DesignR
 
@@ -148,7 +148,8 @@ private fun JobList(
     jobs: List<JobSummary>,
     onOpen: (Uuid) -> Unit,
 ) {
-    val locale = LocalConfiguration.current.locales[0]
+    // The language of the strings, not of the phone: Russian text gets a Russian date.
+    val locale = Locale.forLanguageTag(stringResource(R.string.projects_date_locale))
     val dates = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
     LazyColumn {
         items(jobs, key = { it.id.toString() }) { job ->
