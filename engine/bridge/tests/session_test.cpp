@@ -543,6 +543,7 @@ TEST(Session, OutlinesFollowTheModelEvenWithoutContent) {
   // A free 6.4 m wall, 380 mm thick: a rectangle around its centre line, in metres.
   ASSERT_EQ(outline->points()->size(), 4U);
   EXPECT_DOUBLE_EQ(outline->points()->Get(1)->x(), 6.4);
+  EXPECT_EQ(outline->length(), 6400);
   EXPECT_EQ(built.takeoff(), nullptr);
 
   // Nothing changed, so nothing derived is sent.

@@ -11,6 +11,7 @@
 #include <otves/core/error.h>
 #include <otves/core/model.h>
 #include <otves/core/opening.h>
+#include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 #include <otves/geom/openings.h>
@@ -114,8 +115,11 @@ OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Mo
         points.emplace_back(point.x, point.y);
       }
       const schema::Uuid wall = to_schema(footprint.id);
-      outlines.push_back(
-          schema::CreateWallOutline(builder, &wall, &on, builder.CreateVectorOfStructs(points)));
+      const Wall* drawn = model.find<Wall>(footprint.id);
+      const Mm length =
+          round_to_mm(geom::length(geom::to_vec2(drawn->end) - geom::to_vec2(drawn->start)));
+      outlines.push_back(schema::CreateWallOutline(
+          builder, &wall, &on, builder.CreateVectorOfStructs(points), length.value()));
     }
   }
   return builder.CreateVector(outlines);

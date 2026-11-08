@@ -269,6 +269,7 @@ table WallOutline {
   wall:Uuid;
   level:Uuid;
   points:[PointM];
+  length:long;  // along the location line, rounded to the millimetre, for dimensions
 }
 
 // An opening's plan outline through its wall, counter-clockwise (engine/geom).
