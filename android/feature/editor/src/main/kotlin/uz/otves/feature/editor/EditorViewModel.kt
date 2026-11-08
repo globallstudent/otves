@@ -68,6 +68,12 @@ internal sealed interface Selected {
     ) : Selected
 }
 
+/** A wall's length, written along it on the plan. */
+internal data class Dimension(
+    val wall: Wall,
+    val length: Mm,
+)
+
 @Immutable
 internal data class EditorUiState(
     val ready: Boolean = false,
@@ -81,6 +87,7 @@ internal data class EditorUiState(
     val below: List<WallOutline> = emptyList(),
     /** What to fix on the current storey. */
     val issues: List<Issue> = emptyList(),
+    val dimensions: List<Dimension> = emptyList(),
     val takeoff: List<QuantityLine> = emptyList(),
     val takeoffFailed: Boolean = false,
     /** The first tap of a wall still waiting for its second. */
@@ -363,6 +370,10 @@ internal class EditorViewModel(
                 levels = ordered,
                 level = shown,
                 outlines = wallOutlines.filter { it.level == shown },
+                dimensions =
+                    wallOutlines
+                        .filter { it.level == shown }
+                        .mapNotNull { outline -> walls[outline.wall]?.let { Dimension(it, outline.length) } },
                 openings = openingOutlines.filter { it.level == shown },
                 below = if (below == null) emptyList() else wallOutlines.filter { it.level == below },
                 issues = allIssues.filter { it.level == shown },

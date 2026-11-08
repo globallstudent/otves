@@ -3,6 +3,7 @@ package uz.otves.feature.editor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -18,14 +19,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.engine.Issue
+import uz.otves.engine.LocationLine
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointM
@@ -48,6 +54,7 @@ internal fun PlanCanvas(
     below: List<WallOutline>,
     selected: ElementId?,
     issues: List<Issue>,
+    dimensions: List<Dimension>,
     wallStart: PointMm?,
     onTap: (at: PointMm, reach: Mm) -> Unit,
     modifier: Modifier = Modifier,
@@ -60,6 +67,9 @@ internal fun PlanCanvas(
     val markRadius = with(density) { 6.dp.toPx() }
     val selectionStroke = with(density) { 2.dp.toPx() }
     val touchReach = with(density) { TOUCH_REACH.dp.toPx() }
+    val labelGap = with(density) { LABEL_GAP.dp.toPx() }
+    val measurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelMedium.copy(color = colors.inkSecondary)
 
     Canvas(
         modifier =
@@ -80,6 +90,9 @@ internal fun PlanCanvas(
             val path = path(view, outline)
             drawPath(path, colors.inkTertiary)
             drawPath(path, colors.ink, style = Stroke(width = wallStroke))
+        }
+        for (dimension in dimensions) {
+            dimension(view, dimension, measurer.measure(dimension.length.value.toString(), labelStyle), labelGap)
         }
         // The selection in the plan's only accent colour; openings stay cut out of a selected wall.
         outlines.find { it.wall == selected }?.let { outline ->
@@ -167,6 +180,39 @@ private fun path(
         }
         close()
     }
+
+// The wall's length beside its left face, along the wall and never upside down; left out when the
+// wall is too short on screen to hold it.
+private fun DrawScope.dimension(
+    view: PlanView,
+    dimension: Dimension,
+    label: TextLayoutResult,
+    gap: Float,
+) {
+    val wall = dimension.wall
+    val start = view.toScreen(wall.start.x.value / MM_PER_METRE, wall.start.y.value / MM_PER_METRE)
+    val end = view.toScreen(wall.end.x.value / MM_PER_METRE, wall.end.y.value / MM_PER_METRE)
+    val run = end - start
+    val onScreen = run.getDistance()
+    if (onScreen == 0f || label.size.width > onScreen * LABEL_FILL) return
+    val along = run / onScreen
+    // The plan's left of the wall: y runs down on screen, so it is the screen's right turn.
+    val left = Offset(along.y, -along.x)
+    val face =
+        when (wall.locationLine) {
+            LocationLine.CENTER -> wall.thickness.value / 2.0
+            LocationLine.LEFT_FACE -> 0.0
+            LocationLine.RIGHT_FACE -> wall.thickness.value.toDouble()
+        }
+    val reach = (face / MM_PER_METRE * view.scale).toFloat() + gap + label.size.height / 2f
+    val centre = (start + end) / 2f + left * reach
+    var degrees = angle(run)
+    // Upright, and on an upright wall read from the bottom up, as on drawings.
+    if (degrees >= QUARTER_TURN || degrees < -QUARTER_TURN) degrees += HALF_TURN
+    rotate(degrees, pivot = centre) {
+        drawText(label, topLeft = centre - Offset(label.size.width / 2f, label.size.height / 2f))
+    }
+}
 
 // The gap an opening leaves in its wall, with the usual plan symbol: a window's glazing line, a
 // door's leaf and swing. Corners come counter-clockwise: near and far end on the right face, then
@@ -264,5 +310,8 @@ private const val START_BOTTOM = 0.8f
 private const val TOUCH_REACH = 12f
 private const val SELECTION_FILL = 0.25f
 private const val OUTLINE_CORNERS = 4
+private const val QUARTER_TURN = 90f
 private const val HALF_TURN = 180f
+private const val LABEL_GAP = 4f
+private const val LABEL_FILL = 0.8f
 private const val FULL_TURN = 360f

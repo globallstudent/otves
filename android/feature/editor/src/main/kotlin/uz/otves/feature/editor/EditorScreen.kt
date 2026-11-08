@@ -158,6 +158,7 @@ internal fun EditorScreen(
                     below = state.below,
                     selected = state.selected?.id,
                     issues = state.issues,
+                    dimensions = state.dimensions,
                     wallStart = state.wallStart,
                     onTap = actions.onTap,
                     modifier = Modifier.fillMaxSize(),

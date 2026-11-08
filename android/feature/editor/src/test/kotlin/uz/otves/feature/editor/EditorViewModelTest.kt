@@ -206,7 +206,9 @@ class EditorViewModelTest {
         private fun group(kind: Int) = LogEntry(Uuid.random(), kind, hlc = 0L, device = Uuid.NIL, origin = null, ops = byteArrayOf())
 
         private fun wallOutlines(): List<WallOutline> =
-            elements.mapNotNull { (id, element) -> (element as? Wall)?.let { WallOutline(id, it.level, listOf(PointM(0.0, 0.0))) } }
+            elements.mapNotNull { (id, element) ->
+                (element as? Wall)?.let { WallOutline(id, it.level, listOf(PointM(0.0, 0.0)), length = it.end.x - it.start.x) }
+            }
 
         private fun openingOutlines(): List<OpeningOutline> =
             elements.mapNotNull { (id, element) ->
@@ -547,6 +549,19 @@ class EditorViewModelTest {
         assertThat(viewModel.uiState.value.selected).isNull()
         assertThat(viewModel.uiState.value.outlines).isEmpty()
         assertThat(viewModel.uiState.value.canUndo).isTrue()
+    }
+
+    @Test
+    fun eachWallOfTheStoreyGetsItsLength() {
+        val viewModel = EditorViewModel(engine, { content }, store)
+
+        viewModel.buildWall()
+
+        val dimension =
+            viewModel.uiState.value.dimensions
+                .single()
+        assertThat(dimension.wall.end).isEqualTo(PointMm(6_000.mm, 0.mm))
+        assertThat(dimension.length).isEqualTo(6_000.mm)
     }
 
     @Test
