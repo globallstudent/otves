@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Otves</string>
-    <string name="home_empty_title">Hozircha obyektlar yo‘q</string>
-    <string name="home_empty_body">Obyekt yarating: uy, devor, hammom yoki boshqa qurilish.</string>
-    <string name="home_new_project">Yangi obyekt</string>
 </resources>

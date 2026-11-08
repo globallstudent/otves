@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Отвес</string>
-    <string name="home_empty_title">Объектов пока нет</string>
-    <string name="home_empty_body">Создайте объект: дом, забор, баню или любую другую стройку.</string>
-    <string name="home_new_project">Новый объект</string>
 </resources>

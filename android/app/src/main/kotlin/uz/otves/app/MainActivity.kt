@@ -2,39 +2,56 @@ package uz.otves.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.engine.ContentAssets
 import uz.otves.feature.editor.EditorRoute
+import uz.otves.feature.editor.api.EditorKey
+import uz.otves.feature.projects.ProjectsRoute
+import uz.otves.feature.projects.api.ProjectsKey
+import kotlin.uuid.Uuid
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val engine = (application as OtvesApplication).engine
+        val app = application as OtvesApplication
         setContent {
             OtvesTheme {
-                // One job for now; the projects feature brings a real back stack.
-                var editing by rememberSaveable { mutableStateOf(false) }
-                if (editing) {
-                    BackHandler { editing = false }
-                    EditorRoute(
-                        engine = engine,
-                        loadContent = { withContext(Dispatchers.IO) { ContentAssets.load(assets) } },
-                    )
-                } else {
-                    HomeScreen(onNewProject = { editing = true })
-                }
+                // Restored after process death; each entry keeps its view models until it leaves.
+                val backStack = rememberNavBackStack(ProjectsKey)
+                NavDisplay(
+                    backStack = backStack,
+                    onBack = { backStack.removeLastOrNull() },
+                    entryDecorators =
+                        listOf(
+                            rememberSaveableStateHolderNavEntryDecorator(),
+                            rememberViewModelStoreNavEntryDecorator(),
+                        ),
+                    entryProvider =
+                        entryProvider {
+                            entry<ProjectsKey> {
+                                ProjectsRoute(jobs = app.jobs, onOpen = { job -> backStack.add(EditorKey(job.toString())) })
+                            }
+                            entry<EditorKey> { key ->
+                                EditorRoute(
+                                    engine = app.engine,
+                                    loadContent = { withContext(Dispatchers.IO) { ContentAssets.load(assets) } },
+                                    openJob = { app.jobs.open(Uuid.parse(key.job)) },
+                                )
+                            }
+                        },
+                )
             }
         }
     }

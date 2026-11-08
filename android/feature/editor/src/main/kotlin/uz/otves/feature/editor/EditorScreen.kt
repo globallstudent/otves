@@ -43,6 +43,7 @@ import uz.otves.core.designsystem.SegmentedControl
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
+import uz.otves.data.project.JobStore
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
@@ -55,14 +56,18 @@ import uz.otves.engine.QuantityUnit
 import uz.otves.engine.WallOutline
 import kotlin.uuid.Uuid
 
-/** The editor for one storey, wired to the engine; [loadContent] reads the norms and rules. */
+/**
+ * The editor of one job, wired to the engine; [loadContent] reads the norms and rules and
+ * [openJob] opens the job file, which the editor closes when it leaves.
+ */
 @Composable
 fun EditorRoute(
     engine: Engine,
     loadContent: suspend () -> EngineCommand.LoadContent,
+    openJob: () -> JobStore,
     modifier: Modifier = Modifier,
 ) {
-    val viewModel = viewModel { EditorViewModel(engine, loadContent) }
+    val viewModel = viewModel { EditorViewModel(engine, loadContent, openJob()) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     EditorScreen(
         state = state,

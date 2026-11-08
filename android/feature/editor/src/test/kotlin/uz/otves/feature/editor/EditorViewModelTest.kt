@@ -1,5 +1,9 @@
 package uz.otves.feature.editor
 
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -11,6 +15,8 @@ import org.junit.Before
 import org.junit.Test
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.mm
+import uz.otves.data.project.JobStore
+import uz.otves.data.project.SavedJob
 import uz.otves.engine.CommandResult
 import uz.otves.engine.ContentScript
 import uz.otves.engine.ElementChange
@@ -68,6 +74,15 @@ class EditorViewModelTest {
                 when {
                     refusal != null -> {
                         results += CommandResult.Failed(refusal, "refused")
+                    }
+
+                    command is EngineCommand.OpenModel -> {
+                        changes += elements.keys.map { ElementChange(it, null) }
+                        elements.clear()
+                        steps.clear()
+                        elements += command.elements
+                        changes += command.elements.map { (id, element) -> ElementChange(id, element) }
+                        results += CommandResult.Done(null)
                     }
 
                     command is EngineCommand.AddLevel -> {
@@ -128,7 +143,26 @@ class EditorViewModelTest {
             }
     }
 
+    /** A job file in memory: what it holds when opened, and every response written to it. */
+    private class FakeStore(
+        private val saved: SavedJob = SavedJob(emptyMap(), clock = 0L),
+    ) : JobStore {
+        val recorded = mutableListOf<EngineResponse>()
+        var closed = false
+
+        override suspend fun load(): SavedJob = saved
+
+        override suspend fun record(response: EngineResponse) {
+            recorded += response
+        }
+
+        override fun close() {
+            closed = true
+        }
+    }
+
     private val engine = FakeEngine(level)
+    private var store = FakeStore()
 
     @Before
     fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -137,17 +171,72 @@ class EditorViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun startLoadsTheContentAndAGroundFloor() {
-        val viewModel = EditorViewModel(engine) { content }
+    fun aNewJobOpensEmptyAndGetsAGroundFloor() {
+        val viewModel = EditorViewModel(engine, { content }, store)
 
-        assertThat(engine.sent.single().first()).isEqualTo(content)
-        assertThat(engine.sent.single()[1]).isInstanceOf(EngineCommand.AddLevel::class.java)
+        val start = engine.sent.single()
+        assertThat(start[0]).isEqualTo(content)
+        assertThat(start[1]).isEqualTo(EngineCommand.OpenModel(emptyMap(), clock = 0L))
+        assertThat(start[2]).isInstanceOf(EngineCommand.AddLevel::class.java)
+        assertThat(store.recorded).hasSize(1)
         assertThat(viewModel.uiState.value.ready).isTrue()
+        assertThat(viewModel.uiState.value.level).isEqualTo(level)
+    }
+
+    @Test
+    fun aSavedJobOpensAsSavedOnItsGroundFloor() {
+        val upper = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000010"))
+        val wall = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000011"))
+        val saved =
+            mapOf(
+                level to Level(0.mm, 3_000.mm),
+                upper to Level(3_000.mm, 3_000.mm),
+                wall to Wall(level, PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm), 380.mm, 2_800.mm),
+            )
+        store = FakeStore(SavedJob(saved, clock = 42L))
+
+        val viewModel = EditorViewModel(engine, { content }, store)
+
+        assertThat(engine.sent.single()).containsExactly(content, EngineCommand.OpenModel(saved, clock = 42L)).inOrder()
+        val state = viewModel.uiState.value
+        assertThat(state.levels).containsExactly(level, upper).inOrder()
+        assertThat(state.level).isEqualTo(level)
+        assertThat(state.outlines).hasSize(1)
+        assertThat(state.canUndo).isFalse()
+    }
+
+    @Test
+    fun leavingTheEditorClosesTheJob() {
+        val owner = ViewModelStore()
+        val factory = viewModelFactory { initializer { EditorViewModel(engine, { content }, store) } }
+        ViewModelProvider.create(owner, factory)[EditorViewModel::class]
+
+        owner.clear()
+
+        assertThat(store.closed).isTrue()
+    }
+
+    @Test
+    fun everyResponseGoesToTheJobFile() {
+        val viewModel = EditorViewModel(engine, { content }, store)
+
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
+        viewModel.undo()
+
+        assertThat(store.recorded).hasSize(3)
+        assertThat(
+            store.recorded
+                .last()
+                .changes
+                .single()
+                .element,
+        ).isNull()
     }
 
     @Test
     fun twoTapsBuildAWallOnTheGridWithTheChosenThickness() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.selectThickness(250.mm)
 
         viewModel.tap(PointMm(30.mm, (-40).mm), reach)
@@ -168,7 +257,7 @@ class EditorViewModelTest {
 
     @Test
     fun undoStopsBeforeTheGroundFloor() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         assertThat(viewModel.uiState.value.canUndo).isFalse()
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
@@ -181,7 +270,7 @@ class EditorViewModelTest {
 
     @Test
     fun aTapNearAWallEndLandsOnIt() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_437.mm, 0.mm), reach)
 
@@ -192,7 +281,7 @@ class EditorViewModelTest {
 
     @Test
     fun aWindowGoesIntoTheTappedWallWithTheChosenSize() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.selectTool(Tool.WINDOW)
@@ -218,7 +307,7 @@ class EditorViewModelTest {
 
     @Test
     fun aDoorStandsOnTheFloor() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.selectTool(Tool.DOOR)
 
         viewModel.tap(PointMm(1_000.mm, 0.mm), reach)
@@ -231,7 +320,7 @@ class EditorViewModelTest {
 
     @Test
     fun changingTheToolDropsAWallStart() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
         viewModel.selectTool(Tool.WINDOW)
@@ -241,7 +330,7 @@ class EditorViewModelTest {
 
     @Test
     fun aNewStoreyStandsOnTheTopOneAndIsShownOverIt() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
 
@@ -260,7 +349,7 @@ class EditorViewModelTest {
 
     @Test
     fun choosingAStoreyShowsItsWalls() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.addLevel()
@@ -275,7 +364,7 @@ class EditorViewModelTest {
 
     @Test
     fun undoingAStoreyGoesBackDown() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.addLevel()
 
         viewModel.undo()
@@ -287,7 +376,7 @@ class EditorViewModelTest {
 
     @Test
     fun aWallEndOnTheStoreyBelowCatchesTaps() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_437.mm, 0.mm), reach)
         viewModel.addLevel()
@@ -299,7 +388,7 @@ class EditorViewModelTest {
 
     @Test
     fun refusalAndFailedTakeoffAreShown() {
-        val viewModel = EditorViewModel(engine) { content }
+        val viewModel = EditorViewModel(engine, { content }, store)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
         engine.refuseNext = EngineError.ZERO_LENGTH

@@ -27,8 +27,13 @@ android {
 
 dependencies {
     implementation(projects.core.designsystem)
+    implementation(projects.data.project)
     implementation(projects.engineBridge)
     implementation(projects.feature.editor)
+    implementation(projects.feature.projects)
+    implementation(libs.navigation3.runtime)
+    implementation(libs.navigation3.ui)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)

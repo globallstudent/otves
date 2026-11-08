@@ -8,9 +8,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
+import uz.otves.data.project.JobStore
 import uz.otves.engine.CommandResult
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
@@ -71,12 +74,14 @@ internal data class EditorUiState(
 )
 
 /**
- * The plan, one storey at a time. The engine owns the model; this keeps only what the screen
- * draws and the wall ends it snaps to, all taken from engine responses.
+ * The plan of one job, one storey at a time. The engine owns the model; this keeps only what the
+ * screen draws and the wall ends it snaps to, all taken from engine responses, and writes every
+ * response to the job file. The view model owns [job] and closes it when cleared.
  */
 internal class EditorViewModel(
     private val engine: Engine,
     loadContent: suspend () -> EngineCommand.LoadContent,
+    private val job: JobStore,
 ) : ViewModel() {
     private val state = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = state.asStateFlow()
@@ -88,14 +93,30 @@ internal class EditorViewModel(
     private var outlines: List<WallOutline> = emptyList()
     private var openings: List<OpeningOutline> = emptyList()
 
+    // One command at a time from send to file, so the log keeps the engine's order.
+    private val turn = Mutex()
+
     init {
         viewModelScope.launch {
-            val response = engine.send(listOf(loadContent(), EngineCommand.AddLevel(Ground)))
-            val ground = (response.results.getOrNull(1) as? CommandResult.Done)?.created
-            apply(response, show = ground)
-            state.update { it.copy(ready = ground != null) }
+            turn.withLock {
+                val saved = job.load()
+                val commands =
+                    buildList {
+                        add(loadContent())
+                        add(EngineCommand.OpenModel(saved.elements, saved.clock))
+                        // A new job comes with its ground floor.
+                        if (saved.elements.values.none { it is Level }) add(EngineCommand.AddLevel(Ground))
+                    }
+                val response = engine.send(commands)
+                job.record(response)
+                apply(response)
+                show(orderedLevels().firstOrNull())
+                state.update { it.copy(ready = levels.isNotEmpty()) }
+            }
         }
     }
+
+    override fun onCleared() = job.close()
 
     /**
      * A tap on the plan. With the wall tool the first tap starts a wall and the second builds it;
@@ -172,18 +193,26 @@ internal class EditorViewModel(
         showCreated: Boolean = false,
     ) {
         viewModelScope.launch {
-            val response = engine.send(listOf(command))
-            val result = response.results.singleOrNull()
-            if (result is CommandResult.Done) {
-                userSteps +=
-                    when (command) {
-                        EngineCommand.Undo -> -1
-                        EngineCommand.Redo, is EngineCommand.AddLevel, is EngineCommand.AddWall, is EngineCommand.PlaceOpening -> 1
-                        else -> 0
-                    }
-            }
-            apply(response, show = if (showCreated) (result as? CommandResult.Done)?.created else null)
+            turn.withLock { execute(command, showCreated) }
         }
+    }
+
+    private suspend fun execute(
+        command: EngineCommand,
+        showCreated: Boolean,
+    ) {
+        val response = engine.send(listOf(command))
+        job.record(response)
+        val result = response.results.singleOrNull()
+        if (result is CommandResult.Done) {
+            userSteps +=
+                when (command) {
+                    EngineCommand.Undo -> -1
+                    EngineCommand.Redo, is EngineCommand.AddLevel, is EngineCommand.AddWall, is EngineCommand.PlaceOpening -> 1
+                    else -> 0
+                }
+        }
+        apply(response, show = if (showCreated) (result as? CommandResult.Done)?.created else null)
     }
 
     // Mirrors the engine's changes, then shows [show], or else stays on the current storey while
