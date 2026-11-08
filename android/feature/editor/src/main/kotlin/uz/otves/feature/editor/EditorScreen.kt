@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -83,6 +84,11 @@ fun EditorRoute(
                 onAddLevel = viewModel::addLevel,
                 onUndo = viewModel::undo,
                 onRedo = viewModel::redo,
+                onDeselect = viewModel::deselect,
+                onWallThickness = viewModel::setWallThickness,
+                onOpeningKind = viewModel::setOpeningKind,
+                onOpeningSize = viewModel::setOpeningSize,
+                onDelete = viewModel::removeSelected,
             ),
         modifier = modifier,
     )
@@ -100,6 +106,11 @@ internal data class EditorActions(
     val onAddLevel: () -> Unit = {},
     val onUndo: () -> Unit = {},
     val onRedo: () -> Unit = {},
+    val onDeselect: () -> Unit = {},
+    val onWallThickness: (Mm) -> Unit = {},
+    val onOpeningKind: (OpeningKind) -> Unit = {},
+    val onOpeningSize: (OpeningSize) -> Unit = {},
+    val onDelete: () -> Unit = {},
 )
 
 @Composable
@@ -143,6 +154,7 @@ internal fun EditorScreen(
                     outlines = state.outlines,
                     openings = state.openings,
                     below = state.below,
+                    selected = state.selected?.id,
                     wallStart = state.wallStart,
                     onTap = actions.onTap,
                     modifier = Modifier.fillMaxSize(),
@@ -152,6 +164,7 @@ internal fun EditorScreen(
                         !state.ready -> stringResource(R.string.editor_loading)
                         state.refused != null -> refusalText(state.refused)
                         state.wallStart != null -> stringResource(R.string.editor_hint_end)
+                        state.tool == Tool.SELECT && state.selected == null -> stringResource(R.string.editor_hint_select)
                         state.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
                         state.tool == Tool.DOOR -> stringResource(R.string.editor_hint_door)
                         state.outlines.isEmpty() -> stringResource(R.string.editor_hint_start)
@@ -184,7 +197,8 @@ internal fun EditorScreen(
                     )
                 }
             }
-            TakeoffPanel(state)
+            val selected = state.selected
+            if (selected != null) Inspector(selected, actions) else TakeoffPanel(state)
         }
     }
 }
@@ -254,11 +268,16 @@ private fun ToolOptions(
             Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp)
+                .height(OtvesDimens.minTarget)
                 .horizontalScroll(rememberScrollState())
                 .padding(horizontal = OtvesDimens.gutter),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         when (state.tool) {
+            Tool.SELECT -> {
+                // Nothing to choose before something is picked; the row keeps its height.
+            }
+
             Tool.WALL -> {
                 WallThicknesses.forEach { thickness ->
                     OptionChip(thicknessName(thickness), thickness == state.thickness) { actions.onThickness(thickness) }
@@ -297,6 +316,81 @@ private fun OptionChip(
             ),
         modifier = Modifier.heightIn(min = OtvesDimens.minTarget),
     )
+}
+
+// What the select tool picked, with its settings, in place of the take-off and of the same
+// height, so the plan does not move.
+@Composable
+private fun Inspector(
+    selected: Selected,
+    actions: EditorActions,
+) {
+    Surface(color = OtvesTheme.colors.surface, modifier = Modifier.fillMaxWidth().height(TakeoffHeight)) {
+        Column(modifier = Modifier.padding(horizontal = OtvesDimens.gutter, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val title =
+                    when (selected) {
+                        is Selected.WallPart -> stringResource(R.string.tool_wall)
+                        is Selected.OpeningPart -> kindName(selected.opening.kind)
+                    }
+                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = actions.onDelete, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
+                    Text(stringResource(R.string.inspector_delete))
+                }
+                TextButton(onClick = actions.onDeselect, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
+                    Text(stringResource(R.string.inspector_done))
+                }
+            }
+            when (selected) {
+                is Selected.WallPart -> {
+                    InspectorRow(stringResource(R.string.inspector_thickness)) {
+                        WallThicknesses.forEach { thickness ->
+                            OptionChip(thicknessName(thickness), thickness == selected.wall.thickness) {
+                                actions.onWallThickness(thickness)
+                            }
+                        }
+                    }
+                }
+
+                is Selected.OpeningPart -> {
+                    val opening = selected.opening
+                    SegmentedControl(
+                        options = OpeningKind.entries.map { kindName(it) },
+                        selected = opening.kind.ordinal,
+                        onSelect = { actions.onOpeningKind(OpeningKind.entries[it]) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    InspectorRow(stringResource(R.string.inspector_size)) {
+                        val current = OpeningSize(opening.width, opening.height)
+                        sizesFor(opening.kind).forEach { size ->
+                            OptionChip(sizeName(size), size == current) { actions.onOpeningSize(size) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InspectorRow(
+    label: String,
+    content: @Composable () -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = OtvesTheme.colors.inkSecondary,
+            modifier = Modifier.width(InspectorLabelWidth),
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            content()
+        }
+    }
 }
 
 @Composable
@@ -340,8 +434,17 @@ private fun thicknessName(thickness: Mm): String =
     }
 
 @Composable
+private fun kindName(kind: OpeningKind): String =
+    when (kind) {
+        OpeningKind.WINDOW -> stringResource(R.string.tool_window)
+        OpeningKind.DOOR -> stringResource(R.string.tool_door)
+        OpeningKind.EMPTY -> stringResource(R.string.kind_empty)
+    }
+
+@Composable
 private fun toolName(tool: Tool): String =
     when (tool) {
+        Tool.SELECT -> stringResource(R.string.tool_select)
         Tool.WALL -> stringResource(R.string.tool_wall)
         Tool.WINDOW -> stringResource(R.string.tool_window)
         Tool.DOOR -> stringResource(R.string.tool_door)
@@ -408,3 +511,4 @@ private fun EditorScreenPreview() {
 }
 
 private val TakeoffHeight = 240.dp
+private val InspectorLabelWidth = 96.dp

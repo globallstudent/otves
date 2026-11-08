@@ -38,4 +38,11 @@
     <string name="refused_does_not_fit">Teshik devordan keng</string>
     <string name="level_name">%1$d-qavat</string>
     <string name="level_add">Qavat qo‘shish</string>
+    <string name="tool_select">Tanlash</string>
+    <string name="editor_hint_select">Devor yoki teshikka bosing</string>
+    <string name="kind_empty">Teshik</string>
+    <string name="inspector_thickness">Qalinligi</string>
+    <string name="inspector_size">O‘lchami</string>
+    <string name="inspector_done">Tayyor</string>
+    <string name="inspector_delete">O‘chirish</string>
 </resources>

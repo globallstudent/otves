@@ -39,4 +39,11 @@
     <string name="refused_does_not_fit">Проём шире стены</string>
     <string name="level_name">Этаж %1$d</string>
     <string name="level_add">Добавить этаж</string>
+    <string name="tool_select">Выбор</string>
+    <string name="editor_hint_select">Нажмите на стену или проём</string>
+    <string name="kind_empty">Проём</string>
+    <string name="inspector_thickness">Толщина</string>
+    <string name="inspector_size">Размер</string>
+    <string name="inspector_done">Готово</string>
+    <string name="inspector_delete">Удалить</string>
 </resources>

@@ -23,9 +23,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import uz.otves.core.designsystem.OtvesTheme
+import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
+import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.WallOutline
 import kotlin.math.atan2
@@ -43,6 +45,7 @@ internal fun PlanCanvas(
     outlines: List<WallOutline>,
     openings: List<OpeningOutline>,
     below: List<WallOutline>,
+    selected: ElementId?,
     wallStart: PointMm?,
     onTap: (at: PointMm, reach: Mm) -> Unit,
     modifier: Modifier = Modifier,
@@ -53,6 +56,7 @@ internal fun PlanCanvas(
     val colors = OtvesTheme.colors
     val wallStroke = with(density) { 1.dp.toPx() }
     val markRadius = with(density) { 6.dp.toPx() }
+    val selectionStroke = with(density) { 2.dp.toPx() }
     val touchReach = with(density) { TOUCH_REACH.dp.toPx() }
 
     Canvas(
@@ -75,8 +79,17 @@ internal fun PlanCanvas(
             drawPath(path, colors.inkTertiary)
             drawPath(path, colors.ink, style = Stroke(width = wallStroke))
         }
+        // The selection in the plan's only accent colour; openings stay cut out of a selected wall.
+        outlines.find { it.wall == selected }?.let { outline ->
+            val path = path(view, outline)
+            drawPath(path, colors.selection.copy(alpha = SELECTION_FILL))
+            drawPath(path, colors.selection, style = Stroke(width = selectionStroke))
+        }
         for (opening in openings) {
             opening(view, opening, colors.canvas, colors.ink, wallStroke)
+        }
+        openings.find { it.opening == selected }?.let { opening ->
+            drawPath(path(view, opening.points), colors.selection, style = Stroke(width = selectionStroke))
         }
         if (wallStart != null) {
             val at = view.toScreen(wallStart.x.value / MM_PER_METRE, wallStart.y.value / MM_PER_METRE)
@@ -129,9 +142,14 @@ private class PlanView(
 private fun path(
     view: PlanView,
     outline: WallOutline,
+): Path = path(view, outline.points)
+
+private fun path(
+    view: PlanView,
+    points: List<PointM>,
 ): Path =
     Path().apply {
-        outline.points.forEachIndexed { index, point ->
+        points.forEachIndexed { index, point ->
             val at = view.toScreen(point.x, point.y)
             if (index == 0) moveTo(at.x, at.y) else lineTo(at.x, at.y)
         }
@@ -232,6 +250,7 @@ private const val MAX_SCALE = 2_000f
 private const val START_LEFT = 0.15f
 private const val START_BOTTOM = 0.8f
 private const val TOUCH_REACH = 12f
+private const val SELECTION_FILL = 0.25f
 private const val OUTLINE_CORNERS = 4
 private const val HALF_TURN = 180f
 private const val FULL_TURN = 360f

@@ -20,6 +20,7 @@ import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
 import uz.otves.engine.Level
+import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointMm
@@ -33,8 +34,8 @@ import kotlin.math.roundToLong
 /** Wall thicknesses a builder picks from: half a brick to two bricks with 10 mm joints. */
 internal val WallThicknesses: List<Mm> = listOf(120.mm, 250.mm, 380.mm, 510.mm)
 
-/** What a tap on the plan builds. */
-internal enum class Tool { WALL, WINDOW, DOOR }
+/** What a tap on the plan does. */
+internal enum class Tool { SELECT, WALL, WINDOW, DOOR }
 
 /** A window or door size a builder picks from. */
 internal data class OpeningSize(
@@ -47,6 +48,24 @@ internal val WindowSizes: List<OpeningSize> =
 
 internal val DoorSizes: List<OpeningSize> =
     listOf(OpeningSize(800.mm, 2100.mm), OpeningSize(900.mm, 2100.mm), OpeningSize(1200.mm, 2100.mm))
+
+/** The sizes offered for an opening of this kind; an empty opening is sized like a door. */
+internal fun sizesFor(kind: OpeningKind): List<OpeningSize> = if (kind == OpeningKind.WINDOW) WindowSizes else DoorSizes
+
+/** The element the select tool picked, with its current value. */
+internal sealed interface Selected {
+    val id: ElementId
+
+    data class WallPart(
+        override val id: ElementId,
+        val wall: Wall,
+    ) : Selected
+
+    data class OpeningPart(
+        override val id: ElementId,
+        val opening: Opening,
+    ) : Selected
+}
 
 @Immutable
 internal data class EditorUiState(
@@ -64,6 +83,7 @@ internal data class EditorUiState(
     /** The first tap of a wall still waiting for its second. */
     val wallStart: PointMm? = null,
     val tool: Tool = Tool.WALL,
+    val selected: Selected? = null,
     val thickness: Mm = 380.mm,
     val windowSize: OpeningSize = WindowSizes[1],
     val doorSize: OpeningSize = DoorSizes[1],
@@ -75,8 +95,9 @@ internal data class EditorUiState(
 
 /**
  * The plan of one job, one storey at a time. The engine owns the model; this keeps only what the
- * screen draws and the wall ends it snaps to, all taken from engine responses, and writes every
- * response to the job file. The view model owns [job] and closes it when cleared.
+ * screen draws, the wall ends it snaps to and the values of what can be selected, all taken from
+ * engine responses, and writes every response to the job file. The view model owns [job] and
+ * closes it when cleared.
  */
 internal class EditorViewModel(
     private val engine: Engine,
@@ -86,14 +107,15 @@ internal class EditorViewModel(
     private val state = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = state.asStateFlow()
 
-    // The ground floor comes with a new job, so undo stops at the user's first step.
+    // Undo stops at the user's first step, so it never removes the ground floor of a new job.
     private var userSteps = 0
     private val levels = mutableMapOf<ElementId, Level>()
     private val walls = mutableMapOf<ElementId, Wall>()
-    private var outlines: List<WallOutline> = emptyList()
-    private var openings: List<OpeningOutline> = emptyList()
+    private val openings = mutableMapOf<ElementId, Opening>()
+    private var wallOutlines: List<WallOutline> = emptyList()
+    private var openingOutlines: List<OpeningOutline> = emptyList()
 
-    // One command at a time from send to file, so the log keeps the engine's order.
+    // One request at a time from send to file, so the log keeps the engine's order.
     private val turn = Mutex()
 
     init {
@@ -119,9 +141,9 @@ internal class EditorViewModel(
     override fun onCleared() = job.close()
 
     /**
-     * A tap on the plan. With the wall tool the first tap starts a wall and the second builds it;
-     * a window or door goes into the wall the user tapped. [reach] is how far from the finger, in
-     * plan millimetres, a wall end or wall still counts as touched.
+     * A tap on the plan. The select tool picks what is under it; with the wall tool the first tap
+     * starts a wall and the second builds it; a window or door goes into the wall the user tapped.
+     * [reach] is how far from the finger, in plan millimetres, something still counts as touched.
      */
     fun tap(
         at: PointMm,
@@ -130,6 +152,7 @@ internal class EditorViewModel(
         val current = state.value
         val onLevel = current.level ?: return
         when (current.tool) {
+            Tool.SELECT -> pick(onLevel, at, reach)
             Tool.WALL -> tapWall(onLevel, at, reach)
             Tool.WINDOW -> place(onLevel, at, reach, OpeningKind.WINDOW, current.windowSize, WindowSill)
             Tool.DOOR -> place(onLevel, at, reach, OpeningKind.DOOR, current.doorSize, 0.mm)
@@ -138,7 +161,7 @@ internal class EditorViewModel(
 
     fun cancelWall() = state.update { it.copy(wallStart = null) }
 
-    fun selectTool(tool: Tool) = state.update { it.copy(tool = tool, wallStart = null, refused = null) }
+    fun selectTool(tool: Tool) = state.update { it.copy(tool = tool, wallStart = null, selected = null, refused = null) }
 
     fun selectThickness(thickness: Mm) = state.update { it.copy(thickness = thickness) }
 
@@ -148,7 +171,7 @@ internal class EditorViewModel(
 
     fun selectLevel(level: ElementId) {
         if (level in levels) {
-            state.update { it.copy(refused = null) }
+            state.update { it.copy(refused = null, selected = null) }
             show(level)
         }
     }
@@ -156,12 +179,86 @@ internal class EditorViewModel(
     /** A storey on top of the highest one, which the user then works on. */
     fun addLevel() {
         val top = levels.values.maxOfOrNull { it.elevation + it.height } ?: 0.mm
-        send(EngineCommand.AddLevel(Level(elevation = top, height = StoreyHeight)), showCreated = true)
+        send(listOf(EngineCommand.AddLevel(Level(elevation = top, height = StoreyHeight))), showCreated = true)
     }
 
-    fun undo() = send(EngineCommand.Undo)
+    fun undo() = send(listOf(EngineCommand.Undo))
 
-    fun redo() = send(EngineCommand.Redo)
+    fun redo() = send(listOf(EngineCommand.Redo))
+
+    fun deselect() = state.update { it.copy(selected = null) }
+
+    fun setWallThickness(thickness: Mm) {
+        val wall = state.value.selected as? Selected.WallPart ?: return
+        send(listOf(EngineCommand.SetWallThickness(wall.id, thickness)))
+    }
+
+    /**
+     * Turns the selected opening into another kind, with that kind's usual size and sill; an empty
+     * opening keeps its width. One undo step, centred where the opening was.
+     */
+    fun setOpeningKind(kind: OpeningKind) {
+        val part = state.value.selected as? Selected.OpeningPart ?: return
+        val opening = part.opening
+        if (opening.kind == kind) return
+        val size =
+            when (kind) {
+                OpeningKind.WINDOW -> WindowSizes[1]
+                OpeningKind.DOOR -> DoorSizes[1]
+                OpeningKind.EMPTY -> OpeningSize(opening.width, DoorSizes[1].height)
+            }
+        val sill = if (kind == OpeningKind.WINDOW) WindowSill else 0.mm
+        send(
+            gesture(
+                listOf(EngineCommand.SetOpeningKind(part.id, kind), EngineCommand.SetOpeningSill(part.id, sill)) +
+                    resize(part.id, opening, size),
+            ),
+        )
+    }
+
+    /** Resizes the selected opening about its centre, as one undo step. */
+    fun setOpeningSize(size: OpeningSize) {
+        val part = state.value.selected as? Selected.OpeningPart ?: return
+        send(gesture(resize(part.id, part.opening, size)))
+    }
+
+    fun removeSelected() {
+        val command =
+            when (val selected = state.value.selected) {
+                is Selected.WallPart -> EngineCommand.RemoveWall(selected.id)
+                is Selected.OpeningPart -> EngineCommand.RemoveOpening(selected.id)
+                null -> return
+            }
+        send(listOf(command))
+    }
+
+    private fun pick(
+        onLevel: ElementId,
+        at: PointMm,
+        reach: Mm,
+    ) {
+        viewModelScope.launch {
+            turn.withLock {
+                val result = engine.send(listOf(EngineCommand.Pick(onLevel, at, reach))).results.singleOrNull()
+                val picked = (result as? CommandResult.Done)?.picked
+                state.update { it.copy(selected = picked?.let(::selection), refused = null) }
+            }
+        }
+    }
+
+    // The near edge moves by half the change in width, so the centre stays; it never passes the
+    // wall's start. The engine reports an opening that ends past the wall's end.
+    private fun resize(
+        id: ElementId,
+        opening: Opening,
+        size: OpeningSize,
+    ): List<EngineCommand> {
+        val offset = maxOf(0.mm, Mm(opening.offset.value + (opening.width.value - size.width.value) / 2))
+        return listOf(EngineCommand.MoveOpening(id, offset), EngineCommand.ResizeOpening(id, size.width, size.height))
+    }
+
+    private fun gesture(commands: List<EngineCommand>): List<EngineCommand> =
+        listOf(EngineCommand.BeginGesture) + commands + EngineCommand.EndGesture
 
     private fun tapWall(
         onLevel: ElementId,
@@ -176,7 +273,7 @@ internal class EditorViewModel(
         }
         state.update { it.copy(wallStart = null) }
         val wall = Wall(onLevel, start, point, thickness = state.value.thickness, height = WallHeight)
-        send(EngineCommand.AddWall(wall))
+        send(listOf(EngineCommand.AddWall(wall)))
     }
 
     private fun place(
@@ -186,33 +283,27 @@ internal class EditorViewModel(
         kind: OpeningKind,
         size: OpeningSize,
         sill: Mm,
-    ) = send(EngineCommand.PlaceOpening(onLevel, at, reach, size.width, size.height, sill, kind))
+    ) = send(listOf(EngineCommand.PlaceOpening(onLevel, at, reach, size.width, size.height, sill, kind)))
 
     private fun send(
-        command: EngineCommand,
+        commands: List<EngineCommand>,
         showCreated: Boolean = false,
     ) {
         viewModelScope.launch {
-            turn.withLock { execute(command, showCreated) }
+            turn.withLock { execute(commands, showCreated) }
         }
     }
 
     private suspend fun execute(
-        command: EngineCommand,
+        commands: List<EngineCommand>,
         showCreated: Boolean,
     ) {
-        val response = engine.send(listOf(command))
+        val response = engine.send(commands)
         job.record(response)
-        val result = response.results.singleOrNull()
-        if (result is CommandResult.Done) {
-            userSteps +=
-                when (command) {
-                    EngineCommand.Undo -> -1
-                    EngineCommand.Redo, is EngineCommand.AddLevel, is EngineCommand.AddWall, is EngineCommand.PlaceOpening -> 1
-                    else -> 0
-                }
-        }
-        apply(response, show = if (showCreated) (result as? CommandResult.Done)?.created else null)
+        // Each group in the log is one step: undo takes one back, anything else adds one.
+        userSteps += response.log.sumOf { if (it.isUndo) -1 else 1 }
+        val created = (response.results.firstOrNull() as? CommandResult.Done)?.created
+        apply(response, show = if (showCreated) created else null)
     }
 
     // Mirrors the engine's changes, then shows [show], or else stays on the current storey while
@@ -225,12 +316,12 @@ internal class EditorViewModel(
             when (val element = change.element) {
                 is Level -> levels[change.id] = element
                 is Wall -> walls[change.id] = element
-                null -> levels.remove(change.id) ?: walls.remove(change.id)
-                else -> Unit
+                is Opening -> openings[change.id] = element
+                null -> levels.remove(change.id) ?: walls.remove(change.id) ?: openings.remove(change.id)
             }
         }
-        outlines = response.outlines ?: outlines
-        openings = response.openings ?: openings
+        wallOutlines = response.outlines ?: wallOutlines
+        openingOutlines = response.openings ?: openingOutlines
         state.update { current ->
             current.copy(
                 takeoff =
@@ -247,23 +338,30 @@ internal class EditorViewModel(
                         .filterIsInstance<CommandResult.Failed>()
                         .firstOrNull()
                         ?.error,
+                // The selection follows its element's new value and goes when the element does.
+                selected = current.selected?.let { selection(it.id) },
             )
         }
         show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels })
     }
+
+    private fun selection(id: ElementId): Selected? =
+        walls[id]?.let { Selected.WallPart(id, it) } ?: openings[id]?.let { Selected.OpeningPart(id, it) }
 
     private fun show(level: ElementId?) {
         val ordered = orderedLevels()
         val shown = level ?: ordered.lastOrNull()
         val below = ordered.getOrNull(ordered.indexOf(shown) - 1)
         state.update { current ->
+            val sameLevel = shown == current.level
             current.copy(
                 levels = ordered,
                 level = shown,
-                outlines = outlines.filter { it.level == shown },
-                openings = openings.filter { it.level == shown },
-                below = if (below == null) emptyList() else outlines.filter { it.level == below },
-                wallStart = if (shown == current.level) current.wallStart else null,
+                outlines = wallOutlines.filter { it.level == shown },
+                openings = openingOutlines.filter { it.level == shown },
+                below = if (below == null) emptyList() else wallOutlines.filter { it.level == below },
+                wallStart = if (sameLevel) current.wallStart else null,
+                selected = if (sameLevel) current.selected else null,
             )
         }
     }

@@ -37,7 +37,7 @@ flowchart TB
 | `android/data/project` | One Room file per job (`<job id>.job`): element rows and the op log, written after every engine response (ADR 0007) | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
 | `android/feature/projects` | The jobs on this phone, newest first; create one | exists |
-| `android/feature/editor` | Plan of a job storey by storey: walls by two taps, windows and doors by a tap on a wall, undo/redo, the take-off below; drawn from engine outlines | exists |
+| `android/feature/editor` | Plan of a job storey by storey: walls by two taps, windows and doors by a tap on a wall, a select tool with an inspector (thickness, kind, size, delete), undo/redo, the take-off below; drawn from engine outlines | exists |
 | `android/feature/*` (estimate, ledger, …), `data/catalog`, `device/*` | Screens, prices, hardware | planned |
 
 ## Rules that hold everywhere

@@ -26,6 +26,7 @@ import uz.otves.engine.EngineElement
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
 import uz.otves.engine.Level
+import uz.otves.engine.LogEntry
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
@@ -36,6 +37,7 @@ import uz.otves.engine.QuantityUnit
 import uz.otves.engine.Takeoff
 import uz.otves.engine.Wall
 import uz.otves.engine.WallOutline
+import uz.otves.schema.CommandKind
 import kotlin.uuid.Uuid
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -44,12 +46,16 @@ class EditorViewModelTest {
     private val reach = 300.mm
     private val content = EngineCommand.LoadContent(listOf(ContentScript("practice", "return {}")), emptyList())
 
-    /** A small engine: keeps the elements, reports changes and outlines, undoes the last step. */
+    /**
+     * A small engine: keeps the elements, reports changes, outlines and one log group per request
+     * that changed the model, and undoes the last element created. Picks what the test chose.
+     */
     private class FakeEngine(
         private val ground: ElementId,
     ) : Engine {
         val sent = mutableListOf<List<EngineCommand>>()
         var refuseNext: EngineError? = null
+        var pickNext: ElementId? = null
         private var next = 1L
         private val elements = linkedMapOf<ElementId, EngineElement>()
         private val steps = ArrayDeque<ElementId>()
@@ -61,6 +67,8 @@ class EditorViewModelTest {
             val results = mutableListOf<CommandResult>()
             val changes = mutableListOf<ElementChange>()
 
+            var undone = false
+
             fun create(
                 element: EngineElement,
                 id: ElementId = ElementId(Uuid.fromLongs(++next, 0)),
@@ -69,6 +77,25 @@ class EditorViewModelTest {
                 steps.addLast(id)
                 results += CommandResult.Done(id)
                 changes += ElementChange(id, element)
+            }
+
+            fun edit(
+                id: ElementId,
+                change: (EngineElement) -> EngineElement,
+            ) {
+                val element = change(elements.getValue(id))
+                elements[id] = element
+                changes += ElementChange(id, element)
+                results += CommandResult.Done(null)
+            }
+
+            fun remove(id: ElementId) {
+                val hosted = elements.filterValues { (it as? Opening)?.wall == id }.keys
+                for (gone in hosted + id) {
+                    elements.remove(gone)
+                    changes += ElementChange(gone, null)
+                }
+                results += CommandResult.Done(null)
             }
             for (command in commands) {
                 when {
@@ -102,11 +129,44 @@ class EditorViewModelTest {
                         }
                     }
 
+                    command is EngineCommand.Pick -> {
+                        results += CommandResult.Done(null, picked = pickNext)
+                    }
+
+                    command is EngineCommand.SetWallThickness -> {
+                        edit(command.wall) { (it as Wall).copy(thickness = command.thickness) }
+                    }
+
+                    command is EngineCommand.SetOpeningKind -> {
+                        edit(command.opening) { (it as Opening).copy(kind = command.kind) }
+                    }
+
+                    command is EngineCommand.SetOpeningSill -> {
+                        edit(command.opening) { (it as Opening).copy(sill = command.sill) }
+                    }
+
+                    command is EngineCommand.MoveOpening -> {
+                        edit(command.opening) { (it as Opening).copy(offset = command.offset) }
+                    }
+
+                    command is EngineCommand.ResizeOpening -> {
+                        edit(command.opening) { (it as Opening).copy(width = command.width, height = command.height) }
+                    }
+
+                    command is EngineCommand.RemoveWall -> {
+                        remove(command.wall)
+                    }
+
+                    command is EngineCommand.RemoveOpening -> {
+                        remove(command.opening)
+                    }
+
                     command is EngineCommand.Undo && steps.isNotEmpty() -> {
                         val id = steps.removeLast()
                         elements.remove(id)
                         results += CommandResult.Done(null)
                         changes += ElementChange(id, null)
+                        undone = true
                     }
 
                     else -> {
@@ -115,6 +175,13 @@ class EditorViewModelTest {
                 }
             }
             val changed = changes.isNotEmpty()
+            val opened = commands.any { it is EngineCommand.OpenModel }
+            val log =
+                when {
+                    undone -> listOf(group(CommandKind.Undo))
+                    changed && !opened -> listOf(group(CommandKind.AddWall))
+                    else -> emptyList()
+                }
             return EngineResponse(
                 results = results,
                 changes = changes,
@@ -128,8 +195,11 @@ class EditorViewModelTest {
                     } else {
                         Takeoff.Lines(listOf(QuantityLine("masonry", "masonry_unit", QuantityUnit.PIECE, 100.0)))
                     },
+                log = log,
             )
         }
+
+        private fun group(kind: Int) = LogEntry(Uuid.random(), kind, hlc = 0L, device = Uuid.NIL, origin = null, ops = byteArrayOf())
 
         private fun wallOutlines(): List<WallOutline> =
             elements.mapNotNull { (id, element) -> (element as? Wall)?.let { WallOutline(id, it.level, listOf(PointM(0.0, 0.0))) } }
@@ -384,6 +454,95 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(6_250.mm, 180.mm), reach)
 
         assertThat(viewModel.uiState.value.wallStart).isEqualTo(PointMm(6_400.mm, 0.mm))
+    }
+
+    // A 6 m wall on the ground floor; returns its id.
+    private fun EditorViewModel.buildWall(): ElementId {
+        tap(PointMm(0.mm, 0.mm), reach)
+        tap(PointMm(6_000.mm, 0.mm), reach)
+        return uiState.value.outlines
+            .last()
+            .wall
+    }
+
+    @Test
+    fun theSelectToolShowsWhatTheEnginePicked() {
+        val viewModel = EditorViewModel(engine, { content }, store)
+        val wall = viewModel.buildWall()
+        viewModel.selectTool(Tool.SELECT)
+
+        engine.pickNext = wall
+        viewModel.tap(PointMm(3_000.mm, 100.mm), reach)
+
+        assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.Pick(level, PointMm(3_000.mm, 100.mm), reach))
+        val selected = viewModel.uiState.value.selected as Selected.WallPart
+        assertThat(selected.id).isEqualTo(wall)
+        assertThat(selected.wall.thickness).isEqualTo(380.mm)
+
+        engine.pickNext = null
+        viewModel.tap(PointMm(3_000.mm, 3_000.mm), reach)
+        assertThat(viewModel.uiState.value.selected).isNull()
+    }
+
+    @Test
+    fun theInspectorChangesTheSelectedWall() {
+        val viewModel = EditorViewModel(engine, { content }, store)
+        val wall = viewModel.buildWall()
+        viewModel.selectTool(Tool.SELECT)
+        engine.pickNext = wall
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+
+        viewModel.setWallThickness(250.mm)
+
+        assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.SetWallThickness(wall, 250.mm))
+        assertThat((viewModel.uiState.value.selected as Selected.WallPart).wall.thickness).isEqualTo(250.mm)
+    }
+
+    @Test
+    fun anotherKindIsOneStepWithItsUsualSizeAndSillAboutTheSameCentre() {
+        val viewModel = EditorViewModel(engine, { content }, store)
+        viewModel.buildWall()
+        viewModel.selectTool(Tool.WINDOW)
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+        val window =
+            viewModel.uiState.value.openings
+                .single()
+                .opening
+        viewModel.selectTool(Tool.SELECT)
+        engine.pickNext = window
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+
+        viewModel.setOpeningKind(OpeningKind.DOOR)
+
+        // The window was 1 500 mm wide at offset 0; a 900 mm door keeps its centre at 750 mm.
+        assertThat(engine.sent.last())
+            .containsExactly(
+                EngineCommand.BeginGesture,
+                EngineCommand.SetOpeningKind(window, OpeningKind.DOOR),
+                EngineCommand.SetOpeningSill(window, 0.mm),
+                EngineCommand.MoveOpening(window, 300.mm),
+                EngineCommand.ResizeOpening(window, 900.mm, 2_100.mm),
+                EngineCommand.EndGesture,
+            ).inOrder()
+        val door = (viewModel.uiState.value.selected as Selected.OpeningPart).opening
+        assertThat(door.kind).isEqualTo(OpeningKind.DOOR)
+        assertThat(door.width).isEqualTo(900.mm)
+    }
+
+    @Test
+    fun removingTheSelectionDropsIt() {
+        val viewModel = EditorViewModel(engine, { content }, store)
+        val wall = viewModel.buildWall()
+        viewModel.selectTool(Tool.SELECT)
+        engine.pickNext = wall
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+
+        viewModel.removeSelected()
+
+        assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.RemoveWall(wall))
+        assertThat(viewModel.uiState.value.selected).isNull()
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.canUndo).isTrue()
     }
 
     @Test

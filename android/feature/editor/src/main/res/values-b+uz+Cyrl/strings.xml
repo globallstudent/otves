@@ -38,4 +38,11 @@
     <string name="refused_does_not_fit">Тешик девордан кенг</string>
     <string name="level_name">%1$d-қават</string>
     <string name="level_add">Қават қўшиш</string>
+    <string name="tool_select">Танлаш</string>
+    <string name="editor_hint_select">Девор ёки тешикка босинг</string>
+    <string name="kind_empty">Тешик</string>
+    <string name="inspector_thickness">Қалинлиги</string>
+    <string name="inspector_size">Ўлчами</string>
+    <string name="inspector_done">Тайёр</string>
+    <string name="inspector_delete">Ўчириш</string>
 </resources>
