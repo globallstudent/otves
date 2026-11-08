@@ -1,5 +1,16 @@
 cmake_minimum_required(VERSION 4.0...4.4)
 
+# Gradle passes the NDK as ANDROID_NDK, while vcpkg's Android triplets read ANDROID_NDK_HOME from
+# the environment and the vcpkg toolchain needs the NDK's toolchain to chain to.
+if(DEFINED ANDROID_NDK)
+  if(NOT DEFINED ENV{ANDROID_NDK_HOME})
+    set(ENV{ANDROID_NDK_HOME} "${ANDROID_NDK}")
+  endif()
+  if(NOT DEFINED VCPKG_CHAINLOAD_TOOLCHAIN_FILE)
+    set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${ANDROID_NDK}/build/cmake/android.toolchain.cmake")
+  endif()
+endif()
+
 project(otves_engine VERSION 0.1.0 DESCRIPTION "Otves design engine" LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
