@@ -35,7 +35,8 @@ flowchart TB
 | `android/core/designsystem` | Colour roles, dimensions, theme | exists |
 | `android/app` | Activity, splash, navigation root | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
-| `android/feature/*`, `data/*`, `device/*` | Screens, persistence, hardware | planned |
+| `android/feature/editor` | Plan of one storey: tap two points for a wall, undo/redo, the take-off below; drawn from engine outlines | exists |
+| `android/feature/*` (projects, estimate, …), `data/*`, `device/*` | Screens, persistence, hardware | planned |
 
 ## Rules that hold everywhere
 

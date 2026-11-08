@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_title">Qavat rejasi</string>
+    <string name="editor_cancel_wall">Tozalash</string>
+    <string name="editor_undo">Bekor qilish</string>
+    <string name="editor_redo">Qaytarish</string>
+    <string name="editor_loading">Yuklanmoqda…</string>
+    <string name="editor_hint_start">Devorni boshlash uchun rejaga bosing</string>
+    <string name="editor_hint_end">Devor tugaydigan joyni bosing</string>
+    <string name="takeoff_title">Material sarfi</string>
+    <string name="takeoff_failed">Hisob bajarilmadi: me’yorlarni tekshiring</string>
+    <string name="takeoff_empty">Sarfni ko‘rish uchun devor quring</string>
+    <string name="thickness_half_brick">½ g‘isht</string>
+    <string name="thickness_one_brick">1 g‘isht</string>
+    <string name="thickness_one_and_half_bricks">1½ g‘isht</string>
+    <string name="thickness_two_bricks">2 g‘isht</string>
+    <string name="refused_zero_length">Devor oxiri boshi bilan bir joyda</string>
+    <string name="refused_off_plan">Nuqta koordinata boshidan 100 km dan uzoqda</string>
+    <string name="refused_other">Buyruq bajarilmadi</string>
+    <string name="item_masonry_unit">G‘isht</string>
+    <string name="item_mortar">Qorishma</string>
+    <string name="item_cement">Qorishma uchun sement</string>
+    <string name="item_junction_mesh">Devor tutashmalaridagi to‘r</string>
+    <string name="item_concrete">Beton B%1$s</string>
+    <string name="item_rebar">Armatura A%1$sS Ø%2$s</string>
+    <string name="item_lintel">Peremichka %1$s m dan</string>
+    <string name="unit_piece">dona</string>
+    <string name="unit_metre">m</string>
+    <string name="unit_square_metre">m²</string>
+    <string name="unit_cubic_metre">m³</string>
+    <string name="unit_kilogram">kg</string>
+</resources>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_title">План этажа</string>
+    <string name="editor_cancel_wall">Сбросить</string>
+    <string name="editor_undo">Отменить</string>
+    <string name="editor_redo">Повторить</string>
+    <string name="editor_loading">Загрузка…</string>
+    <string name="editor_hint_start">Нажмите на план, чтобы начать стену</string>
+    <string name="editor_hint_end">Нажмите, где стена кончается</string>
+    <string name="takeoff_title">Расход материалов</string>
+    <string name="takeoff_failed">Расчёт не выполнен: проверьте нормы</string>
+    <string name="takeoff_empty">Постройте стену, чтобы увидеть расход</string>
+    <string name="thickness_half_brick">½ кирпича</string>
+    <string name="thickness_one_brick">1 кирпич</string>
+    <string name="thickness_one_and_half_bricks">1½ кирпича</string>
+    <string name="thickness_two_bricks">2 кирпича</string>
+    <string name="refused_zero_length">Конец стены совпадает с началом</string>
+    <string name="refused_off_plan">Точка дальше 100 км от начала координат</string>
+    <string name="refused_other">Команда не выполнена</string>
+    <string name="item_masonry_unit">Кирпич</string>
+    <string name="item_mortar">Раствор</string>
+    <string name="item_cement">Цемент для раствора</string>
+    <string name="item_junction_mesh">Сетка в узлах стен</string>
+    <string name="item_concrete">Бетон B%1$s</string>
+    <string name="item_rebar">Арматура A%1$sС Ø%2$s</string>
+    <string name="item_lintel">Перемычка от %1$s м</string>
+    <string name="unit_piece">шт</string>
+    <string name="unit_metre">м</string>
+    <string name="unit_square_metre">м²</string>
+    <string name="unit_cubic_metre">м³</string>
+    <string name="unit_kilogram">кг</string>
+</resources>

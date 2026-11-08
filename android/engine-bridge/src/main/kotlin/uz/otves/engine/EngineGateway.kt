@@ -11,12 +11,13 @@ import kotlin.uuid.Uuid
  */
 public class EngineGateway(
     device: Uuid,
-) : AutoCloseable {
+) : Engine,
+    AutoCloseable {
     private val executor = Executors.newSingleThreadExecutor { task -> Thread(task, "otves-engine") }
     private val engineThread = executor.asCoroutineDispatcher()
     private val session = EngineSession(device)
 
-    public suspend fun send(commands: List<EngineCommand>): EngineResponse = withContext(engineThread) { session.send(commands) }
+    override suspend fun send(commands: List<EngineCommand>): EngineResponse = withContext(engineThread) { session.send(commands) }
 
     override fun close() {
         executor.execute { session.close() }

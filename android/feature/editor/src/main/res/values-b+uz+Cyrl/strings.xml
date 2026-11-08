@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="editor_title">Қават режаси</string>
+    <string name="editor_cancel_wall">Тозалаш</string>
+    <string name="editor_undo">Бекор қилиш</string>
+    <string name="editor_redo">Қайтариш</string>
+    <string name="editor_loading">Юкланмоқда…</string>
+    <string name="editor_hint_start">Деворни бошлаш учун режага босинг</string>
+    <string name="editor_hint_end">Девор тугайдиган жойни босинг</string>
+    <string name="takeoff_title">Материал сарфи</string>
+    <string name="takeoff_failed">Ҳисоб бажарилмади: меъёрларни текширинг</string>
+    <string name="takeoff_empty">Сарфни кўриш учун девор қуринг</string>
+    <string name="thickness_half_brick">½ ғишт</string>
+    <string name="thickness_one_brick">1 ғишт</string>
+    <string name="thickness_one_and_half_bricks">1½ ғишт</string>
+    <string name="thickness_two_bricks">2 ғишт</string>
+    <string name="refused_zero_length">Девор охири боши билан бир жойда</string>
+    <string name="refused_off_plan">Нуқта координата бошидан 100 км дан узоқда</string>
+    <string name="refused_other">Буйруқ бажарилмади</string>
+    <string name="item_masonry_unit">Ғишт</string>
+    <string name="item_mortar">Қоришма</string>
+    <string name="item_cement">Қоришма учун цемент</string>
+    <string name="item_junction_mesh">Девор туташмаларидаги тўр</string>
+    <string name="item_concrete">Бетон B%1$s</string>
+    <string name="item_rebar">Арматура A%1$sС Ø%2$s</string>
+    <string name="item_lintel">Перемичка %1$s м дан</string>
+    <string name="unit_piece">дона</string>
+    <string name="unit_metre">м</string>
+    <string name="unit_square_metre">м²</string>
+    <string name="unit_cubic_metre">м³</string>
+    <string name="unit_kilogram">кг</string>
+</resources>

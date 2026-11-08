@@ -27,6 +27,9 @@ android {
 
 dependencies {
     implementation(projects.core.designsystem)
+    implementation(projects.engineBridge)
+    implementation(projects.feature.editor)
+    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
