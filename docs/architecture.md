@@ -28,7 +28,7 @@ flowchart TB
 | `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, walls and openings, commands, document with op log, undo and gestures | exists |
 | `engine/geom` | Wall joins and plan outlines (`join_walls`) | exists |
 | `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar, Luau rules sandbox (`RuleSet`) | exists |
-| `content/` | Norm tables and rules in Luau: masonry units, mortar, cement, lintels | exists |
+| `content/` | Norm tables and rules in Luau: masonry units, mortar, cement, lintels, ring beams | exists |
 | `engine/render`, `export`, `bridge` | Drawing, PDF/DXF/IFC, JNI | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme | exists |

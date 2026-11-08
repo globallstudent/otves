@@ -35,9 +35,11 @@ Script load(const std::filesystem::path& file) {
 
 // Everything in content/.
 RuleSet content() {
-  const std::vector norms{load("norms/mortar.luau"), load("norms/practice.luau"),
+  const std::vector norms{load("norms/losses.luau"), load("norms/mortar.luau"),
+                          load("norms/practice.luau"), load("norms/rebar.luau"),
                           load("norms/seismic.luau")};
-  const std::vector rules{load("rules/masonry.luau"), load("rules/lintels.luau")};
+  const std::vector rules{load("rules/masonry.luau"), load("rules/lintels.luau"),
+                          load("rules/ring_beam.luau")};
   auto set = RuleSet::compile({.norms = norms, .rules = rules});
   EXPECT_TRUE(set.has_value()) << set.error().message;
   return *std::move(set);
@@ -62,14 +64,17 @@ struct Room {
   Masonry masonry;
 };
 
-Room room(const RuleSet& rules, const std::vector<OpeningInput>& openings = {}) {
-  const auto wall = [](std::int64_t n, PointMm start, PointMm end) {
-    return geom::WallInput{
-        .id = id(n), .wall = {.start = start, .end = end, .thickness = 380_mm, .height = 2800_mm}};
-  };
-  const std::vector walls{
+geom::WallInput wall(std::int64_t n, PointMm start, PointMm end, Mm thickness = 380_mm) {
+  return {.id = id(n),
+          .wall = {.start = start, .end = end, .thickness = thickness, .height = 2800_mm}};
+}
+
+Room room(const RuleSet& rules, const std::vector<OpeningInput>& openings = {},
+          const std::vector<geom::WallInput>& more_walls = {}) {
+  std::vector walls{
       wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}), wall(2, {6400_mm, 0_mm}, {6400_mm, 4000_mm}),
       wall(3, {6400_mm, 4000_mm}, {0_mm, 4000_mm}), wall(4, {0_mm, 4000_mm}, {0_mm, 0_mm})};
+  walls.insert(walls.end(), more_walls.begin(), more_walls.end());
   const MasonrySpec brick{.unit = {.length = 250_mm, .width = 120_mm, .height = 65_mm},
                           .joints = {.bed = 12_mm, .head = 10_mm}};
   Room result;
@@ -190,6 +195,52 @@ TEST(Content, LintelsAreBarsSideBySideByLength) {
       {.rule = "lintels", .item = "lintel.bar.l25", .unit = Unit::kPiece, .amount = 3},
   };
   EXPECT_EQ(lines_of(*all, "lintels"), expected);
+}
+
+TEST(Content, RingBeamTopsTheLoadBearingWalls) {
+  const RuleSet rules = content();
+  // A 120 mm partition across the room is not load-bearing and gets no ring beam.
+  const Room r = room(rules, {}, {wall(5, {3200_mm, 0_mm}, {3200_mm, 4000_mm}, 120_mm)});
+  const auto all = rules.run(r.measurement, r.masonry, {});
+
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  const auto lines = lines_of(*all, "ring_beam");
+  ASSERT_EQ(lines.size(), 2U);
+  // 20.8 m of 380 mm wall, 150 mm high, B15 with 2.8 % placement loss (Сборник потерь).
+  EXPECT_NEAR(amount(lines, "concrete.b15"), 20.8 * 0.38 * 0.15 * 1.028, 1e-9);
+  // 9 points: 4Ø12 A500С at 0.888 kg/m (ГОСТ 34028-2016) plus 7 % for laps.
+  EXPECT_NEAR(amount(lines, "rebar.a500c.d12"), 20.8 * 4 * 0.888 * 1.07, 1e-9);
+}
+
+TEST(Content, RingBeamFollowsIntensityHeightAndConcrete) {
+  const RuleSet rules = content();
+  const Room r = room(rules);
+  const Settings settings{
+      {"seismic_intensity", 8.0}, {"ring_beam_height", 250.0}, {"ring_beam_concrete", 12.5}};
+  const auto all = rules.run(r.measurement, r.masonry, settings);
+
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  const auto lines = lines_of(*all, "ring_beam");
+  EXPECT_NEAR(amount(lines, "concrete.b12_5"), 20.8 * 0.38 * 0.25 * 1.028, 1e-9);
+  EXPECT_NEAR(amount(lines, "rebar.a500c.d10"), 20.8 * 4 * 0.617 * 1.07, 1e-9);
+
+  const auto calm = rules.run(r.measurement, r.masonry, {{"seismic_intensity", 6.0}});
+  ASSERT_TRUE(calm.has_value()) << calm.error().message;
+  EXPECT_TRUE(lines_of(*calm, "ring_beam").empty());
+}
+
+TEST(Content, RingBeamRejectsValuesBelowTheNorm) {
+  const RuleSet rules = content();
+  const Room r = room(rules);
+
+  const auto low = rules.run(r.measurement, r.masonry, {{"ring_beam_height", 120.0}});
+  ASSERT_FALSE(low.has_value());
+  EXPECT_NE(low.error().message.find("ring_beam_height must be at least 150 mm"),
+            std::string::npos);
+  const auto weak = rules.run(r.measurement, r.masonry, {{"ring_beam_concrete", 10.0}});
+  ASSERT_FALSE(weak.has_value());
+  EXPECT_NE(weak.error().message.find("ring_beam_concrete must be at least 12.5"),
+            std::string::npos);
 }
 
 }  // namespace

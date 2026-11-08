@@ -3,7 +3,7 @@
 return {
 	source = {
 		standard = "КМК 2.01.03-19",
-		clause = "3.5.15",
+		clause = "3.5.10, 3.5.11, 3.5.15",
 		jurisdiction = "UZ",
 		status = "mandatory",
 	},
@@ -11,5 +11,17 @@ return {
 		bearing = 350, -- on each side of the opening
 		short_bearing = 250, -- on each side of an opening up to short_span wide
 		short_span = 1500,
+	},
+	-- At every floor and roof, on all walls, the full wall thickness.
+	ring_beam = {
+		min_height = 150,
+		min_concrete_class = 12.5, -- B12.5
+		-- Longitudinal bars by design intensity in points; 10 stands for >9 and 9*.
+		bars = {
+			[7] = { count = 4, diameter = 10 },
+			[8] = { count = 4, diameter = 10 },
+			[9] = { count = 4, diameter = 12 },
+			[10] = { count = 4, diameter = 14 },
+		},
 	},
 }

@@ -7,7 +7,7 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | job | объект | obyekt | One construction site; one `.job` file |
 | part | часть | qism | House, summer kitchen, fence, yard inside a job |
 | level | этаж | qavat | Storey, including basement (подвал) and foundation |
-| wall | стена | devor | Masonry or block wall with thickness in bricks |
+| wall | стена | devor | Masonry or block wall with thickness in bricks; its height is the masonry, below the ring beam |
 | location line | линия привязки | bog‘lash chizig‘i | The wall line whose points are stored: centre, left or right face |
 | wall join | сопряжение стен | devorlar tutashuvi | How wall ends meet: a mitre at a corner, slices around a shared point |
 | butt joint | примыкание | tirab ulash | A wall ending against the face of another wall |

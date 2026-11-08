@@ -40,10 +40,25 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 
 | File | Content | Source |
 |---|---|---|
+| `norms/losses.luau` | Concrete placement losses: 1.8 % foundations and slabs, 2.8 % beams and columns | Сборник типовых норм потерь (к РДС 82-202-96), table 1, item 42 |
 | `norms/mortar.luau` | Cement per m³ of masonry mortar by cement and mortar grade | СП 82-101-98, tables 4–5 |
-| `norms/practice.luau` | Waste allowances (запас), default cement and mortar grade, lintel bar 2ПБ 120 × 140 | Practice; ГОСТ 948-2016 table 1; editable in job settings |
-| `norms/seismic.luau` | Lintel bearing: 350 mm, 250 mm up to a 1 500 mm opening | КМК 2.01.03-19, 3.5.15 |
+| `norms/practice.luau` | Waste allowances (запас), default cement, mortar grade and seismic intensity, lintel bar 2ПБ 120 × 140, ring beam B15 A500С | Practice; ГОСТ 948-2016 table 1; editable in job settings |
+| `norms/rebar.luau` | Nominal bar mass per metre by diameter | ГОСТ 34028-2016, table 1 |
+| `norms/seismic.luau` | Lintel bearing 350 mm (250 mm up to a 1 500 mm opening); ring beam ≥ 150 mm, ≥ B12.5, 4Ø10 / 4Ø12 / 4Ø14 by intensity | КМК 2.01.03-19, 3.5.10–3.5.11, 3.5.15 |
 | `rules/masonry.luau` | Units and mortar with waste, cement in that mortar | `mortar`, `practice` |
 | `rules/lintels.luau` | Bar lintels by length: `lintel.bar.l22` is a bar at least 2.2 m long, as many side by side as the wall is thick | `practice` |
+| `rules/ring_beam.luau` | Ring beam on walls ≥ 250 mm: concrete `concrete.b15` with losses, bars `rebar.a500c.d12` with laps | `seismic`, `losses`, `rebar`, `practice` |
+
+## Settings
+
+| Setting | Unit | Default | Read by |
+|---|---|---|---|
+| `unit_waste`, `mortar_waste` | fraction | `practice.waste` | `masonry` |
+| `cement`, `mortar_grade` | `PC400`, `M100` | `practice.defaults` | `masonry` |
+| `seismic_intensity` | points | 9 | `ring_beam` |
+| `ring_beam_height` | mm | 150, the КМК minimum | `ring_beam` |
+| `ring_beam_concrete` | class (`15` for B15) | 15 | `ring_beam` |
+
+Wall height is the masonry: the ring beam sits on top of it. Walls thinner than 250 mm count as partitions until walls carry a load-bearing flag.
 
 The engine also reads `seismic.lintel` and `practice.lintel.height` itself to place lintels, through `lintel_spec`. GOST 948 marks are not chosen yet: their length table is not verified.
