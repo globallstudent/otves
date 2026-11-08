@@ -5,6 +5,7 @@
 
 #include <otves/core/opening.h>
 #include <otves/core/units.h>
+#include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/vec2.h>
@@ -31,26 +32,57 @@ Axis axis(const Wall& wall) {
   return {.start = start, .dir = dir, .left = perp(dir), .length = run_length};
 }
 
+// How far `at` lies from the part of a wall between `from` and `to` along its location line,
+// face to face, and where along the line it falls.
+struct Reach {
+  double distance = 0.0;
+  double along = 0.0;
+};
+
+Reach reach_of(const Wall& wall, double from, double to, Vec2 at) {
+  const Axis line = axis(wall);
+  const Faces offsets = faces(wall);
+  const double along = dot(at - line.start, line.dir);
+  const double across = dot(at - line.start, line.left);
+  const double outside_along = std::max({from - along, 0.0, along - to});
+  const double outside_across = std::max({-offsets.right - across, 0.0, across - offsets.left});
+  return {.distance = length({.x = outside_along, .y = outside_across}), .along = along};
+}
+
 }  // namespace
 
 std::optional<WallHit> hit_wall(std::span<const WallInput> walls, Vec2 at, double reach) {
   std::optional<WallHit> best;
   double best_distance = 0.0;
   for (const WallInput& input : walls) {
-    const Axis line = axis(input.wall);
-    const Faces offsets = faces(input.wall);
-    const double along = dot(at - line.start, line.dir);
-    const double across = dot(at - line.start, line.left);
-    const double outside_along = std::max({-along, 0.0, along - line.length});
-    const double outside_across = std::max({-offsets.right - across, 0.0, across - offsets.left});
-    const double distance = length({.x = outside_along, .y = outside_across});
+    const double wall_length = axis(input.wall).length;
+    const auto [distance, along] = reach_of(input.wall, 0.0, wall_length, at);
     if (distance > reach) {
       continue;
     }
     const bool nearer =
         !best || distance < best_distance || (distance == best_distance && input.id < best->wall);
     if (nearer) {
-      best = WallHit{.wall = input.id, .along = std::clamp(along, 0.0, line.length)};
+      best = WallHit{.wall = input.id, .along = std::clamp(along, 0.0, wall_length)};
+      best_distance = distance;
+    }
+  }
+  return best;
+}
+
+std::optional<ElementId> hit_opening(std::span<const PlacedOpening> openings, Vec2 at,
+                                     double reach) {
+  std::optional<ElementId> best;
+  double best_distance = 0.0;
+  for (const PlacedOpening& placed : openings) {
+    const double from = to_metres(placed.opening.offset);
+    const double to = from + to_metres(placed.opening.width);
+    const double distance = reach_of(placed.wall, from, to, at).distance;
+    if (distance > reach) {
+      continue;
+    }
+    if (!best || distance < best_distance || (distance == best_distance && placed.id < *best)) {
+      best = placed.id;
       best_distance = distance;
     }
   }

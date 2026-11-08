@@ -26,6 +26,19 @@ struct WallHit {
 [[nodiscard]] std::optional<WallHit> hit_wall(std::span<const WallInput> walls, Vec2 at,
                                               double reach);
 
+// An opening with the wall it stands in.
+struct PlacedOpening {
+  ElementId id;
+  Wall wall;
+  Opening opening;
+};
+
+// The opening whose rectangle on the plan lies nearest to `at`, if one lies within `reach` metres.
+// Ties go to the smaller id.
+// Precondition: every wall passes validate().
+[[nodiscard]] std::optional<ElementId> hit_opening(std::span<const PlacedOpening> openings, Vec2 at,
+                                                   double reach);
+
 // The rectangle an opening cuts through its wall on the plan, counter-clockwise, in metres: from
 // `offset` to `offset + width` along the location line, face to face.
 // Precondition: the wall passes validate().

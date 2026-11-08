@@ -83,6 +83,22 @@ TEST(HitWall, FollowsTheLocationLineToTheFaces) {
   EXPECT_FALSE(hit_wall(walls, {.x = 1.0, .y = 0.1}, 0.0).has_value());
 }
 
+TEST(HitOpening, FindsTheOpeningUnderThePointWithinReach) {
+  const Wall host = wall(1, {0_mm, 0_mm}, {6000_mm, 0_mm}).wall;
+  const auto opening = [&host](std::int64_t n, Mm offset) {
+    return PlacedOpening{
+        .id = id(n),
+        .wall = host,
+        .opening = {
+            .wall = id(1), .offset = offset, .width = 1500_mm, .height = 1500_mm, .sill = 900_mm}};
+  };
+  const std::vector openings{opening(3, 3000_mm), opening(2, 500_mm)};
+
+  EXPECT_EQ(hit_opening(openings, {.x = 1.0, .y = 0.1}, 0.0), id(2));
+  EXPECT_EQ(hit_opening(openings, {.x = 4.6, .y = -0.4}, 0.3), id(3));
+  EXPECT_EQ(hit_opening(openings, {.x = 2.5, .y = 0.0}, 0.3), std::nullopt);
+}
+
 TEST(OpeningOutline, CutsFaceToFaceAlongTheLocationLine) {
   const Wall host = wall(1, {0_mm, 0_mm}, {0_mm, 4000_mm}).wall;
   const Opening window{

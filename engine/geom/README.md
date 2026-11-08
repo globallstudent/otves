@@ -11,6 +11,7 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | `join_walls(walls)` | Outlines of all walls on one level, sorted by id; junctions where walls meet (corners, T, several walls at a point), sorted by point; join issues |
 | `signed_area(outline)` | Area in m², positive for a counter-clockwise outline |
 | `hit_wall(walls, at, reach)` | The wall nearest to a plan point within a reach, and how far along its location line the point lies |
+| `hit_opening(openings, at, reach)` | The opening nearest to a plan point within a reach |
 | `opening_outline(wall, opening)` | The rectangle an opening cuts through its wall on the plan, face to face |
 
 ## Joins
