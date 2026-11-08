@@ -9,6 +9,8 @@ import java.nio.ByteBuffer
 import kotlin.uuid.Uuid
 import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.ElementChange as ChangeTable
+import uz.otves.schema.Issue as IssueTable
+import uz.otves.schema.IssueKind as IssueKindCode
 import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.LogEntry as LogEntryTable
@@ -45,6 +47,7 @@ internal object ResponseDecoder {
             takeoff = takeoff(response),
             openings = response.openingsVector()?.let { List(response.openingsLength()) { opening(response.openings(it)) } },
             log = List(response.logLength()) { logEntry(response.log(it)) },
+            issues = response.issuesVector()?.let { List(response.issuesLength()) { issue(response.issues(it)) } },
         )
     }
 
@@ -93,6 +96,24 @@ internal object ResponseDecoder {
             ops = ByteArray(ops.remaining()).also { ops.get(it) },
         )
     }
+
+    private fun issue(issue: IssueTable): Issue =
+        Issue(
+            kind =
+                when (issue.kind()) {
+                    IssueKindCode.OpeningOutsideWall -> IssueKind.OPENING_OUTSIDE_WALL
+                    IssueKindCode.OpeningOverlap -> IssueKind.OPENING_OVERLAP
+                    IssueKindCode.OpeningWithoutWall -> IssueKind.OPENING_WITHOUT_WALL
+                    IssueKindCode.ShortBearing -> IssueKind.SHORT_BEARING
+                    IssueKindCode.NoRoomForLintel -> IssueKind.NO_ROOM_FOR_LINTEL
+                    IssueKindCode.WallOverlap -> IssueKind.WALL_OVERLAP
+                    IssueKindCode.SharpAngle -> IssueKind.SHARP_ANGLE
+                    else -> IssueKind.UNKNOWN
+                },
+            element = issue.element()?.let(::id),
+            level = id(checkNotNull(issue.level()) { "An issue has no level" }),
+            at = issue.at()?.let { PointMm(Mm(it.x()), Mm(it.y())) },
+        )
 
     private fun line(line: LineTable): QuantityLine =
         QuantityLine(

@@ -14,6 +14,8 @@ import kotlin.uuid.Uuid
 import uz.otves.schema.CommandKind as CommandKindCode
 import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.ElementChange as ChangeTable
+import uz.otves.schema.Issue as IssueTable
+import uz.otves.schema.IssueKind as IssueKindCode
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.LogEntry as LogEntryTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
@@ -73,6 +75,12 @@ class ResponseDecoderTest {
             .isEqualTo(Takeoff.Lines(listOf(QuantityLine("masonry", "masonry_unit", QuantityUnit.PIECE, 2767.0))))
         assertThat(decoded.openings)
             .containsExactly(OpeningOutline(window, level, OpeningKind.DOOR, listOf(PointM(1.0, -0.19), PointM(1.9, -0.19))))
+        assertThat(decoded.issues)
+            .containsExactly(
+                Issue(IssueKind.SHORT_BEARING, window, level, at = null),
+                Issue(IssueKind.WALL_OVERLAP, element = null, level, PointMm(0.mm, 0.mm)),
+                Issue(IssueKind.UNKNOWN, element = null, level, at = null),
+            ).inOrder()
     }
 
     @Test
@@ -178,6 +186,7 @@ class ResponseDecoderTest {
                 0,
                 0,
                 0,
+                0,
             )
         builder.finish(response, "OTVS")
         return builder.dataBuffer()
@@ -217,6 +226,21 @@ class ResponseDecoderTest {
             )
         val lines = if (takeoffError == ErrorCode.None) intArrayOf(line) else intArrayOf()
         val message = builder.createString("masonry:3: boom")
+        IssueTable.startIssue(builder)
+        IssueTable.addKind(builder, IssueKindCode.ShortBearing)
+        IssueTable.addElement(builder, builder.uuid(window))
+        IssueTable.addLevel(builder, builder.uuid(level))
+        val shortBearing = IssueTable.endIssue(builder)
+        IssueTable.startIssue(builder)
+        IssueTable.addKind(builder, IssueKindCode.WallOverlap)
+        IssueTable.addLevel(builder, builder.uuid(level))
+        IssueTable.addAt(builder, PointStruct.createPointMm(builder, 0, 0))
+        val overlap = IssueTable.endIssue(builder)
+        IssueTable.startIssue(builder)
+        IssueTable.addKind(builder, 200)
+        IssueTable.addLevel(builder, builder.uuid(level))
+        val newer = IssueTable.endIssue(builder)
+        val issues = Response.createIssuesVector(builder, intArrayOf(shortBearing, overlap, newer))
         val outlines = Response.createOutlinesVector(builder, intArrayOf(outline))
         val openings = Response.createOpeningsVector(builder, intArrayOf(opening))
         val takeoff = Response.createTakeoffVector(builder, lines)
@@ -228,6 +252,7 @@ class ResponseDecoderTest {
         Response.addTakeoffError(builder, takeoffError)
         Response.addTakeoffMessage(builder, message)
         Response.addOpenings(builder, openings)
+        Response.addIssues(builder, issues)
         builder.finish(Response.endResponse(builder), "OTVS")
         return builder.dataBuffer()
     }

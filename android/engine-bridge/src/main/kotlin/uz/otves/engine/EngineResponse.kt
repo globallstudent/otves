@@ -118,4 +118,6 @@ public data class EngineResponse(
     public val openings: List<OpeningOutline>? = null,
     /** Groups appended to the operation log, in order. */
     public val log: List<LogEntry> = emptyList(),
+    /** Sent with [outlines]; opening issues once content is loaded. */
+    public val issues: List<Issue>? = null,
 )

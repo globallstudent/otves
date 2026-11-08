@@ -37,6 +37,39 @@ public data class OpeningOutline(
     public val points: List<PointM>,
 )
 
+/** What is wrong with an opening or where walls meet; the app shows translated text for each. */
+public enum class IssueKind {
+    /** Past the wall's ends, below its base or above its top. */
+    OPENING_OUTSIDE_WALL,
+
+    /** Over another opening in the same wall. */
+    OPENING_OVERLAP,
+    OPENING_WITHOUT_WALL,
+
+    /** The lintel runs past the wall's end or into another opening. */
+    SHORT_BEARING,
+
+    /** The lintel rises above the wall's top. */
+    NO_ROOM_FOR_LINTEL,
+
+    /** Walls along one line from a point, or one inside another. */
+    WALL_OVERLAP,
+
+    /** Walls meet at so small an angle that their ends are cut square. */
+    SHARP_ANGLE,
+
+    /** A kind from a newer engine than this app knows. */
+    UNKNOWN,
+}
+
+/** Something to fix: an opening issue names the [element]; a wall join issue has its point [at]. */
+public data class Issue(
+    public val kind: IssueKind,
+    public val element: ElementId?,
+    public val level: ElementId,
+    public val at: PointMm?,
+)
+
 /** A Luau file from content/: a norm table or a rule (docs/adr/0005). */
 public data class ContentScript(
     public val name: String,
