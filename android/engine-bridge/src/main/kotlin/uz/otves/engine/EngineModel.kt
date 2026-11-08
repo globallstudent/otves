@@ -16,6 +16,35 @@ public enum class OpeningKind { WINDOW, DOOR, EMPTY }
 
 public enum class WallEnd { START, END }
 
+/** A point of geometry the engine derived, in metres: for drawing, never for measuring. */
+public data class PointM(
+    public val x: Double,
+    public val y: Double,
+)
+
+/** A wall's plan outline after joining, counter-clockwise. */
+public data class WallOutline(
+    public val wall: ElementId,
+    public val level: ElementId,
+    public val points: List<PointM>,
+)
+
+/** A Luau file from content/: a norm table or a rule (docs/adr/0005). */
+public data class ContentScript(
+    public val name: String,
+    public val source: String,
+)
+
+public enum class QuantityUnit { PIECE, METRE, SQUARE_METRE, CUBIC_METRE, KILOGRAM }
+
+/** A material line from a content rule, such as `masonry_unit` or `lintel.bar.l22`. */
+public data class QuantityLine(
+    public val rule: String,
+    public val item: String,
+    public val unit: QuantityUnit,
+    public val amount: Double,
+)
+
 /** A model element as the engine reports it (engine/core). */
 public sealed interface EngineElement
 

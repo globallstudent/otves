@@ -12,6 +12,7 @@ import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.BeginGesture as BeginGestureTable
 import uz.otves.schema.EndGesture as EndGestureTable
 import uz.otves.schema.Level as LevelTable
+import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.MoveOpening as MoveOpeningTable
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
@@ -23,6 +24,7 @@ import uz.otves.schema.RemoveLevel as RemoveLevelTable
 import uz.otves.schema.RemoveOpening as RemoveOpeningTable
 import uz.otves.schema.RemoveWall as RemoveWallTable
 import uz.otves.schema.ResizeOpening as ResizeOpeningTable
+import uz.otves.schema.Script as ScriptTable
 import uz.otves.schema.SetLevelElevation as SetLevelElevationTable
 import uz.otves.schema.SetLevelHeight as SetLevelHeightTable
 import uz.otves.schema.SetOpeningKind as SetOpeningKindTable
@@ -182,7 +184,19 @@ internal object RequestEncoder {
                 RedoTable.startRedo(this)
                 Command.Redo to RedoTable.endRedo(this)
             }
+
+            is EngineCommand.LoadContent -> {
+                val norms = LoadContentTable.createNormsVector(this, scripts(command.norms))
+                val rules = LoadContentTable.createRulesVector(this, scripts(command.rules))
+                Command.LoadContent to LoadContentTable.createLoadContent(this, norms, rules)
+            }
         }
+
+    private fun FlatBufferBuilder.scripts(scripts: List<ContentScript>): IntArray =
+        scripts
+            .map { script ->
+                ScriptTable.createScript(this, createString(script.name), createString(script.source))
+            }.toIntArray()
 
     private fun FlatBufferBuilder.wall(wall: Wall): Int {
         WallTable.startWall(this)

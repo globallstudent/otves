@@ -1,6 +1,7 @@
 package uz.otves.engine
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
 import org.junit.Assert.assertThrows
@@ -79,6 +80,23 @@ class EngineSessionTest {
             .containsExactly(EngineError.HEIGHT_NOT_POSITIVE, EngineError.NOT_FOUND, EngineError.NOTHING_TO_UNDO)
             .inOrder()
         assertThat(response.changes).isEmpty()
+    }
+
+    @Test
+    fun takeoffRunsTheBundledContent() {
+        val assets = InstrumentationRegistry.getInstrumentation().targetContext.assets
+        val loaded = session.send(listOf(ContentAssets.load(assets)))
+        assertThat(loaded.results.single()).isInstanceOf(CommandResult.Done::class.java)
+
+        val level = session.send(listOf(EngineCommand.AddLevel(Level(0.mm, 3000.mm)))).createdId()
+        val built =
+            session.send(listOf(EngineCommand.AddWall(Wall(level, PointMm(0.mm, 0.mm), PointMm(6400.mm, 0.mm), 380.mm, 2800.mm))))
+
+        assertThat(built.outlines).hasSize(1)
+        val lines = (built.takeoff as Takeoff.Lines).lines
+        // 6.4 × 2.8 m of 380 mm 1НФ brick: about 2 686 units net, before waste.
+        assertThat(lines.single { it.item == "masonry_unit" }.amount).isGreaterThan(2686.0)
+        assertThat(lines.map { it.item }).contains("concrete.b15")
     }
 
     @Test

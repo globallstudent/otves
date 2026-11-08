@@ -18,9 +18,16 @@ val generateSchemaJava =
         toolDirectory.set(layout.buildDirectory.dir("flatc"))
     }
 
+// The content bundle (content/) ships with the engine; ContentAssets reads it back.
+val contentDirectory: String =
+    layout.projectDirectory
+        .dir("../../content")
+        .asFile.path
+
 androidComponents {
     onVariants { variant ->
         variant.sources.java?.addGeneratedSourceDirectory(generateSchemaJava, FlatcJavaTask::outputDirectory)
+        variant.sources.assets?.addStaticSourceDirectory(contentDirectory)
     }
 }
 
@@ -66,6 +73,7 @@ kotlin {
 dependencies {
     api(projects.core.model)
     implementation(libs.flatbuffers.java)
+    implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit4)
     testImplementation(libs.truth)
     androidTestImplementation(libs.androidx.test.runner)

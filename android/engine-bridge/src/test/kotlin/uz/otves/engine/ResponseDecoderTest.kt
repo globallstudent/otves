@@ -14,9 +14,13 @@ import kotlin.uuid.Uuid
 import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.LocationLine as LocationLineCode
+import uz.otves.schema.PointM as PointMStruct
 import uz.otves.schema.PointMm as PointStruct
+import uz.otves.schema.QuantityLine as LineTable
+import uz.otves.schema.Unit as UnitCode
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
+import uz.otves.schema.WallOutline as OutlineTable
 
 class ResponseDecoderTest {
     private val level = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000001"))
@@ -50,6 +54,25 @@ class ResponseDecoderTest {
             ).inOrder()
         assertThat(decoded.canUndo).isTrue()
         assertThat(decoded.canRedo).isFalse()
+        assertThat(decoded.outlines).isNull()
+        assertThat(decoded.takeoff).isNull()
+    }
+
+    @Test
+    fun outlinesAndTakeoffComeBackWhenTheModelChanged() {
+        val decoded = ResponseDecoder.decode(derivedResponse(takeoffError = ErrorCode.None))
+
+        assertThat(decoded.outlines)
+            .containsExactly(WallOutline(wall, level, listOf(PointM(0.0, -0.19), PointM(6.4, -0.19), PointM(6.4, 0.19))))
+        assertThat(decoded.takeoff)
+            .isEqualTo(Takeoff.Lines(listOf(QuantityLine("masonry", "masonry_unit", QuantityUnit.PIECE, 2767.0))))
+    }
+
+    @Test
+    fun takeoffThatCouldNotRunCarriesItsError() {
+        val decoded = ResponseDecoder.decode(derivedResponse(takeoffError = ErrorCode.RuleFailed))
+
+        assertThat(decoded.takeoff).isEqualTo(Takeoff.Failed(EngineError.RULE_FAILED, "masonry:3: boom"))
     }
 
     @Test
@@ -106,8 +129,48 @@ class ResponseDecoderTest {
                 Response.createChangesVector(builder, intArrayOf(changed, deleted)),
                 true,
                 false,
+                0,
+                0,
+                ErrorCode.None,
+                0,
             )
         builder.finish(response, "OTVS")
+        return builder.dataBuffer()
+    }
+
+    // A response after a change: one wall's outline and a take-off, or the take-off's error.
+    private fun derivedResponse(takeoffError: Int): ByteBuffer {
+        val builder = FlatBufferBuilder(1024)
+        OutlineTable.startPointsVector(builder, 3)
+        for ((x, y) in listOf(6.4 to 0.19, 6.4 to -0.19, 0.0 to -0.19)) {
+            PointMStruct.createPointM(builder, x, y)
+        }
+        val points = builder.endVector()
+        OutlineTable.startWallOutline(builder)
+        OutlineTable.addWall(builder, builder.uuid(wall))
+        OutlineTable.addLevel(builder, builder.uuid(level))
+        OutlineTable.addPoints(builder, points)
+        val outline = OutlineTable.endWallOutline(builder)
+        val line =
+            LineTable.createQuantityLine(
+                builder,
+                builder.createString("masonry"),
+                builder.createString("masonry_unit"),
+                UnitCode.Piece,
+                2767.0,
+            )
+        val lines = if (takeoffError == ErrorCode.None) intArrayOf(line) else intArrayOf()
+        val message = builder.createString("masonry:3: boom")
+        val outlines = Response.createOutlinesVector(builder, intArrayOf(outline))
+        val takeoff = Response.createTakeoffVector(builder, lines)
+        val results = Response.createResultsVector(builder, intArrayOf())
+        Response.startResponse(builder)
+        Response.addResults(builder, results)
+        Response.addOutlines(builder, outlines)
+        Response.addTakeoff(builder, takeoff)
+        Response.addTakeoffError(builder, takeoffError)
+        Response.addTakeoffMessage(builder, message)
+        builder.finish(Response.endResponse(builder), "OTVS")
         return builder.dataBuffer()
     }
 

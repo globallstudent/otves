@@ -91,4 +91,10 @@ public sealed interface EngineCommand {
     public data object Undo : EngineCommand
 
     public data object Redo : EngineCommand
+
+    /** Replaces the take-off content; a bundle that does not compile keeps the previous one. */
+    public data class LoadContent(
+        public val norms: List<ContentScript>,
+        public val rules: List<ContentScript>,
+    ) : EngineCommand
 }

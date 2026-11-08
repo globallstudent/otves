@@ -8,6 +8,7 @@ import uz.otves.schema.Command
 import uz.otves.schema.Request
 import kotlin.uuid.Uuid
 import uz.otves.schema.AddWall as AddWallTable
+import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
 import uz.otves.schema.WallEnd as WallEndCode
@@ -55,6 +56,23 @@ class RequestEncoderTest {
         assertThat(moved.end()).isEqualTo(WallEndCode.Start)
         assertThat(moved.to().x()).isEqualTo(-100L)
         assertThat(moved.to().y()).isEqualTo(50L)
+    }
+
+    @Test
+    fun contentCarriesItsScripts() {
+        val load =
+            EngineCommand.LoadContent(
+                norms = listOf(ContentScript("practice", "return {}"), ContentScript("seismic", "return { a = 1 }")),
+                rules = listOf(ContentScript("masonry", "return { run = function() return {} end }")),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(load)))
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.LoadContent)
+        val content = request.commands(0).command(LoadContentTable()) as LoadContentTable
+        assertThat(List(content.normsLength()) { content.norms(it).name() }).containsExactly("practice", "seismic").inOrder()
+        assertThat(content.norms(1).source()).isEqualTo("return { a = 1 }")
+        assertThat(content.rules(0).name()).isEqualTo("masonry")
     }
 
     @Test

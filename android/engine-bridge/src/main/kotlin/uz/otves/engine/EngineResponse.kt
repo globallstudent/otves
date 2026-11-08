@@ -47,6 +47,18 @@ public data class ElementChange(
     public val element: EngineElement?,
 )
 
+/** The take-off after a change: its lines, or why the rules could not run. */
+public sealed interface Takeoff {
+    public data class Lines(
+        public val lines: List<QuantityLine>,
+    ) : Takeoff
+
+    public data class Failed(
+        public val error: EngineError,
+        public val message: String,
+    ) : Takeoff
+}
+
 public data class EngineResponse(
     /** One per command sent, in order. */
     public val results: List<CommandResult>,
@@ -54,4 +66,8 @@ public data class EngineResponse(
     public val changes: List<ElementChange>,
     public val canUndo: Boolean,
     public val canRedo: Boolean,
+    /** Every wall's outline, or null when nothing changed since the previous response. */
+    public val outlines: List<WallOutline>? = null,
+    /** Null when nothing changed, or while no content is loaded. */
+    public val takeoff: Takeoff? = null,
 )

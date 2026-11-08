@@ -13,9 +13,13 @@ import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.PointM as PointMStruct
 import uz.otves.schema.PointMm as PointStruct
+import uz.otves.schema.QuantityLine as LineTable
+import uz.otves.schema.Unit as UnitCode
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
+import uz.otves.schema.WallOutline as OutlineTable
 
 /**
  * Reads schema `Response` buffers (schema/engine.fbs). The engine ships with the app, so a value
@@ -35,8 +39,50 @@ internal object ResponseDecoder {
             changes = List(response.changesLength()) { change(response.changes(it)) },
             canUndo = response.canUndo(),
             canRedo = response.canRedo(),
+            outlines = response.outlinesVector()?.let { List(response.outlinesLength()) { outline(response.outlines(it)) } },
+            takeoff = takeoff(response),
         )
     }
+
+    // An absent vector means unchanged; an empty one means there is nothing.
+    private fun takeoff(response: Response): Takeoff? {
+        if (response.takeoffVector() == null) {
+            return null
+        }
+        return when (val error = error(response.takeoffError())) {
+            null -> Takeoff.Lines(List(response.takeoffLength()) { line(response.takeoff(it)) })
+            else -> Takeoff.Failed(error = error, message = response.takeoffMessage().orEmpty())
+        }
+    }
+
+    private fun outline(outline: OutlineTable): WallOutline =
+        WallOutline(
+            wall = id(checkNotNull(outline.wall()) { "An outline has no wall" }),
+            level = id(checkNotNull(outline.level()) { "An outline has no level" }),
+            points =
+                List(outline.pointsLength()) {
+                    val point = outline.points(PointMStruct(), it)
+                    PointM(point.x(), point.y())
+                },
+        )
+
+    private fun line(line: LineTable): QuantityLine =
+        QuantityLine(
+            rule = line.rule().orEmpty(),
+            item = line.item().orEmpty(),
+            unit = unit(line.unit()),
+            amount = line.amount(),
+        )
+
+    private fun unit(code: Int): QuantityUnit =
+        when (code) {
+            UnitCode.Piece -> QuantityUnit.PIECE
+            UnitCode.Metre -> QuantityUnit.METRE
+            UnitCode.SquareMetre -> QuantityUnit.SQUARE_METRE
+            UnitCode.CubicMetre -> QuantityUnit.CUBIC_METRE
+            UnitCode.Kilogram -> QuantityUnit.KILOGRAM
+            else -> error("The engine sent an unknown unit $code")
+        }
 
     private fun hasIdentifier(buffer: ByteBuffer): Boolean {
         val start = buffer.position() + IDENTIFIER_OFFSET
