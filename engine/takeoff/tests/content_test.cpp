@@ -33,7 +33,7 @@ Script load(const std::filesystem::path& file) {
 }
 
 RuleSet masonry_rules() {
-  const std::vector norms{load("norms/practice.luau"), load("norms/sp_82_101_98.luau")};
+  const std::vector norms{load("norms/practice.luau"), load("norms/mortar.luau")};
   const std::vector rules{load("rules/masonry.luau")};
   auto set = RuleSet::compile({.norms = norms, .rules = rules});
   EXPECT_TRUE(set.has_value()) << set.error().message;

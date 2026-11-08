@@ -14,7 +14,7 @@ flowchart LR
 
 | Path | Holds |
 |---|---|
-| `norms/<name>.luau` | One table of values with a `source` record: standard, clause, jurisdiction, status. The file name is its key in `norms` |
+| `norms/<role>.luau` | One table of values with a `source` record: standard, clause, jurisdiction, status. The file is named by its role (`mortar`, `seismic`), not by its standard, so a norm profile (UZ, RU, EU) swaps the file and rules stay the same. The name is its key in `norms` |
 | `rules/<name>.luau` | `return { run = function(input, norms, settings) ... end }`, returning an array of lines |
 
 ## Rule contract
@@ -39,6 +39,6 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 
 | File | Content | Source |
 |---|---|---|
-| `norms/sp_82_101_98.luau` | Cement per m³ of masonry mortar by cement and mortar grade | СП 82-101-98, tables 4–5 |
+| `norms/mortar.luau` | Cement per m³ of masonry mortar by cement and mortar grade | СП 82-101-98, tables 4–5 |
 | `norms/practice.luau` | Waste allowances (запас), default cement and mortar grade | Practice; editable in job settings |
 | `rules/masonry.luau` | Units and mortar with waste, cement in that mortar | Uses both norms above |

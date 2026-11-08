@@ -30,7 +30,7 @@ return {
 		local cement = setting(settings, "cement", practice.defaults.cement)
 		local grade = setting(settings, "mortar_grade", practice.defaults.mortar_grade)
 
-		local by_grade = norms.sp_82_101_98.cement_kg_per_m3[cement]
+		local by_grade = norms.mortar.cement_kg_per_m3[cement]
 		local cement_per_m3 = if by_grade then by_grade[grade] else nil
 		if cement_per_m3 == nil then
 			error(`no cement norm for {cement} in mortar {grade}`)
