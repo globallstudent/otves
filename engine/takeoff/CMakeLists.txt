@@ -1,0 +1,17 @@
+add_library(otves_takeoff
+  src/masonry.cpp
+  src/wall_quantities.cpp)
+add_library(otves::takeoff ALIAS otves_takeoff)
+
+target_include_directories(otves_takeoff PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
+target_compile_features(otves_takeoff PUBLIC cxx_std_23)
+target_link_libraries(otves_takeoff
+  PUBLIC otves::geom
+  PRIVATE otves::build_options)
+
+if(OTVES_BUILD_TESTS)
+  otves_add_test(otves_takeoff_tests
+    tests/masonry_test.cpp
+    tests/wall_quantities_test.cpp)
+  target_link_libraries(otves_takeoff_tests PRIVATE otves::takeoff)
+endif()

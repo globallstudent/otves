@@ -15,7 +15,9 @@ enum class ErrorCode : std::uint8_t {
   kZeroLength,
   kThicknessNotPositive,
   kHeightNotPositive,
-  kGestureOpen,  // undo or redo while a gesture is open
+  kUnitSizeNotPositive,  // a brick or block dimension
+  kJointNegative,        // a mortar joint thickness
+  kGestureOpen,          // undo or redo while a gesture is open
   kNothingToUndo,
   kNothingToRedo,
   kCorruptData,

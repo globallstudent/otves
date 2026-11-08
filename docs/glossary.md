@@ -11,6 +11,11 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | location line | линия привязки | bog‘lash chizig‘i | The wall line whose points are stored: centre, left or right face |
 | wall join | сопряжение стен | devorlar tutashuvi | How wall ends meet: a mitre at a corner, slices around a shared point |
 | butt joint | примыкание | tirab ulash | A wall ending against the face of another wall |
+| masonry unit | кирпич, блок | g‘isht, blok | A brick or block as laid: length along the wall, width across, course height |
+| wythe | ряд в полкирпича | yarim g‘isht qatlami | One unit width across the wall; a 380 mm brick wall has three |
+| bed joint | горизонтальный шов | gorizontal chok | Mortar between courses, 12 mm by СП 70 |
+| head joint | вертикальный шов | vertikal chok | Mortar between units in a course, 10 mm by СП 70 |
+| mortar | раствор | qorishma | Cement-sand mix that fills the joints |
 | opening | проём | teshik | Window, door or empty opening in a wall |
 | hole | отверстие | teshik (plitada) | Opening through a slab or roof, not a wall |
 | lintel | перемычка | peremichka | Beam over an opening (ГОСТ 948) |
