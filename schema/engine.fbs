@@ -279,6 +279,25 @@ table OpeningOutline {
   points:[PointM];
 }
 
+enum IssueKind:ubyte {
+  OpeningOutsideWall = 0,  // past the wall's ends, below its base or above its top
+  OpeningOverlap = 1,      // over another opening in the same wall
+  OpeningWithoutWall = 2,
+  ShortBearing = 3,        // the lintel runs past the wall's end or into another opening
+  NoRoomForLintel = 4,     // the lintel rises above the wall's top
+  WallOverlap = 5,         // walls along one line from a point, or one inside another
+  SharpAngle = 6,          // walls meet at so small an angle that their ends are cut square
+}
+
+// Something in the model a builder has to fix (engine/geom, engine/takeoff). An opening issue
+// names the opening; a wall join issue has the point where the walls meet.
+table Issue {
+  kind:IssueKind = OpeningOutsideWall;
+  element:Uuid;
+  level:Uuid;
+  at:PointMm;
+}
+
 enum Unit:ubyte { Piece = 0, Metre = 1, SquareMetre = 2, CubicMetre = 3, Kilogram = 4 }
 
 // A material line from a content rule (engine/takeoff).
@@ -308,6 +327,7 @@ table Response {
   takeoff_message:string;
   openings:[OpeningOutline];  // with the outlines: every opening in a wall
   log:[LogEntry];             // groups appended to the operation log, in order
+  issues:[Issue];             // with the outlines; opening issues once content is loaded
 }
 
 root_type Request;

@@ -582,5 +582,32 @@ TEST(Session, BrokenContentKeepsThePreviousContent) {
   EXPECT_GT(amount(built, "masonry_unit"), 0.0);
 }
 
+TEST(Session, IssuesNameTheOpeningsAndJoinsToFix) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+  const ElementId level = add_level(session);
+  add_wall(session, level);
+
+  // A door at the wall's start leaves no masonry for its lintel to rest on; a second wall along
+  // the first from the same point overlaps it.
+  const auto& placed =
+      respond(session, Request{}.place(level, {0, 0}, 900, schema::OpeningKind::Door).bytes());
+  const ElementId door = to_id(placed.results()->Get(0)->created());
+  ASSERT_NE(placed.issues(), nullptr);
+  ASSERT_EQ(placed.issues()->size(), 1U);
+  const auto* issue = placed.issues()->Get(0);
+  EXPECT_EQ(issue->kind(), schema::IssueKind::ShortBearing);
+  EXPECT_EQ(to_id(issue->element()), door);
+  EXPECT_EQ(to_id(issue->level()), level);
+
+  const auto& overlapped = respond(session, Request{}.add_wall(level, 3000).bytes());
+  const auto* overlap = overlapped.issues()->Get(0);
+  EXPECT_EQ(overlap->kind(), schema::IssueKind::WallOverlap);
+  EXPECT_EQ(overlap->element(), nullptr);
+  ASSERT_NE(overlap->at(), nullptr);
+  EXPECT_EQ(overlap->at()->x(), 0);
+}
+
 }  // namespace
 }  // namespace otves::bridge

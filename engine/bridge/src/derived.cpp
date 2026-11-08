@@ -59,6 +59,32 @@ schema::Unit unit_code(takeoff::Unit unit) {
   return schema::Unit::Piece;
 }
 
+schema::IssueKind issue_code(takeoff::OpeningIssueKind kind) {
+  switch (kind) {
+    case takeoff::OpeningIssueKind::kOutsideWall:
+      return schema::IssueKind::OpeningOutsideWall;
+    case takeoff::OpeningIssueKind::kOverlap:
+      return schema::IssueKind::OpeningOverlap;
+    case takeoff::OpeningIssueKind::kNoWall:
+      return schema::IssueKind::OpeningWithoutWall;
+    case takeoff::OpeningIssueKind::kShortBearing:
+      return schema::IssueKind::ShortBearing;
+    case takeoff::OpeningIssueKind::kNoRoomForLintel:
+      return schema::IssueKind::NoRoomForLintel;
+  }
+  return schema::IssueKind::OpeningOutsideWall;
+}
+
+schema::IssueKind issue_code(geom::JoinIssueKind kind) {
+  switch (kind) {
+    case geom::JoinIssueKind::kOverlap:
+      return schema::IssueKind::WallOverlap;
+    case geom::JoinIssueKind::kSharpAngle:
+      return schema::IssueKind::SharpAngle;
+  }
+  return schema::IssueKind::WallOverlap;
+}
+
 TakeoffOffsets failure(flatbuffers::FlatBufferBuilder& builder, const Error& error) {
   return {.lines = builder.CreateVector(std::vector<flatbuffers::Offset<schema::QuantityLine>>{}),
           .error = to_schema(error.code),
@@ -67,7 +93,8 @@ TakeoffOffsets failure(flatbuffers::FlatBufferBuilder& builder, const Error& err
 
 }  // namespace
 
-OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Model& model) {
+OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Model& model,
+                               IssueOffsets& issues) {
   std::map<ElementId, std::vector<geom::WallInput>> levels;
   for (const geom::WallInput& input : walls_of(model)) {
     levels[input.wall.level].push_back(input);
@@ -75,7 +102,12 @@ OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Mo
   std::vector<flatbuffers::Offset<schema::WallOutline>> outlines;
   for (const auto& [level, walls] : levels) {
     const schema::Uuid on = to_schema(level);
-    for (const geom::WallFootprint& footprint : geom::join_walls(walls).footprints) {
+    const geom::WallJoins joins = geom::join_walls(walls);
+    for (const geom::JoinIssue& issue : joins.issues) {
+      const schema::PointMm at = to_schema(issue.at);
+      issues.push_back(schema::CreateIssue(builder, issue_code(issue.kind), nullptr, &on, &at));
+    }
+    for (const geom::WallFootprint& footprint : joins.footprints) {
       std::vector<schema::PointM> points;
       points.reserve(footprint.outline.size());
       for (const geom::Vec2 point : footprint.outline) {
@@ -113,7 +145,7 @@ OpeningOutlinesOffset encode_openings(flatbuffers::FlatBufferBuilder& builder, c
 }
 
 TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Model& model,
-                              const std::optional<takeoff::RuleSet>& rules) {
+                              const std::optional<takeoff::RuleSet>& rules, IssueOffsets& issues) {
   if (!rules) {
     return {};
   }
@@ -128,6 +160,13 @@ TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Mod
   const auto measurement = takeoff::measure_levels(walls_of(model), openings_of(model), *lintels);
   if (!measurement) {
     return failure(builder, measurement.error());
+  }
+  for (const takeoff::OpeningIssue& issue : measurement->issues) {
+    const auto* opening = model.find<Opening>(issue.opening);
+    const Wall* wall = opening != nullptr ? model.find<Wall>(opening->wall) : nullptr;
+    const schema::Uuid element = to_schema(issue.opening);
+    const schema::Uuid level = to_schema(wall != nullptr ? wall->level : ElementId{});
+    issues.push_back(schema::CreateIssue(builder, issue_code(issue.kind), &element, &level));
   }
   const auto masonry = takeoff::count_masonry(measurement->walls, *masonry_spec);
   if (!masonry) {

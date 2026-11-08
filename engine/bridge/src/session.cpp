@@ -183,10 +183,13 @@ struct Session::Impl {
     OutlinesOffset outlines;
     OpeningOutlinesOffset openings;
     TakeoffOffsets takeoff;
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<schema::Issue>>> issues;
     if (!changes.empty() || content_changed) {
-      outlines = encode_outlines(builder, document.model());
+      IssueOffsets found;
+      outlines = encode_outlines(builder, document.model(), found);
       openings = encode_openings(builder, document.model());
-      takeoff = encode_takeoff(builder, document.model(), rules);
+      takeoff = encode_takeoff(builder, document.model(), rules, found);
+      issues = builder.CreateVector(found);
       content_changed = false;
     }
     const std::span<const OpGroup> log = document.log().subspan(reported);
@@ -201,7 +204,7 @@ struct Session::Impl {
     const auto response = schema::CreateResponse(
         builder, kVersion, builder.CreateVector(results), builder.CreateVector(changes),
         document.can_undo(), document.can_redo(), outlines, takeoff.lines, takeoff.error,
-        takeoff.message, openings, builder.CreateVector(entries));
+        takeoff.message, openings, builder.CreateVector(entries), issues);
     builder.Finish(response, kIdentifier);
     // Only a finished response counts as reported; after a failure the next one repeats them.
     unreported.clear();
