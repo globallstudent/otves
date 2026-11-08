@@ -4,6 +4,7 @@
 #include <variant>
 #include <vector>
 
+#include <otves/core/element.h>
 #include <otves/core/hlc.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -12,28 +13,35 @@ namespace otves {
 
 // Property-level changes. Every model change is a list of these; undo, history and sync read
 // nothing else. Create and delete carry the whole value so either can be inverted.
-struct CreateWall {
+template <typename T>
+struct Create {
   ElementId id;
-  Wall wall;
+  T element;
 
-  bool operator==(const CreateWall&) const = default;
+  bool operator==(const Create&) const = default;
 };
 
-struct DeleteWall {
+template <typename T>
+struct Delete {
   ElementId id;
-  Wall wall;
+  T element;
 
-  bool operator==(const DeleteWall&) const = default;
+  bool operator==(const Delete&) const = default;
 };
 
-struct SetWallField {
+template <typename T>
+struct SetField {
   ElementId id;
-  WallField field = WallField::kStart;
-  WallValue before;
-  WallValue after;
+  ElementTraits<T>::Field field{};
+  ElementTraits<T>::Value before;
+  ElementTraits<T>::Value after;
 
-  bool operator==(const SetWallField&) const = default;
+  bool operator==(const SetField&) const = default;
 };
+
+using CreateWall = Create<Wall>;
+using DeleteWall = Delete<Wall>;
+using SetWallField = SetField<Wall>;
 
 using Op = std::variant<CreateWall, DeleteWall, SetWallField>;
 

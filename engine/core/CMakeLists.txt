@@ -3,7 +3,6 @@ add_library(otves_core
   src/command.cpp
   src/document.cpp
   src/hlc.cpp
-  src/model.cpp
   src/op.cpp
   src/uuid.cpp
   src/wall.cpp)

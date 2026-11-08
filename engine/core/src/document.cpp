@@ -10,6 +10,7 @@
 #include <otves/core/assert.h>
 #include <otves/core/command.h>
 #include <otves/core/document.h>
+#include <otves/core/element.h>
 #include <otves/core/error.h>
 #include <otves/core/op.h>
 #include <otves/core/overloaded.h>
@@ -21,11 +22,13 @@ namespace {
 
 using Ops = std::vector<Op>;
 
-// Plans a single-field change: validates the wall as it would become and records before/after.
-// Setting a field to its current value plans nothing.
-std::expected<Ops, Error> change(ElementId id, const Wall& current, WallField field,
-                                 const WallValue& value) {
-  Wall changed = current;
+// Plans a single-field change: validates the element as it would become and records
+// before/after. Setting a field to its current value plans nothing.
+template <typename T>
+std::expected<Ops, Error> change(ElementId id, const T& current,
+                                 typename ElementTraits<T>::Field field,
+                                 const typename ElementTraits<T>::Value& value) {
+  T changed = current;
   set_field(changed, field, value);
   if (auto valid = validate(changed); !valid) {
     return std::unexpected(std::move(valid.error()));
@@ -34,32 +37,40 @@ std::expected<Ops, Error> change(ElementId id, const Wall& current, WallField fi
     return Ops{};
   }
   return Ops{
-      SetWallField{.id = id, .field = field, .before = get_field(current, field), .after = value}};
+      SetField<T>{.id = id, .field = field, .before = get_field(current, field), .after = value}};
 }
 
-// A drag sends a command every frame. Within a gesture each wall field keeps its first `before`
-// and its latest `after`, so the log holds one change per field instead of one per frame.
+// A drag sends a command every frame. Within a gesture each field keeps its first `before` and
+// its latest `after`, so the log holds one change per field instead of one per frame.
+template <typename T>
+bool fold(OpGroup& gesture, const SetField<T>& set) {
+  for (Op& existing : gesture.ops) {
+    auto* other = std::get_if<SetField<T>>(&existing);
+    if (other != nullptr && other->id == set.id && other->field == set.field) {
+      other->after = set.after;
+      return true;
+    }
+  }
+  return false;
+}
+
 void fold_into(OpGroup& gesture, const Ops& ops) {
   for (const Op& op : ops) {
-    const auto* set = std::get_if<SetWallField>(&op);
-    if (set != nullptr) {
-      const auto same_field = [set](const Op& existing) {
-        const auto* other = std::get_if<SetWallField>(&existing);
-        return other != nullptr && other->id == set->id && other->field == set->field;
-      };
-      if (const auto found = std::ranges::find_if(gesture.ops, same_field);
-          found != gesture.ops.end()) {
-        std::get_if<SetWallField>(&*found)->after = set->after;
-        continue;
-      }
+    const bool folded = std::visit(
+        Overloaded{[&gesture]<typename T>(const SetField<T>& set) { return fold(gesture, set); },
+                   [](const auto&) { return false; }},
+        op);
+    if (!folded) {
+      gesture.ops.push_back(op);
     }
-    gesture.ops.push_back(op);
   }
 }
 
 bool is_no_op(const Op& op) {
-  const auto* set = std::get_if<SetWallField>(&op);
-  return set != nullptr && set->before == set->after;
+  return std::visit(
+      Overloaded{[]<typename T>(const SetField<T>& set) { return set.before == set.after; },
+                 [](const auto&) { return false; }},
+      op);
 }
 
 }  // namespace
@@ -158,7 +169,7 @@ std::vector<ElementId> Document::take_dirty() {
 
 std::expected<Ops, Error> Document::plan(const Command& command) {
   const auto find = [this](ElementId id) -> std::expected<const Wall*, Error> {
-    const Wall* wall = model_.find_wall(id);
+    const Wall* wall = model_.find<Wall>(id);
     if (wall == nullptr) {
       return make_error(ErrorCode::kNotFound, "wall not found");
     }
@@ -174,7 +185,7 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
                           if (auto valid = validate(add.wall); !valid) {
                             return std::unexpected(std::move(valid.error()));
                           }
-                          return Ops{CreateWall{.id = ElementId{next_uuid()}, .wall = add.wall}};
+                          return Ops{CreateWall{.id = ElementId{next_uuid()}, .element = add.wall}};
                         },
                         [&change_field](const MoveWallEnd& move) {
                           const WallField field =
@@ -193,7 +204,7 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
                         },
                         [&find](const RemoveWall& remove) -> std::expected<Ops, Error> {
                           return find(remove.wall).transform([&remove](const Wall* wall) {
-                            return Ops{DeleteWall{.id = remove.wall, .wall = *wall}};
+                            return Ops{DeleteWall{.id = remove.wall, .element = *wall}};
                           });
                         },
                     },
@@ -201,18 +212,19 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
 }
 
 void Document::apply(const Op& op) {
-  std::visit(Overloaded{
-                 [this](const CreateWall& create) { model_.insert_wall(create.id, create.wall); },
-                 [this](const DeleteWall& remove) { model_.erase_wall(remove.id); },
-                 [this](const SetWallField& set) {
-                   Wall* wall = model_.find_wall(set.id);
-                   OTVES_ASSERT(wall != nullptr);
-                   if (wall != nullptr) {
-                     set_field(*wall, set.field, set.after);
-                   }
-                 },
-             },
-             op);
+  std::visit(
+      Overloaded{
+          [this]<typename T>(const Create<T>& create) { model_.insert(create.id, create.element); },
+          [this]<typename T>(const Delete<T>& remove) { model_.erase<T>(remove.id); },
+          [this]<typename T>(const SetField<T>& set) {
+            T* element = model_.find<T>(set.id);
+            OTVES_ASSERT(element != nullptr);
+            if (element != nullptr) {
+              set_field(*element, set.field, set.after);
+            }
+          },
+      },
+      op);
   dirty_.push_back(target(op));
 }
 

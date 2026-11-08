@@ -42,7 +42,7 @@ Wall wall_4() {
 
 ElementId only_wall(const Document& document) {
   ElementId found;
-  document.model().for_each_wall([&found](ElementId id, const Wall&) { found = id; });
+  document.model().for_each<Wall>([&found](ElementId id, const Wall&) { found = id; });
   return found;
 }
 
@@ -57,8 +57,8 @@ TEST(Document, AddWallRecordsOneCreateOp) {
   ASSERT_EQ(group.ops.size(), 1U);
   const auto* create = std::get_if<CreateWall>(&group.ops.front());
   ASSERT_NE(create, nullptr);
-  EXPECT_EQ(create->wall, wall_4());
-  EXPECT_EQ(*document.model().find_wall(create->id), wall_4());
+  EXPECT_EQ(create->element, wall_4());
+  EXPECT_EQ(*document.model().find<Wall>(create->id), wall_4());
 }
 
 TEST(Document, RejectsInvalidWallAndChangesNothing) {
@@ -80,7 +80,7 @@ TEST(Document, RejectsInvalidWallAndChangesNothing) {
   EXPECT_EQ(code(point), ErrorCode::kZeroLength);
   EXPECT_EQ(code(far), ErrorCode::kOffPlan);
   EXPECT_TRUE(document.log().empty());
-  EXPECT_EQ(document.model().wall_count(), 0U);
+  EXPECT_EQ(document.model().count<Wall>(), 0U);
 }
 
 TEST(Document, MoveWallEndRecordsBeforeAndAfter) {
@@ -96,7 +96,7 @@ TEST(Document, MoveWallEndRecordsBeforeAndAfter) {
   EXPECT_EQ(set->field, WallField::kEnd);
   EXPECT_EQ(set->before, (WallValue{PointMm{6400_mm, 0_mm}}));
   EXPECT_EQ(set->after, (WallValue{PointMm{7000_mm, 0_mm}}));
-  EXPECT_EQ(document.model().find_wall(id)->end, (PointMm{7000_mm, 0_mm}));
+  EXPECT_EQ(document.model().find<Wall>(id)->end, (PointMm{7000_mm, 0_mm}));
 }
 
 TEST(Document, UndoRestoresExactStateAndAppendsToLog) {
@@ -108,7 +108,7 @@ TEST(Document, UndoRestoresExactStateAndAppendsToLog) {
 
   ASSERT_TRUE(document.undo());
 
-  EXPECT_EQ(*document.model().find_wall(id), wall_4());
+  EXPECT_EQ(*document.model().find<Wall>(id), wall_4());
   ASSERT_EQ(document.log().size(), 3U);
   EXPECT_EQ(document.log().back().kind, CommandKind::kUndo);
   EXPECT_EQ(document.log().back().origin, thickened);
@@ -124,7 +124,7 @@ TEST(Document, RedoReappliesUndoneChange) {
 
   ASSERT_TRUE(document.redo());
 
-  EXPECT_EQ(document.model().find_wall(id)->height, 3000_mm);
+  EXPECT_EQ(document.model().find<Wall>(id)->height, 3000_mm);
   EXPECT_EQ(document.log().back().kind, CommandKind::kRedo);
   EXPECT_TRUE(document.can_undo());
   EXPECT_FALSE(document.can_redo());
@@ -148,12 +148,12 @@ TEST(Document, UndoingRemovalRestoresTheSameWall) {
   ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
   const ElementId id = only_wall(document);
   ASSERT_TRUE(document.execute(RemoveWall{.wall = id}));
-  ASSERT_EQ(document.model().find_wall(id), nullptr);
+  ASSERT_EQ(document.model().find<Wall>(id), nullptr);
 
   ASSERT_TRUE(document.undo());
 
-  ASSERT_NE(document.model().find_wall(id), nullptr);
-  EXPECT_EQ(*document.model().find_wall(id), wall_4());
+  ASSERT_NE(document.model().find<Wall>(id), nullptr);
+  EXPECT_EQ(*document.model().find<Wall>(id), wall_4());
 }
 
 TEST(Document, GestureFoldsEveryFrameIntoOneGroup) {
@@ -212,7 +212,7 @@ TEST(Document, GestureLeftOpenIsLoggedWhenTheNextOneBegins) {
   EXPECT_EQ(document.log()[2].kind, CommandKind::kSetWallHeight);
   ASSERT_TRUE(document.undo());
   ASSERT_TRUE(document.undo());
-  EXPECT_EQ(*document.model().find_wall(id), wall_4());
+  EXPECT_EQ(*document.model().find<Wall>(id), wall_4());
 }
 
 TEST(Document, UndoIsRefusedDuringGesture) {

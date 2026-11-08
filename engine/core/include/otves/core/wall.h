@@ -4,6 +4,7 @@
 #include <expected>
 #include <variant>
 
+#include <otves/core/element.h>
 #include <otves/core/error.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
@@ -53,5 +54,11 @@ using WallValue = std::variant<PointMm, Mm, LocationLine>;
 // The value's alternative must match the field (PointMm for kStart/kEnd, Mm for kThickness and
 // kHeight, LocationLine for kLocationLine); a mismatch is a programming error.
 void set_field(Wall& wall, WallField field, const WallValue& value);
+
+template <>
+struct ElementTraits<Wall> {
+  using Field = WallField;
+  using Value = WallValue;
+};
 
 }  // namespace otves

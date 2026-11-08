@@ -9,14 +9,14 @@ namespace otves {
 Op inverse(const Op& op) {
   return std::visit(
       Overloaded{
-          [](const CreateWall& create) -> Op {
-            return DeleteWall{.id = create.id, .wall = create.wall};
+          []<typename T>(const Create<T>& create) -> Op {
+            return Delete<T>{.id = create.id, .element = create.element};
           },
-          [](const DeleteWall& remove) -> Op {
-            return CreateWall{.id = remove.id, .wall = remove.wall};
+          []<typename T>(const Delete<T>& remove) -> Op {
+            return Create<T>{.id = remove.id, .element = remove.element};
           },
-          [](const SetWallField& set) -> Op {
-            return SetWallField{
+          []<typename T>(const SetField<T>& set) -> Op {
+            return SetField<T>{
                 .id = set.id, .field = set.field, .before = set.after, .after = set.before};
           },
       },
