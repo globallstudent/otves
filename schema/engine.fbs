@@ -77,6 +77,20 @@ table LoadContent {
   rules:[Script];
 }
 
+// An opening where the user tapped: in the wall on `level` nearest to `at`, if one lies within
+// `reach`, centred on the tap and moved along the wall to fit between its ends. Runs as
+// AddOpening. Fails with NoWall when no wall is that near and DoesNotFit when the opening is
+// wider than the wall.
+table PlaceOpening {
+  level:Uuid;
+  at:PointMm;
+  reach:long;
+  width:long;
+  height:long;
+  sill:long;
+  kind:OpeningKind = Window;
+}
+
 // Commands between BeginGesture and EndGesture fold into one undo step.
 table BeginGesture {}
 table EndGesture {}
@@ -105,6 +119,7 @@ union Command {
   Undo,
   Redo,
   LoadContent,
+  PlaceOpening,
 }
 
 table CommandEntry {
@@ -139,6 +154,8 @@ enum ErrorCode:ubyte {
   CorruptData = 18,
   UnsupportedVersion = 19,
   Internal = 20,
+  NoWall = 21,
+  DoesNotFit = 22,
 }
 
 table CommandResult {
@@ -159,6 +176,14 @@ struct PointM {
 table WallOutline {
   wall:Uuid;
   level:Uuid;
+  points:[PointM];
+}
+
+// An opening's plan outline through its wall, counter-clockwise (engine/geom).
+table OpeningOutline {
+  opening:Uuid;
+  level:Uuid;
+  kind:OpeningKind = Window;
   points:[PointM];
 }
 
@@ -189,6 +214,7 @@ table Response {
   takeoff:[QuantityLine];   // absent until content is loaded
   takeoff_error:ErrorCode = None;
   takeoff_message:string;
+  openings:[OpeningOutline];  // with the outlines: every opening in a wall
 }
 
 root_type Request;

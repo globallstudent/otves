@@ -71,18 +71,6 @@ schema::LocationLine to_schema(LocationLine line) {
   return schema::LocationLine::Center;
 }
 
-schema::OpeningKind to_schema(OpeningKind kind) {
-  switch (kind) {
-    case OpeningKind::kWindow:
-      return schema::OpeningKind::Window;
-    case OpeningKind::kDoor:
-      return schema::OpeningKind::Door;
-    case OpeningKind::kEmpty:
-      return schema::OpeningKind::Empty;
-  }
-  return schema::OpeningKind::Window;
-}
-
 PointMm to_point(const schema::PointMm& point) { return {.x = Mm{point.x()}, .y = Mm{point.y()}}; }
 
 schema::PointMm to_schema(PointMm point) { return {point.x.value(), point.y.value()}; }
@@ -227,6 +215,18 @@ ElementId to_id(const schema::Uuid* uuid) {
   return uuid == nullptr ? ElementId{} : ElementId{Uuid{uuid->high(), uuid->low()}};
 }
 
+schema::OpeningKind to_schema(OpeningKind kind) {
+  switch (kind) {
+    case OpeningKind::kWindow:
+      return schema::OpeningKind::Window;
+    case OpeningKind::kDoor:
+      return schema::OpeningKind::Door;
+    case OpeningKind::kEmpty:
+      return schema::OpeningKind::Empty;
+  }
+  return schema::OpeningKind::Window;
+}
+
 schema::ErrorCode to_schema(ErrorCode code) {
   switch (code) {
     case ErrorCode::kNotFound:
@@ -267,6 +267,10 @@ schema::ErrorCode to_schema(ErrorCode code) {
       return schema::ErrorCode::CorruptData;
     case ErrorCode::kUnsupportedVersion:
       return schema::ErrorCode::UnsupportedVersion;
+    case ErrorCode::kNoWall:
+      return schema::ErrorCode::NoWall;
+    case ErrorCode::kDoesNotFit:
+      return schema::ErrorCode::DoesNotFit;
   }
   return schema::ErrorCode::Internal;
 }
@@ -299,6 +303,25 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
     default:
       return corrupt("not a model command");
   }
+}
+
+std::expected<OpeningPlacement, Error> decode(const schema::PlaceOpening* place) {
+  if (place == nullptr || place->at() == nullptr) {
+    return corrupt("placement or its point is missing");
+  }
+  const std::optional<OpeningKind> kind = from_schema(place->kind());
+  if (!kind) {
+    return corrupt("unknown opening kind");
+  }
+  return OpeningPlacement{.level = to_id(place->level()),
+                          .at = to_point(*place->at()),
+                          .reach = Mm{place->reach()},
+                          .opening = {.wall = {},
+                                      .offset = {},
+                                      .width = Mm{place->width()},
+                                      .height = Mm{place->height()},
+                                      .sill = Mm{place->sill()},
+                                      .kind = *kind}};
 }
 
 flatbuffers::Offset<schema::ElementChange> encode_change(flatbuffers::FlatBufferBuilder& builder,

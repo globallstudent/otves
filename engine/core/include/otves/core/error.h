@@ -29,6 +29,8 @@ enum class ErrorCode : std::uint8_t {
   kNothingToRedo,
   kCorruptData,
   kUnsupportedVersion,
+  kNoWall,      // no wall near the point where an opening was placed
+  kDoesNotFit,  // an opening wider than its wall
 };
 
 struct Error {

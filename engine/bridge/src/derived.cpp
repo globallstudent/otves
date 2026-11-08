@@ -1,5 +1,6 @@
 #include "derived.h"
 
+#include <algorithm>
 #include <expected>
 #include <map>
 #include <optional>
@@ -12,6 +13,7 @@
 #include <otves/core/opening.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/geom/openings.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 #include <otves/takeoff/masonry.h>
@@ -83,6 +85,29 @@ OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Mo
       outlines.push_back(
           schema::CreateWallOutline(builder, &wall, &on, builder.CreateVectorOfStructs(points)));
     }
+  }
+  return builder.CreateVector(outlines);
+}
+
+OpeningOutlinesOffset encode_openings(flatbuffers::FlatBufferBuilder& builder, const Model& model) {
+  std::vector<takeoff::OpeningInput> openings = openings_of(model);
+  std::ranges::sort(openings, {}, &takeoff::OpeningInput::id);
+  std::vector<flatbuffers::Offset<schema::OpeningOutline>> outlines;
+  outlines.reserve(openings.size());
+  for (const takeoff::OpeningInput& input : openings) {
+    const Wall* wall = model.find<Wall>(input.opening.wall);
+    if (wall == nullptr) {
+      continue;
+    }
+    std::vector<schema::PointM> points;
+    for (const geom::Vec2 point : geom::opening_outline(*wall, input.opening)) {
+      points.emplace_back(point.x, point.y);
+    }
+    const schema::Uuid opening = to_schema(input.id);
+    const schema::Uuid level = to_schema(wall->level);
+    outlines.push_back(schema::CreateOpeningOutline(builder, &opening, &level,
+                                                    to_schema(input.opening.kind),
+                                                    builder.CreateVectorOfStructs(points)));
   }
   return builder.CreateVector(outlines);
 }

@@ -9,7 +9,7 @@
 
 #include "engine_generated.h"
 
-// What the engine derives from the model for the app: plan outlines and the take-off. Both are
+// What the engine derives from the model for the app: plan outlines and the take-off. All are
 // rebuilt whole; the session sends them only when the model or the content changed.
 namespace otves::bridge {
 
@@ -21,6 +21,13 @@ using LinesOffset =
 // Every wall's joined outline, level by level, so walls on different floors never meet.
 [[nodiscard]] OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder,
                                              const Model& model);
+
+using OpeningOutlinesOffset =
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<schema::OpeningOutline>>>;
+
+// Every opening whose wall exists, cut face to face through it, sorted by id.
+[[nodiscard]] OpeningOutlinesOffset encode_openings(flatbuffers::FlatBufferBuilder& builder,
+                                                    const Model& model);
 
 struct TakeoffOffsets {
   LinesOffset lines;  // null when no content is loaded

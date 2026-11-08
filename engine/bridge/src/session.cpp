@@ -22,6 +22,7 @@
 #include "convert.h"
 #include "derived.h"
 #include "engine_generated.h"
+#include "placement.h"
 
 namespace otves::bridge {
 namespace {
@@ -63,6 +64,12 @@ struct Session::Impl {
         return document.redo().transform([] { return std::optional<ElementId>{}; });
       case schema::Command::LoadContent:
         return load(entry.command_as_LoadContent());
+      case schema::Command::PlaceOpening:
+        return decode(entry.command_as_PlaceOpening())
+            .and_then([this](const OpeningPlacement& placement) {
+              return place_opening(document.model(), placement);
+            })
+            .and_then([this](const AddOpening& add) { return document.execute(add); });
       default:
         return decode(entry).and_then(
             [this](const Command& command) { return document.execute(command); });
@@ -139,16 +146,18 @@ struct Session::Impl {
       changes.push_back(encode_change(builder, document.model(), id));
     }
     OutlinesOffset outlines;
+    OpeningOutlinesOffset openings;
     TakeoffOffsets takeoff;
     if (!changes.empty() || content_changed) {
       outlines = encode_outlines(builder, document.model());
+      openings = encode_openings(builder, document.model());
       takeoff = encode_takeoff(builder, document.model(), rules);
       content_changed = false;
     }
     const auto response = schema::CreateResponse(builder, kVersion, builder.CreateVector(results),
                                                  builder.CreateVector(changes), document.can_undo(),
                                                  document.can_redo(), outlines, takeoff.lines,
-                                                 takeoff.error, takeoff.message);
+                                                 takeoff.error, takeoff.message, openings);
     builder.Finish(response, kIdentifier);
   }
 

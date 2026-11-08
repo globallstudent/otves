@@ -49,6 +49,14 @@ class Request {
     return add(Command::AddOpening, schema::CreateAddOpening(builder_, opening).Union());
   }
 
+  // A 1500 × 1500 window tapped with a 300 mm reach, or a door of that width.
+  Request& place(ElementId level, schema::PointMm at, std::int64_t width = 1500,
+                 schema::OpeningKind kind = schema::OpeningKind::Window) {
+    const schema::Uuid on = key(level);
+    return add(Command::PlaceOpening,
+               schema::CreatePlaceOpening(builder_, &on, &at, 300, width, 1500, 800, kind).Union());
+  }
+
   Request& move_end(ElementId wall, std::int64_t x, schema::WallEnd end = schema::WallEnd::End) {
     const schema::Uuid id = key(wall);
     const schema::PointMm to{x, 0};
@@ -271,6 +279,69 @@ TEST(Session, RemovingAWallReportsItsOpeningsGone) {
     const ElementId id = to_id(change->id());
     EXPECT_TRUE(id == wall || id == window);
   }
+}
+
+TEST(Session, PlacedOpeningIsCentredOnTheTapAndOutlined) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const ElementId wall = add_wall(session, level);
+
+  const auto& placed = respond(session, Request{}.place(level, {3000, 250}).bytes());
+
+  ASSERT_EQ(placed.results()->Get(0)->error(), schema::ErrorCode::None);
+  const ElementId window = to_id(placed.results()->Get(0)->created());
+  ASSERT_EQ(placed.changes()->size(), 1U);
+  const auto* opening = placed.changes()->Get(0)->element_as_Opening();
+  ASSERT_NE(opening, nullptr);
+  EXPECT_EQ(to_id(opening->wall()), wall);
+  EXPECT_EQ(opening->offset(), 2250);
+  EXPECT_EQ(opening->sill(), 800);
+  ASSERT_NE(placed.openings(), nullptr);
+  ASSERT_EQ(placed.openings()->size(), 1U);
+  const auto* outline = placed.openings()->Get(0);
+  EXPECT_EQ(to_id(outline->opening()), window);
+  EXPECT_EQ(to_id(outline->level()), level);
+  EXPECT_EQ(outline->kind(), schema::OpeningKind::Window);
+  ASSERT_EQ(outline->points()->size(), 4U);
+  EXPECT_DOUBLE_EQ(outline->points()->Get(0)->x(), 2.25);
+  EXPECT_DOUBLE_EQ(outline->points()->Get(0)->y(), -0.19);
+  EXPECT_DOUBLE_EQ(outline->points()->Get(2)->x(), 3.75);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(undone.changes()->Get(0)->element_type(), schema::Element::NONE);
+  EXPECT_EQ(undone.openings()->size(), 0U);
+}
+
+TEST(Session, PlacedOpeningMovesAlongTheWallToFit) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_wall(session, level);
+
+  const auto& placed =
+      respond(session, Request{}.place(level, {6300, 0}, 900, schema::OpeningKind::Door).bytes());
+
+  EXPECT_EQ(placed.changes()->Get(0)->element_as_Opening()->offset(), 5500);
+  EXPECT_EQ(placed.openings()->Get(0)->kind(), schema::OpeningKind::Door);
+}
+
+TEST(Session, PlacingAnOpeningAwayFromAWallOrTooWideFails) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_wall(session, level);
+
+  const auto& response = respond(session, Request{}
+                                              .place(level, {3000, 600})
+                                              .place(level, {3000, 0}, 7000)
+                                              .place(ElementId{Uuid{7, 7}}, {3000, 0})
+                                              .place(level, {3000, 0}, 0)
+                                              .bytes());
+
+  ASSERT_EQ(response.results()->size(), 4U);
+  EXPECT_EQ(response.results()->Get(0)->error(), schema::ErrorCode::NoWall);
+  EXPECT_EQ(response.results()->Get(1)->error(), schema::ErrorCode::DoesNotFit);
+  EXPECT_EQ(response.results()->Get(2)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(response.results()->Get(3)->error(), schema::ErrorCode::WidthNotPositive);
+  EXPECT_EQ(response.changes()->size(), 0U);
 }
 
 std::pair<std::string, std::string> content_file(std::string_view folder, std::string_view name) {
