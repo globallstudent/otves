@@ -8,6 +8,22 @@ val vcpkgRoot: String =
         ?: providers.gradleProperty("otves.vcpkg.dir").orNull
         ?: "set-VCPKG_ROOT-or-otves.vcpkg.dir"
 
+// Java for schema/engine.fbs, made by the flatc release that matches flatbuffers-java.
+val generateSchemaJava =
+    tasks.register<FlatcJavaTask>("generateSchemaJava") {
+        schema.set(layout.projectDirectory.file("../../schema/engine.fbs"))
+        flatcVersion.set(libs.versions.flatbuffers)
+        packagePrefix.set("uz")
+        outputDirectory.set(layout.buildDirectory.dir("generated/flatc"))
+        toolDirectory.set(layout.buildDirectory.dir("flatc"))
+    }
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.java?.addGeneratedSourceDirectory(generateSchemaJava, FlatcJavaTask::outputDirectory)
+    }
+}
+
 android {
     namespace = "uz.otves.engine"
     ndkVersion = libs.versions.ndk.get()
@@ -44,4 +60,11 @@ android {
 
 kotlin {
     explicitApi()
+}
+
+dependencies {
+    api(projects.core.model)
+    implementation(libs.flatbuffers.java)
+    testImplementation(libs.junit4)
+    testImplementation(libs.truth)
 }

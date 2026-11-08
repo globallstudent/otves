@@ -31,11 +31,11 @@ flowchart TB
 | `content/` | Norm tables and rules in Luau: masonry units, mortar, cement, lintels, ring beams, junction meshes | exists |
 | `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`), JNI functions of `libdesign.so` | exists |
 | `engine/render`, `export` | Drawing, PDF/DXF/IFC | planned |
-| `android/core/model` | Value types shared by features: `Mm`, `Money` | exists |
+| `android/core/model` | Value types shared by features: `Mm`, `Money`, `ElementId` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme | exists |
 | `android/app` | Activity, splash, navigation root | exists |
-| `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession` over the JNI functions | exists |
-| `android/feature/*`, `data/*`, `device/*`; schema codecs in `engine-bridge` | Screens, persistence, hardware, typed requests and responses | planned |
+| `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
+| `android/feature/*`, `data/*`, `device/*` | Screens, persistence, hardware | planned |
 
 ## Rules that hold everywhere
 

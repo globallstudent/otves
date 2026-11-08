@@ -3,6 +3,8 @@ agp = "9.5.1"
 # Native toolchain for engine-bridge: NDK r30 and the SDK CMake that the engine needs (>= 4.0).
 ndk = "30.0.16248370"
 cmake = "4.1.2"
+# flatc for the Kotlin side is pinned to this version too: generated code checks the runtime.
+flatbuffers = "25.2.10"
 kotlin = "2.4.21"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
@@ -25,6 +27,7 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+flatbuffers-java = { module = "com.google.flatbuffers:flatbuffers-java", version.ref = "flatbuffers" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 

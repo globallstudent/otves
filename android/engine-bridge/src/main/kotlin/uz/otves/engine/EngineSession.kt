@@ -17,6 +17,9 @@ public class EngineSession(
         check(handle != 0L) { "The engine could not open a session" }
     }
 
+    /** Runs [commands] in order; one that fails changes nothing and the rest still run. */
+    public fun send(commands: List<EngineCommand>): EngineResponse = ResponseDecoder.decode(handle(RequestEncoder.encode(commands)))
+
     /** Sends the bytes of a schema `Request`; returns a read-only schema `Response`. */
     public fun handle(bytes: ByteBuffer): ByteBuffer {
         check(handle != 0L) { "The session is closed" }
