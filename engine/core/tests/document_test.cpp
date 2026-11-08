@@ -185,6 +185,27 @@ TEST(Document, GestureEndingWhereItStartedRecordsNothing) {
   EXPECT_EQ(document.log().size(), 1U);
 }
 
+TEST(Document, GestureLeftOpenIsLoggedWhenTheNextOneBegins) {
+  Document document{test_environment()};
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId id = only_wall(document);
+
+  // The touch-up of the first drag never arrives.
+  document.begin_gesture();
+  ASSERT_TRUE(
+      document.execute(MoveWallEnd{.wall = id, .end = WallEnd::kEnd, .to = {7000_mm, 0_mm}}));
+  document.begin_gesture();
+  ASSERT_TRUE(document.execute(SetWallHeight{.wall = id, .height = 3000_mm}));
+  ASSERT_TRUE(document.end_gesture().has_value());
+
+  ASSERT_EQ(document.log().size(), 3U);
+  EXPECT_EQ(document.log()[1].kind, CommandKind::kMoveWallEnd);
+  EXPECT_EQ(document.log()[2].kind, CommandKind::kSetWallHeight);
+  ASSERT_TRUE(document.undo());
+  ASSERT_TRUE(document.undo());
+  EXPECT_EQ(*document.model().find_wall(id), wall_4());
+}
+
 TEST(Document, UndoIsRefusedDuringGesture) {
   Document document{test_environment()};
   ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));

@@ -91,7 +91,7 @@ std::expected<void, Error> Document::execute(const Command& command) {
 }
 
 void Document::begin_gesture() {
-  OTVES_ASSERT(!gesture_);
+  static_cast<void>(end_gesture());
   gesture_.emplace();
 }
 

@@ -38,6 +38,7 @@ class Document {
   // On error nothing changes.
   [[nodiscard]] std::expected<void, Error> execute(const Command& command);
 
+  // A gesture still open (its touch-up was lost) is closed first, so its changes reach the log.
   void begin_gesture();
   // Closes the gesture. Returns the new group, or nothing if the gesture changed nothing.
   std::optional<GroupId> end_gesture();
