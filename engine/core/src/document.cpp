@@ -15,6 +15,7 @@
 #include <otves/core/document.h>
 #include <otves/core/element.h>
 #include <otves/core/error.h>
+#include <otves/core/level.h>
 #include <otves/core/model.h>
 #include <otves/core/op.h>
 #include <otves/core/opening.h>
@@ -65,18 +66,42 @@ std::expected<Ops, Error> edit(
   });
 }
 
-// The wall's openings are deleted first, so undo recreates the wall before them.
+// Appends the deletion of a wall after its openings, so undo recreates the wall before them.
+void delete_wall(const Model& model, ElementId id, const Wall& wall, Ops& ops) {
+  std::vector<DeleteOpening> hosted;
+  model.for_each<Opening>([&hosted, id](ElementId opening_id, const Opening& opening) {
+    if (opening.wall == id) {
+      hosted.push_back({.id = opening_id, .element = opening});
+    }
+  });
+  std::ranges::sort(hosted, {}, &DeleteOpening::id);
+  ops.insert(ops.end(), hosted.begin(), hosted.end());
+  ops.emplace_back(DeleteWall{.id = id, .element = wall});
+}
+
 std::expected<Ops, Error> remove_wall(const Model& model, ElementId id) {
   return find_element<Wall>(model, id).transform([&model, id](const Wall* wall) {
-    std::vector<DeleteOpening> hosted;
-    model.for_each<Opening>([&hosted, id](ElementId opening_id, const Opening& opening) {
-      if (opening.wall == id) {
-        hosted.push_back({.id = opening_id, .element = opening});
+    Ops ops;
+    delete_wall(model, id, *wall, ops);
+    return ops;
+  });
+}
+
+// The level goes last, after its walls and their openings.
+std::expected<Ops, Error> remove_level(const Model& model, ElementId id) {
+  return find_element<Level>(model, id).transform([&model, id](const Level* level) {
+    std::vector<DeleteWall> standing;
+    model.for_each<Wall>([&standing, id](ElementId wall_id, const Wall& wall) {
+      if (wall.level == id) {
+        standing.push_back({.id = wall_id, .element = wall});
       }
     });
-    std::ranges::sort(hosted, {}, &DeleteOpening::id);
-    Ops ops(hosted.begin(), hosted.end());
-    ops.emplace_back(DeleteWall{.id = id, .element = *wall});
+    std::ranges::sort(standing, {}, &DeleteWall::id);
+    Ops ops;
+    for (const DeleteWall& wall : standing) {
+      delete_wall(model, wall.id, wall.element, ops);
+    }
+    ops.emplace_back(DeleteLevel{.id = id, .element = *level});
     return ops;
   });
 }
@@ -212,11 +237,27 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
   const Model& model = model_;
   return std::visit(
       Overloaded{
+          [this](const AddLevel& add) -> std::expected<Ops, Error> {
+            if (auto valid = validate(add.level); !valid) {
+              return std::unexpected(std::move(valid.error()));
+            }
+            return Ops{CreateLevel{.id = ElementId{next_uuid()}, .element = add.level}};
+          },
+          [&model](const SetLevelElevation& set) {
+            return edit<Level>(model, set.level, {{LevelField::kElevation, set.elevation}});
+          },
+          [&model](const SetLevelHeight& set) {
+            return edit<Level>(model, set.level, {{LevelField::kHeight, set.height}});
+          },
+          [&model](const RemoveLevel& remove) { return remove_level(model, remove.level); },
           [this](const AddWall& add) -> std::expected<Ops, Error> {
             if (auto valid = validate(add.wall); !valid) {
               return std::unexpected(std::move(valid.error()));
             }
-            return Ops{CreateWall{.id = ElementId{next_uuid()}, .element = add.wall}};
+            return find_element<Level>(model_, add.wall.level)
+                .transform([this, &add](const Level*) {
+                  return Ops{CreateWall{.id = ElementId{next_uuid()}, .element = add.wall}};
+                });
           },
           [&model](const MoveWallEnd& move) {
             const WallField field =

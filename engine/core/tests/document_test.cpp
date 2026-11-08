@@ -10,6 +10,7 @@
 #include <otves/core/command.h>
 #include <otves/core/document.h>
 #include <otves/core/error.h>
+#include <otves/core/level.h>
 #include <otves/core/op.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
@@ -31,9 +32,19 @@ DocumentEnvironment test_environment() {
   };
 }
 
+// The ground floor, 3 000 mm floor to floor: every wall stands on a level.
+ElementId add_level(Document& document) {
+  EXPECT_TRUE(document.execute(AddLevel{.level = {.elevation = 0_mm, .height = 3000_mm}}));
+  ElementId found;
+  document.model().for_each<Level>([&found](ElementId id, const Level&) { found = id; });
+  static_cast<void>(document.take_dirty());
+  return found;
+}
+
 // Wall Ст-4 of the reference house: 6 400 mm along the bottom, 1½ bricks, 2 800 mm high.
-Wall wall_4() {
-  return Wall{.start = {.x = 0_mm, .y = 0_mm},
+Wall wall_4(ElementId level) {
+  return Wall{.level = level,
+              .start = {.x = 0_mm, .y = 0_mm},
               .end = {.x = 6400_mm, .y = 0_mm},
               .thickness = 380_mm,
               .height = 2800_mm,
@@ -48,28 +59,30 @@ ElementId only_wall(const Document& document) {
 
 TEST(Document, AddWallRecordsOneCreateOp) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
 
-  ASSERT_EQ(document.log().size(), 1U);
-  const OpGroup& group = document.log().front();
+  ASSERT_EQ(document.log().size(), 2U);
+  const OpGroup& group = document.log().back();
   EXPECT_EQ(group.kind, CommandKind::kAddWall);
   EXPECT_EQ(group.id.uuid().version(), 7U);
   ASSERT_EQ(group.ops.size(), 1U);
   const auto* create = std::get_if<CreateWall>(&group.ops.front());
   ASSERT_NE(create, nullptr);
-  EXPECT_EQ(create->element, wall_4());
-  EXPECT_EQ(*document.model().find<Wall>(create->id), wall_4());
+  EXPECT_EQ(create->element, wall_4(level));
+  EXPECT_EQ(*document.model().find<Wall>(create->id), wall_4(level));
 }
 
 TEST(Document, RejectsInvalidWallAndChangesNothing) {
   Document document{test_environment()};
-  Wall flat = wall_4();
+  const ElementId level = add_level(document);
+  Wall flat = wall_4(level);
   flat.thickness = 0_mm;
-  Wall low = wall_4();
+  Wall low = wall_4(level);
   low.height = -1_mm;
-  Wall point = wall_4();
+  Wall point = wall_4(level);
   point.end = point.start;
-  Wall far = wall_4();
+  Wall far = wall_4(level);
   far.end.x = kMaxCoordinate + 1_mm;
 
   const auto code = [&document](const Wall& wall) {
@@ -79,13 +92,14 @@ TEST(Document, RejectsInvalidWallAndChangesNothing) {
   EXPECT_EQ(code(low), ErrorCode::kHeightNotPositive);
   EXPECT_EQ(code(point), ErrorCode::kZeroLength);
   EXPECT_EQ(code(far), ErrorCode::kOffPlan);
-  EXPECT_TRUE(document.log().empty());
+  EXPECT_EQ(document.log().size(), 1U);
   EXPECT_EQ(document.model().count<Wall>(), 0U);
 }
 
 TEST(Document, MoveWallEndRecordsBeforeAndAfter) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
 
   ASSERT_TRUE(
@@ -101,15 +115,16 @@ TEST(Document, MoveWallEndRecordsBeforeAndAfter) {
 
 TEST(Document, UndoRestoresExactStateAndAppendsToLog) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
   ASSERT_TRUE(document.execute(SetWallThickness{.wall = id, .thickness = 510_mm}));
   const GroupId thickened = document.log().back().id;
 
   ASSERT_TRUE(document.undo());
 
-  EXPECT_EQ(*document.model().find<Wall>(id), wall_4());
-  ASSERT_EQ(document.log().size(), 3U);
+  EXPECT_EQ(*document.model().find<Wall>(id), wall_4(level));
+  ASSERT_EQ(document.log().size(), 4U);
   EXPECT_EQ(document.log().back().kind, CommandKind::kUndo);
   EXPECT_EQ(document.log().back().origin, thickened);
   EXPECT_TRUE(document.can_redo());
@@ -117,7 +132,8 @@ TEST(Document, UndoRestoresExactStateAndAppendsToLog) {
 
 TEST(Document, RedoReappliesUndoneChange) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
   ASSERT_TRUE(document.execute(SetWallHeight{.wall = id, .height = 3000_mm}));
   ASSERT_TRUE(document.undo());
@@ -132,7 +148,8 @@ TEST(Document, RedoReappliesUndoneChange) {
 
 TEST(Document, NewCommandClearsRedo) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
   ASSERT_TRUE(document.execute(SetWallHeight{.wall = id, .height = 3000_mm}));
   ASSERT_TRUE(document.undo());
@@ -145,7 +162,8 @@ TEST(Document, NewCommandClearsRedo) {
 
 TEST(Document, UndoingRemovalRestoresTheSameWall) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
   ASSERT_TRUE(document.execute(RemoveWall{.wall = id}));
   ASSERT_EQ(document.model().find<Wall>(id), nullptr);
@@ -153,12 +171,13 @@ TEST(Document, UndoingRemovalRestoresTheSameWall) {
   ASSERT_TRUE(document.undo());
 
   ASSERT_NE(document.model().find<Wall>(id), nullptr);
-  EXPECT_EQ(*document.model().find<Wall>(id), wall_4());
+  EXPECT_EQ(*document.model().find<Wall>(id), wall_4(level));
 }
 
 TEST(Document, GestureFoldsEveryFrameIntoOneGroup) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
 
   document.begin_gesture();
@@ -169,7 +188,7 @@ TEST(Document, GestureFoldsEveryFrameIntoOneGroup) {
   const std::optional<GroupId> group = document.end_gesture();
 
   ASSERT_TRUE(group.has_value());
-  ASSERT_EQ(document.log().size(), 2U);
+  ASSERT_EQ(document.log().size(), 3U);
   const OpGroup& drag = document.log().back();
   EXPECT_EQ(drag.kind, CommandKind::kMoveWallEnd);
   ASSERT_EQ(drag.ops.size(), 1U);
@@ -181,7 +200,8 @@ TEST(Document, GestureFoldsEveryFrameIntoOneGroup) {
 
 TEST(Document, GestureEndingWhereItStartedRecordsNothing) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
 
   document.begin_gesture();
@@ -191,12 +211,13 @@ TEST(Document, GestureEndingWhereItStartedRecordsNothing) {
       document.execute(MoveWallEnd{.wall = id, .end = WallEnd::kEnd, .to = {6400_mm, 0_mm}}));
 
   EXPECT_FALSE(document.end_gesture().has_value());
-  EXPECT_EQ(document.log().size(), 1U);
+  EXPECT_EQ(document.log().size(), 2U);
 }
 
 TEST(Document, GestureLeftOpenIsLoggedWhenTheNextOneBegins) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
 
   // The touch-up of the first drag never arrives.
@@ -207,23 +228,32 @@ TEST(Document, GestureLeftOpenIsLoggedWhenTheNextOneBegins) {
   ASSERT_TRUE(document.execute(SetWallHeight{.wall = id, .height = 3000_mm}));
   ASSERT_TRUE(document.end_gesture().has_value());
 
-  ASSERT_EQ(document.log().size(), 3U);
-  EXPECT_EQ(document.log()[1].kind, CommandKind::kMoveWallEnd);
-  EXPECT_EQ(document.log()[2].kind, CommandKind::kSetWallHeight);
+  ASSERT_EQ(document.log().size(), 4U);
+  EXPECT_EQ(document.log()[2].kind, CommandKind::kMoveWallEnd);
+  EXPECT_EQ(document.log()[3].kind, CommandKind::kSetWallHeight);
   ASSERT_TRUE(document.undo());
   ASSERT_TRUE(document.undo());
-  EXPECT_EQ(*document.model().find<Wall>(id), wall_4());
+  EXPECT_EQ(*document.model().find<Wall>(id), wall_4(level));
 }
 
 TEST(Document, UndoIsRefusedDuringGesture) {
   Document document{test_environment()};
   EXPECT_EQ(document.undo().error().code, ErrorCode::kNothingToUndo);
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   document.begin_gesture();
   EXPECT_EQ(document.undo().error().code, ErrorCode::kGestureOpen);
   EXPECT_EQ(document.redo().error().code, ErrorCode::kGestureOpen);
   static_cast<void>(document.end_gesture());
   EXPECT_TRUE(document.undo());
+}
+
+TEST(Document, WallNeedsAnExistingLevel) {
+  Document document{test_environment()};
+  const ElementId missing{Uuid{7, 7}};
+
+  EXPECT_EQ(document.execute(AddWall{.wall = wall_4(missing)}).error().code, ErrorCode::kNotFound);
+  EXPECT_TRUE(document.log().empty());
 }
 
 TEST(Document, UnknownWallIsNotFound) {
@@ -236,15 +266,17 @@ TEST(Document, UnknownWallIsNotFound) {
 
 TEST(Document, SettingTheSameValueRecordsNothing) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
   ASSERT_TRUE(document.execute(SetWallThickness{.wall = id, .thickness = 380_mm}));
-  EXPECT_EQ(document.log().size(), 1U);
+  EXPECT_EQ(document.log().size(), 2U);
 }
 
 TEST(Document, ReportsDirtyElementsOnce) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
   ASSERT_TRUE(document.execute(SetWallHeight{.wall = id, .height = 3000_mm}));
 
@@ -254,7 +286,8 @@ TEST(Document, ReportsDirtyElementsOnce) {
 
 TEST(Document, StampsGrowStrictly) {
   Document document{test_environment()};
-  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
   const ElementId id = only_wall(document);
   ASSERT_TRUE(document.execute(SetWallHeight{.wall = id, .height = 3000_mm}));
   ASSERT_TRUE(document.undo());

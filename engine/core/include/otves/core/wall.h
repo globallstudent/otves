@@ -9,6 +9,7 @@
 #include <otves/core/error.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
+#include <otves/core/uuid.h>
 
 namespace otves {
 
@@ -21,8 +22,11 @@ enum class LocationLine : std::uint8_t {
   kRightFace,
 };
 
-// A straight wall on one level. Parameters only: geometry is derived by engine/geom.
+// A straight wall on one level. Parameters only: geometry is derived by engine/geom. The level
+// is set when the wall is added; Document checks that it exists.
 struct Wall {
+  // The explicit initializer lets geometry code build walls without naming a level.
+  ElementId level{};  // NOLINT(readability-redundant-member-init)
   PointMm start;
   PointMm end;
   Mm thickness;

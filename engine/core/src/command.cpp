@@ -9,6 +9,10 @@ namespace otves {
 CommandKind kind_of(const Command& command) {
   return std::visit(
       Overloaded{
+          [](const AddLevel&) { return CommandKind::kAddLevel; },
+          [](const SetLevelElevation&) { return CommandKind::kSetLevelElevation; },
+          [](const SetLevelHeight&) { return CommandKind::kSetLevelHeight; },
+          [](const RemoveLevel&) { return CommandKind::kRemoveLevel; },
           [](const AddWall&) { return CommandKind::kAddWall; },
           [](const MoveWallEnd&) { return CommandKind::kMoveWallEnd; },
           [](const SetWallThickness&) { return CommandKind::kSetWallThickness; },

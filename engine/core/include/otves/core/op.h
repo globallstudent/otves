@@ -6,6 +6,7 @@
 
 #include <otves/core/element.h>
 #include <otves/core/hlc.h>
+#include <otves/core/level.h>
 #include <otves/core/opening.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -40,6 +41,9 @@ struct SetField {
   bool operator==(const SetField&) const = default;
 };
 
+using CreateLevel = Create<Level>;
+using DeleteLevel = Delete<Level>;
+using SetLevelField = SetField<Level>;
 using CreateWall = Create<Wall>;
 using DeleteWall = Delete<Wall>;
 using SetWallField = SetField<Wall>;
@@ -47,14 +51,18 @@ using CreateOpening = Create<Opening>;
 using DeleteOpening = Delete<Opening>;
 using SetOpeningField = SetField<Opening>;
 
-using Op = std::variant<CreateWall, DeleteWall, SetWallField, CreateOpening, DeleteOpening,
-                        SetOpeningField>;
+using Op = std::variant<CreateLevel, DeleteLevel, SetLevelField, CreateWall, DeleteWall,
+                        SetWallField, CreateOpening, DeleteOpening, SetOpeningField>;
 
 [[nodiscard]] Op inverse(const Op& op);
 [[nodiscard]] ElementId target(const Op& op);
 
 // What produced a group; the app turns it into a label such as «Стена добавлена».
 enum class CommandKind : std::uint8_t {
+  kAddLevel,
+  kSetLevelElevation,
+  kSetLevelHeight,
+  kRemoveLevel,
   kAddWall,
   kMoveWallEnd,
   kSetWallThickness,
@@ -83,7 +91,7 @@ struct Stamp {
 // that was undone or redone; otherwise it is nil.
 struct OpGroup {
   GroupId id;
-  CommandKind kind = CommandKind::kAddWall;
+  CommandKind kind = CommandKind::kAddLevel;
   Stamp stamp;
   GroupId origin;
   std::vector<Op> ops;

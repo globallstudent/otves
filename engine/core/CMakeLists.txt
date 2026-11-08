@@ -3,6 +3,7 @@ add_library(otves_core
   src/command.cpp
   src/document.cpp
   src/hlc.cpp
+  src/level.cpp
   src/op.cpp
   src/opening.cpp
   src/uuid.cpp
@@ -22,6 +23,7 @@ if(OTVES_BUILD_TESTS)
     tests/document_test.cpp
     tests/error_test.cpp
     tests/hlc_test.cpp
+    tests/level_test.cpp
     tests/opening_test.cpp
     tests/slot_map_test.cpp
     tests/units_test.cpp

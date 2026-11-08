@@ -29,8 +29,9 @@ DocumentEnvironment test_environment() {
   };
 }
 
-Wall wall_4() {
-  return Wall{.start = {.x = 0_mm, .y = 0_mm},
+Wall wall_4(ElementId level) {
+  return Wall{.level = level,
+              .start = {.x = 0_mm, .y = 0_mm},
               .end = {.x = 6400_mm, .y = 0_mm},
               .thickness = 380_mm,
               .height = 2800_mm,
@@ -54,13 +55,16 @@ ElementId last_created(const Document& document) {
 
 struct House {
   Document document{test_environment()};
+  ElementId level;
   ElementId wall;
   ElementId window;
 };
 
 std::unique_ptr<House> house() {
   auto h = std::make_unique<House>();
-  EXPECT_TRUE(h->document.execute(AddWall{.wall = wall_4()}));
+  EXPECT_TRUE(h->document.execute(AddLevel{.level = {.elevation = 0_mm, .height = 3000_mm}}));
+  h->level = last_created(h->document);
+  EXPECT_TRUE(h->document.execute(AddWall{.wall = wall_4(h->level)}));
   h->wall = last_created(h->document);
   EXPECT_TRUE(h->document.execute(AddOpening{.opening = window_1(h->wall)}));
   h->window = last_created(h->document);
@@ -171,7 +175,7 @@ TEST(Opening, SillAndKindUndoAndRedo) {
 
 TEST(Opening, RemovingAWallRemovesItsOpeningsAndUndoBringsThemBack) {
   const auto h = house();
-  ASSERT_TRUE(h->document.execute(AddWall{.wall = wall_4()}));
+  ASSERT_TRUE(h->document.execute(AddWall{.wall = wall_4(h->level)}));
   const ElementId other = last_created(h->document);
   ASSERT_TRUE(h->document.execute(AddOpening{.opening = window_1(other)}));
   Opening door = window_1(h->wall);

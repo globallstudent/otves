@@ -2,6 +2,7 @@
 
 #include <variant>
 
+#include <otves/core/level.h>
 #include <otves/core/op.h>
 #include <otves/core/opening.h>
 #include <otves/core/point.h>
@@ -13,6 +14,26 @@ namespace otves {
 
 // User intents. Document validates a command against the model and turns it into ops.
 
+struct AddLevel {
+  Level level;
+};
+
+struct SetLevelElevation {
+  ElementId level;
+  Mm elevation;
+};
+
+struct SetLevelHeight {
+  ElementId level;
+  Mm height;
+};
+
+// Removes the level with every wall on it and every opening in those walls.
+struct RemoveLevel {
+  ElementId level;
+};
+
+// The wall's level must exist.
 struct AddWall {
   Wall wall;
 };
@@ -73,9 +94,10 @@ struct RemoveOpening {
   ElementId opening;
 };
 
-using Command = std::variant<AddWall, MoveWallEnd, SetWallThickness, SetWallHeight,
-                             SetWallLocationLine, RemoveWall, AddOpening, MoveOpening,
-                             ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening>;
+using Command =
+    std::variant<AddLevel, SetLevelElevation, SetLevelHeight, RemoveLevel, AddWall, MoveWallEnd,
+                 SetWallThickness, SetWallHeight, SetWallLocationLine, RemoveWall, AddOpening,
+                 MoveOpening, ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 
