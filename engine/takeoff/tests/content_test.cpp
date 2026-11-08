@@ -35,9 +35,9 @@ Script load(const std::filesystem::path& file) {
 
 // Everything in content/.
 RuleSet content() {
-  const std::vector norms{load("norms/losses.luau"), load("norms/mortar.luau"),
-                          load("norms/practice.luau"), load("norms/rebar.luau"),
-                          load("norms/seismic.luau")};
+  const std::vector norms{load("norms/losses.luau"), load("norms/masonry.luau"),
+                          load("norms/mortar.luau"), load("norms/practice.luau"),
+                          load("norms/rebar.luau"),  load("norms/seismic.luau")};
   const std::vector rules{load("rules/masonry.luau"), load("rules/lintels.luau"),
                           load("rules/ring_beam.luau"), load("rules/junction_meshes.luau")};
   auto set = RuleSet::compile({.norms = norms, .rules = rules});
@@ -75,8 +75,7 @@ Room room(const RuleSet& rules, const std::vector<OpeningInput>& openings = {},
       wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}), wall(2, {6400_mm, 0_mm}, {6400_mm, 4000_mm}),
       wall(3, {6400_mm, 4000_mm}, {0_mm, 4000_mm}), wall(4, {0_mm, 4000_mm}, {0_mm, 0_mm})};
   walls.insert(walls.end(), more_walls.begin(), more_walls.end());
-  const MasonrySpec brick{.unit = {.length = 250_mm, .width = 120_mm, .height = 65_mm},
-                          .joints = {.bed = 12_mm, .head = 10_mm}};
+  const MasonrySpec brick = masonry_spec(rules).value();
   Room result;
   result.measurement =
       measure_walls(walls, openings, lintel_spec(rules).value(), geom::join_walls(walls)).value();
@@ -113,6 +112,18 @@ TEST(Content, LintelSpecComesFromNorms) {
   EXPECT_EQ(spec->short_bearing, 250_mm);
   EXPECT_EQ(spec->short_span, 1500_mm);
   EXPECT_EQ(spec->height, 140_mm);
+}
+
+TEST(Content, MasonrySpecComesFromNorms) {
+  const auto spec = masonry_spec(content());
+
+  ASSERT_TRUE(spec.has_value()) << spec.error().message;
+  // 1НФ brick (ГОСТ 530-2012) with СП 70.13330.2012 9.2.4 joints.
+  EXPECT_EQ(spec->unit.length, 250_mm);
+  EXPECT_EQ(spec->unit.width, 120_mm);
+  EXPECT_EQ(spec->unit.height, 65_mm);
+  EXPECT_EQ(spec->joints.bed, 12_mm);
+  EXPECT_EQ(spec->joints.head, 10_mm);
 }
 
 TEST(Content, MasonryRuleUsesPracticeDefaults) {

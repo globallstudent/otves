@@ -447,4 +447,31 @@ Result<LintelSpec> lintel_spec(const RuleSet& rules) {
   return spec;
 }
 
+Result<MasonrySpec> masonry_spec(const RuleSet& rules) {
+  const auto unit = [&rules](std::string_view key) {
+    const std::array<std::string_view, 2> path{"masonry_unit", key};
+    return rules.length("practice", path);
+  };
+  const auto joint = [&rules](std::string_view key) {
+    const std::array<std::string_view, 2> path{"joints", key};
+    return rules.length("masonry", path);
+  };
+  const Result<Mm> length = unit("length");
+  const Result<Mm> width = unit("width");
+  const Result<Mm> height = unit("height");
+  const Result<Mm> bed = joint("bed");
+  const Result<Mm> head = joint("head");
+  for (const Result<Mm>* value : {&length, &width, &height, &bed, &head}) {
+    if (!*value) {
+      return std::unexpected{value->error()};
+    }
+  }
+  const MasonrySpec spec{.unit = {.length = *length, .width = *width, .height = *height},
+                         .joints = {.bed = *bed, .head = *head}};
+  if (auto valid = validate(spec); !valid) {
+    return std::unexpected{std::move(valid).error()};
+  }
+  return spec;
+}
+
 }  // namespace otves::takeoff

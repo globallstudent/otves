@@ -42,8 +42,9 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 | File | Content | Source |
 |---|---|---|
 | `norms/losses.luau` | Concrete placement losses: 1.8 % foundations and slabs, 2.8 % beams and columns | Сборник типовых норм потерь (к РДС 82-202-96), table 1, item 42 |
+| `norms/masonry.luau` | Joints: 12 mm bed, 10 mm head | СП 70.13330.2012, 9.2.4 |
 | `norms/mortar.luau` | Cement per m³ of masonry mortar by cement and mortar grade | СП 82-101-98, tables 4–5 |
-| `norms/practice.luau` | Waste allowances (запас), default cement, mortar grade and seismic intensity, lintel bar 2ПБ 120 × 140, ring beam B15 A500С | Practice; ГОСТ 948-2016 table 1; editable in job settings |
+| `norms/practice.luau` | Waste allowances (запас), default cement, mortar grade and seismic intensity, the 1НФ unit a job starts with, lintel bar 2ПБ 120 × 140, ring beam B15 A500С | Practice; ГОСТ 948-2016 table 1; editable in job settings |
 | `norms/rebar.luau` | Nominal bar mass per metre by diameter | ГОСТ 34028-2016, table 1 |
 | `norms/seismic.luau` | Lintel bearing 350 mm (250 mm up to a 1 500 mm opening); ring beam ≥ 150 mm, ≥ B12.5, 4Ø10 / 4Ø12 / 4Ø14 by intensity; junction meshes 1.5 m, ≥ 1 cm², every 700 mm (7–8 points) or 500 mm (9) | КМК 2.01.03-19, 3.5.10–3.5.12, 3.5.15 |
 | `rules/masonry.luau` | Units and mortar with waste, cement in that mortar | `mortar`, `practice` |
@@ -63,4 +64,4 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 
 Wall height is the masonry: the ring beam sits on top of it. Walls thinner than 250 mm (`practice.walls`) count as partitions until walls carry a load-bearing flag.
 
-The engine also reads `seismic.lintel` and `practice.lintel.height` itself to place lintels, through `lintel_spec`. GOST 948 marks are not chosen yet: their length table is not verified.
+The engine also reads `seismic.lintel` and `practice.lintel.height` to place lintels (`lintel_spec`), and `masonry.joints` with `practice.masonry_unit` to count units (`masonry_spec`). GOST 948 marks are not chosen yet: their length table is not verified.

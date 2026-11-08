@@ -29,6 +29,7 @@ flowchart LR
 | `RuleSet::run(measurement, masonry, settings)` | Runs every rule in a fresh sandbox and returns validated lines |
 | `RuleSet::length(norm, path)` | Reads a whole-millimetre value from a norm, so engine inputs stay out of code |
 | `lintel_spec(rules)` | Lintel height and bearings from `norms.practice` and `norms.seismic` |
+| `masonry_spec(rules)` | Unit size from `norms.practice`, joints from `norms.masonry` |
 
 ## Formulas
 
