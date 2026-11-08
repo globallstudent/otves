@@ -30,6 +30,11 @@ struct Wall {
   constexpr bool operator==(const Wall&) const = default;
 };
 
+enum class WallEnd : std::uint8_t {
+  kStart,
+  kEnd,
+};
+
 // Checks values that come from the user; never asserts.
 [[nodiscard]] std::expected<void, Error> validate(const Wall& wall);
 

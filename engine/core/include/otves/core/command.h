@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <variant>
 
 #include <otves/core/op.h>
@@ -15,11 +14,6 @@ namespace otves {
 
 struct AddWall {
   Wall wall;
-};
-
-enum class WallEnd : std::uint8_t {
-  kStart,
-  kEnd,
 };
 
 struct MoveWallEnd {

@@ -25,7 +25,7 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 | Path | Contents |
 |---|---|
 | `android/` | Kotlin app: `app`, `core/model`, `core/designsystem`, convention plugins in `build-logic` |
-| `engine/` | C++23 design engine: `core` (wall model, commands, operation log, undo) |
+| `engine/` | C++23 design engine: `core` (wall model, commands, operation log, undo), `geom` (wall joins, plan outlines) |
 | `docs/brand/` | Logo, mark and launcher icon sources |
 | `docs/` | Architecture, decisions (ADRs), glossary, brand, research |
 

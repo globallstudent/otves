@@ -16,6 +16,10 @@ target_compile_options(otves_build_options INTERFACE
   -Wnon-virtual-dtor -Woverloaded-virtual -Wnull-dereference
   -Wimplicit-fallthrough -Wdouble-promotion)
 
+# arm64 fuses a*b + c into one rounding and x86-64 does not; with fusion off, geometry gives the
+# same bits on phones and in CI.
+target_compile_options(otves_build_options INTERFACE -ffp-contract=off)
+
 # Standard library hardening: full checks in Debug, cheap bounds checks elsewhere.
 target_compile_definitions(otves_build_options INTERFACE
   $<IF:$<CONFIG:Debug>,_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG,_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST>

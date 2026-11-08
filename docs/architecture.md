@@ -26,7 +26,8 @@ flowchart TB
 | Module | Role | Status |
 |---|---|---|
 | `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, wall model, commands, document with op log, undo and gestures | exists |
-| `engine/geom`, `takeoff`, `render`, `export`, `bridge` | Geometry, quantities, drawing, PDF/DXF/IFC, JNI | planned |
+| `engine/geom` | Wall joins and plan outlines (`join_walls`) | exists |
+| `engine/takeoff`, `render`, `export`, `bridge` | Quantities, drawing, PDF/DXF/IFC, JNI | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme | exists |
 | `android/app` | Activity, splash, navigation root | exists |

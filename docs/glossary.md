@@ -8,6 +8,9 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | part | часть | qism | House, summer kitchen, fence, yard inside a job |
 | level | этаж | qavat | Storey, including basement (подвал) and foundation |
 | wall | стена | devor | Masonry or block wall with thickness in bricks |
+| location line | линия привязки | bog‘lash chizig‘i | The wall line whose points are stored: centre, left or right face |
+| wall join | сопряжение стен | devorlar tutashuvi | How wall ends meet: a mitre at a corner, slices around a shared point |
+| butt joint | примыкание | tirab ulash | A wall ending against the face of another wall |
 | opening | проём | teshik | Window, door or empty opening in a wall |
 | hole | отверстие | teshik (plitada) | Opening through a slab or roof, not a wall |
 | lintel | перемычка | peremichka | Beam over an opening (ГОСТ 948) |
