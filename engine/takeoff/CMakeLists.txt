@@ -15,8 +15,11 @@ target_link_libraries(otves_takeoff
 
 if(OTVES_BUILD_TESTS)
   otves_add_test(otves_takeoff_tests
+    tests/content_test.cpp
     tests/masonry_test.cpp
     tests/rules_test.cpp
     tests/wall_quantities_test.cpp)
   target_link_libraries(otves_takeoff_tests PRIVATE otves::takeoff)
+  target_compile_definitions(otves_takeoff_tests PRIVATE
+    OTVES_CONTENT_DIR="${PROJECT_SOURCE_DIR}/../content")
 endif()

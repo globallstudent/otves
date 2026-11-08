@@ -26,5 +26,6 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | take-off | расход материалов | material sarfi | Quantities derived from the model |
 | estimate | смета | smeta | Priced snapshot of quantities, labour and markup |
 | ledger | учёт расходов | xarajatlar | Purchases, labour and payments on site |
+| rule | правило расчёта | hisob qoidasi | Luau script in `content/rules` that turns quantities into material lines |
 | norm profile | нормативная база | me’yorlar bazasi | Set of rules: UZ (КМК/ШНК), RU (СП), EU (EN) |
 | plumb bob | отвес | otves | The brand: a tool that checks the true vertical |
