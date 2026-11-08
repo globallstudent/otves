@@ -25,6 +25,12 @@ public enum class EngineError {
     UNSUPPORTED_VERSION,
     INTERNAL,
 
+    /** No wall near the point where an opening was placed. */
+    NO_WALL,
+
+    /** An opening wider than its wall. */
+    DOES_NOT_FIT,
+
     /** A code from a newer engine than this app knows. */
     UNKNOWN,
 }
@@ -70,4 +76,6 @@ public data class EngineResponse(
     public val outlines: List<WallOutline>? = null,
     /** Null when nothing changed, or while no content is loaded. */
     public val takeoff: Takeoff? = null,
+    /** Every opening's outline, sent with [outlines]. */
+    public val openings: List<OpeningOutline>? = null,
 )

@@ -83,6 +83,21 @@ public sealed interface EngineCommand {
         public val opening: ElementId,
     ) : EngineCommand
 
+    /**
+     * An opening where the user tapped: in the wall on [level] nearest to [at] within [reach],
+     * centred on the tap and moved along the wall to fit. Runs as [AddOpening]; fails with
+     * [EngineError.NO_WALL] or [EngineError.DOES_NOT_FIT].
+     */
+    public data class PlaceOpening(
+        public val level: ElementId,
+        public val at: PointMm,
+        public val reach: Mm,
+        public val width: Mm,
+        public val height: Mm,
+        public val sill: Mm,
+        public val kind: OpeningKind,
+    ) : EngineCommand
+
     /** Commands until [EndGesture] fold into one undo step, as a drag does. */
     public data object BeginGesture : EngineCommand
 

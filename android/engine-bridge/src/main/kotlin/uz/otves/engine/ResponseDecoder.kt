@@ -13,6 +13,7 @@ import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.OpeningOutline as OpeningOutlineTable
 import uz.otves.schema.PointM as PointMStruct
 import uz.otves.schema.PointMm as PointStruct
 import uz.otves.schema.QuantityLine as LineTable
@@ -41,6 +42,7 @@ internal object ResponseDecoder {
             canRedo = response.canRedo(),
             outlines = response.outlinesVector()?.let { List(response.outlinesLength()) { outline(response.outlines(it)) } },
             takeoff = takeoff(response),
+            openings = response.openingsVector()?.let { List(response.openingsLength()) { opening(response.openings(it)) } },
         )
     }
 
@@ -59,6 +61,18 @@ internal object ResponseDecoder {
         WallOutline(
             wall = id(checkNotNull(outline.wall()) { "An outline has no wall" }),
             level = id(checkNotNull(outline.level()) { "An outline has no level" }),
+            points =
+                List(outline.pointsLength()) {
+                    val point = outline.points(PointMStruct(), it)
+                    PointM(point.x(), point.y())
+                },
+        )
+
+    private fun opening(outline: OpeningOutlineTable): OpeningOutline =
+        OpeningOutline(
+            opening = id(checkNotNull(outline.opening()) { "An opening outline has no opening" }),
+            level = id(checkNotNull(outline.level()) { "An opening outline has no level" }),
+            kind = openingKind(outline.kind()),
             points =
                 List(outline.pointsLength()) {
                     val point = outline.points(PointMStruct(), it)
@@ -178,6 +192,8 @@ internal object ResponseDecoder {
             ErrorCode.CorruptData -> EngineError.CORRUPT_DATA
             ErrorCode.UnsupportedVersion -> EngineError.UNSUPPORTED_VERSION
             ErrorCode.Internal -> EngineError.INTERNAL
+            ErrorCode.NoWall -> EngineError.NO_WALL
+            ErrorCode.DoesNotFit -> EngineError.DOES_NOT_FIT
             else -> EngineError.UNKNOWN
         }
 }

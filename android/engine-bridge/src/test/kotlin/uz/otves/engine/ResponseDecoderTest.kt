@@ -14,6 +14,8 @@ import kotlin.uuid.Uuid
 import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.LocationLine as LocationLineCode
+import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.OpeningOutline as OpeningOutlineTable
 import uz.otves.schema.PointM as PointMStruct
 import uz.otves.schema.PointMm as PointStruct
 import uz.otves.schema.QuantityLine as LineTable
@@ -26,6 +28,7 @@ class ResponseDecoderTest {
     private val level = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000001"))
     private val wall = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000002"))
     private val gone = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000003"))
+    private val window = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000004"))
 
     @Test
     fun resultsAndChangesComeBackTyped() {
@@ -66,6 +69,8 @@ class ResponseDecoderTest {
             .containsExactly(WallOutline(wall, level, listOf(PointM(0.0, -0.19), PointM(6.4, -0.19), PointM(6.4, 0.19))))
         assertThat(decoded.takeoff)
             .isEqualTo(Takeoff.Lines(listOf(QuantityLine("masonry", "masonry_unit", QuantityUnit.PIECE, 2767.0))))
+        assertThat(decoded.openings)
+            .containsExactly(OpeningOutline(window, level, OpeningKind.DOOR, listOf(PointM(1.0, -0.19), PointM(1.9, -0.19))))
     }
 
     @Test
@@ -133,6 +138,7 @@ class ResponseDecoderTest {
                 0,
                 ErrorCode.None,
                 0,
+                0,
             )
         builder.finish(response, "OTVS")
         return builder.dataBuffer()
@@ -151,6 +157,17 @@ class ResponseDecoderTest {
         OutlineTable.addLevel(builder, builder.uuid(level))
         OutlineTable.addPoints(builder, points)
         val outline = OutlineTable.endWallOutline(builder)
+        OpeningOutlineTable.startPointsVector(builder, 2)
+        for ((x, y) in listOf(1.9 to -0.19, 1.0 to -0.19)) {
+            PointMStruct.createPointM(builder, x, y)
+        }
+        val openingPoints = builder.endVector()
+        OpeningOutlineTable.startOpeningOutline(builder)
+        OpeningOutlineTable.addOpening(builder, builder.uuid(window))
+        OpeningOutlineTable.addLevel(builder, builder.uuid(level))
+        OpeningOutlineTable.addKind(builder, OpeningKindCode.Door)
+        OpeningOutlineTable.addPoints(builder, openingPoints)
+        val opening = OpeningOutlineTable.endOpeningOutline(builder)
         val line =
             LineTable.createQuantityLine(
                 builder,
@@ -162,6 +179,7 @@ class ResponseDecoderTest {
         val lines = if (takeoffError == ErrorCode.None) intArrayOf(line) else intArrayOf()
         val message = builder.createString("masonry:3: boom")
         val outlines = Response.createOutlinesVector(builder, intArrayOf(outline))
+        val openings = Response.createOpeningsVector(builder, intArrayOf(opening))
         val takeoff = Response.createTakeoffVector(builder, lines)
         val results = Response.createResultsVector(builder, intArrayOf())
         Response.startResponse(builder)
@@ -170,6 +188,7 @@ class ResponseDecoderTest {
         Response.addTakeoff(builder, takeoff)
         Response.addTakeoffError(builder, takeoffError)
         Response.addTakeoffMessage(builder, message)
+        Response.addOpenings(builder, openings)
         builder.finish(Response.endResponse(builder), "OTVS")
         return builder.dataBuffer()
     }

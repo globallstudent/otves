@@ -29,6 +29,14 @@ public data class WallOutline(
     public val points: List<PointM>,
 )
 
+/** The rectangle an opening cuts through its wall on the plan, counter-clockwise. */
+public data class OpeningOutline(
+    public val opening: ElementId,
+    public val level: ElementId,
+    public val kind: OpeningKind,
+    public val points: List<PointM>,
+)
+
 /** A Luau file from content/: a norm table or a rule (docs/adr/0005). */
 public data class ContentScript(
     public val name: String,

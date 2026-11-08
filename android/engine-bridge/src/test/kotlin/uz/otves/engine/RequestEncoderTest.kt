@@ -11,6 +11,8 @@ import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
+import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.PlaceOpening as PlaceOpeningTable
 import uz.otves.schema.WallEnd as WallEndCode
 
 class RequestEncoderTest {
@@ -73,6 +75,31 @@ class RequestEncoderTest {
         assertThat(List(content.normsLength()) { content.norms(it).name() }).containsExactly("practice", "seismic").inOrder()
         assertThat(content.norms(1).source()).isEqualTo("return { a = 1 }")
         assertThat(content.rules(0).name()).isEqualTo("masonry")
+    }
+
+    @Test
+    fun placementCarriesTheTapReachAndOpening() {
+        val place =
+            EngineCommand.PlaceOpening(
+                level = level,
+                at = PointMm(3000.mm, 250.mm),
+                reach = 400.mm,
+                width = 900.mm,
+                height = 2100.mm,
+                sill = 0.mm,
+                kind = OpeningKind.DOOR,
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(place)))
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.PlaceOpening)
+        val placed = request.commands(0).command(PlaceOpeningTable()) as PlaceOpeningTable
+        assertThat(Uuid.fromLongs(placed.level().high(), placed.level().low())).isEqualTo(level.uuid)
+        assertThat(placed.at().y()).isEqualTo(250L)
+        assertThat(placed.reach()).isEqualTo(400L)
+        assertThat(placed.width()).isEqualTo(900L)
+        assertThat(placed.height()).isEqualTo(2100L)
+        assertThat(placed.kind()).isEqualTo(OpeningKindCode.Door)
     }
 
     @Test

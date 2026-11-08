@@ -18,6 +18,7 @@ import uz.otves.schema.MoveOpening as MoveOpeningTable
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.PlaceOpening as PlaceOpeningTable
 import uz.otves.schema.PointMm as PointTable
 import uz.otves.schema.Redo as RedoTable
 import uz.otves.schema.RemoveLevel as RemoveLevelTable
@@ -163,6 +164,18 @@ internal object RequestEncoder {
                 RemoveOpeningTable.startRemoveOpening(this)
                 RemoveOpeningTable.addOpening(this, uuid(command.opening))
                 Command.RemoveOpening to RemoveOpeningTable.endRemoveOpening(this)
+            }
+
+            is EngineCommand.PlaceOpening -> {
+                PlaceOpeningTable.startPlaceOpening(this)
+                PlaceOpeningTable.addLevel(this, uuid(command.level))
+                PlaceOpeningTable.addAt(this, point(command.at))
+                PlaceOpeningTable.addReach(this, command.reach.value)
+                PlaceOpeningTable.addWidth(this, command.width.value)
+                PlaceOpeningTable.addHeight(this, command.height.value)
+                PlaceOpeningTable.addSill(this, command.sill.value)
+                PlaceOpeningTable.addKind(this, code(command.kind))
+                Command.PlaceOpening to PlaceOpeningTable.endPlaceOpening(this)
             }
 
             EngineCommand.BeginGesture -> {
