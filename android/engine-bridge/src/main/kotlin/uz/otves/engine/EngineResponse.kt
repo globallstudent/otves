@@ -1,6 +1,7 @@
 package uz.otves.engine
 
 import uz.otves.core.model.ElementId
+import kotlin.uuid.Uuid
 
 /** Why the engine refused a command. The app shows translated text for each value. */
 public enum class EngineError {
@@ -65,6 +66,34 @@ public sealed interface Takeoff {
     ) : Takeoff
 }
 
+/**
+ * A group the request appended to the operation log, for the job file (docs/adr/0007). [kind] is
+ * the schema's `CommandKind` code and [ops] a finished `OpGroup` buffer; both are stored as they
+ * are and only the engine reads them back.
+ */
+public class LogEntry(
+    public val id: Uuid,
+    public val kind: Int,
+    public val hlc: Long,
+    public val device: Uuid,
+    /** The group an undo reverts or a redo repeats. */
+    public val origin: Uuid?,
+    public val ops: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean =
+        other is LogEntry &&
+            id == other.id &&
+            kind == other.kind &&
+            hlc == other.hlc &&
+            device == other.device &&
+            origin == other.origin &&
+            ops.contentEquals(other.ops)
+
+    override fun hashCode(): Int = id.hashCode()
+
+    override fun toString(): String = "LogEntry(id=$id, kind=$kind, hlc=$hlc, ops=${ops.size} bytes)"
+}
+
 public data class EngineResponse(
     /** One per command sent, in order. */
     public val results: List<CommandResult>,
@@ -78,4 +107,6 @@ public data class EngineResponse(
     public val takeoff: Takeoff? = null,
     /** Every opening's outline, sent with [outlines]. */
     public val openings: List<OpeningOutline>? = null,
+    /** Groups appended to the operation log, in order. */
+    public val log: List<LogEntry> = emptyList(),
 )

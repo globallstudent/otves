@@ -11,6 +11,7 @@ import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LocationLine as LocationLineCode
+import uz.otves.schema.LogEntry as LogEntryTable
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.OpeningOutline as OpeningOutlineTable
@@ -43,6 +44,7 @@ internal object ResponseDecoder {
             outlines = response.outlinesVector()?.let { List(response.outlinesLength()) { outline(response.outlines(it)) } },
             takeoff = takeoff(response),
             openings = response.openingsVector()?.let { List(response.openingsLength()) { opening(response.openings(it)) } },
+            log = List(response.logLength()) { logEntry(response.log(it)) },
         )
     }
 
@@ -79,6 +81,18 @@ internal object ResponseDecoder {
                     PointM(point.x(), point.y())
                 },
         )
+
+    private fun logEntry(entry: LogEntryTable): LogEntry {
+        val ops = checkNotNull(entry.opsAsByteBuffer()) { "A log entry has no ops" }
+        return LogEntry(
+            id = uuid(checkNotNull(entry.id()) { "A log entry has no id" }),
+            kind = entry.kind(),
+            hlc = entry.hlc(),
+            device = uuid(checkNotNull(entry.device()) { "A log entry has no device" }),
+            origin = entry.origin()?.let(::uuid)?.takeIf { it != Uuid.NIL },
+            ops = ByteArray(ops.remaining()).also { ops.get(it) },
+        )
+    }
 
     private fun line(line: LineTable): QuantityLine =
         QuantityLine(
@@ -123,7 +137,9 @@ internal object ResponseDecoder {
         return ElementChange(id = id, element = element)
     }
 
-    private fun id(uuid: UuidStruct): ElementId = ElementId(Uuid.fromLongs(uuid.high(), uuid.low()))
+    private fun uuid(uuid: UuidStruct): Uuid = Uuid.fromLongs(uuid.high(), uuid.low())
+
+    private fun id(uuid: UuidStruct): ElementId = ElementId(uuid(uuid))
 
     private fun point(point: PointStruct?): PointMm {
         checkNotNull(point) { "A wall has no point" }

@@ -5,12 +5,15 @@ import org.junit.Test
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.mm
 import uz.otves.schema.Command
+import uz.otves.schema.Element
 import uz.otves.schema.Request
 import kotlin.uuid.Uuid
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
+import uz.otves.schema.OpenModel as OpenModelTable
+import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.PlaceOpening as PlaceOpeningTable
 import uz.otves.schema.WallEnd as WallEndCode
@@ -100,6 +103,33 @@ class RequestEncoderTest {
         assertThat(placed.width()).isEqualTo(900L)
         assertThat(placed.height()).isEqualTo(2100L)
         assertThat(placed.kind()).isEqualTo(OpeningKindCode.Door)
+    }
+
+    @Test
+    fun openingAJobCarriesItsElementsAndClock() {
+        val opening = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000003"))
+        val open =
+            EngineCommand.OpenModel(
+                elements =
+                    mapOf(
+                        level to Level(elevation = 0.mm, height = 3000.mm),
+                        wall to Wall(level, PointMm(0.mm, 0.mm), PointMm(6400.mm, 0.mm), 380.mm, 2800.mm),
+                        opening to Opening(wall, 1200.mm, 1500.mm, 1500.mm, 900.mm, OpeningKind.WINDOW),
+                    ),
+                clock = 0x0100_0000_0000_0000L,
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(open)))
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.OpenModel)
+        val opened = request.commands(0).command(OpenModelTable()) as OpenModelTable
+        assertThat(opened.clock()).isEqualTo(0x0100_0000_0000_0000L)
+        assertThat(List(opened.elementsLength()) { opened.elements(it).elementType() })
+            .containsExactly(Element.Level, Element.Wall, Element.Opening)
+            .inOrder()
+        val saved = opened.elements(2)
+        assertThat(Uuid.fromLongs(saved.id().high(), saved.id().low())).isEqualTo(opening.uuid)
+        assertThat((saved.element(OpeningTable()) as OpeningTable).sill()).isEqualTo(900L)
     }
 
     @Test

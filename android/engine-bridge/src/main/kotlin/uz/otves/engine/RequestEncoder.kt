@@ -4,18 +4,21 @@ import com.google.flatbuffers.FlatBufferBuilder
 import uz.otves.core.model.ElementId
 import uz.otves.schema.Command
 import uz.otves.schema.CommandEntry
+import uz.otves.schema.Element
 import uz.otves.schema.Request
 import java.nio.ByteBuffer
 import uz.otves.schema.AddLevel as AddLevelTable
 import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.BeginGesture as BeginGestureTable
+import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.EndGesture as EndGestureTable
 import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.MoveOpening as MoveOpeningTable
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
+import uz.otves.schema.OpenModel as OpenModelTable
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.PlaceOpening as PlaceOpeningTable
@@ -178,6 +181,21 @@ internal object RequestEncoder {
                 Command.PlaceOpening to PlaceOpeningTable.endPlaceOpening(this)
             }
 
+            is EngineCommand.OpenModel -> {
+                val saved =
+                    command.elements
+                        .map { (id, element) ->
+                            val (type, value) = element(element)
+                            ChangeTable.startElementChange(this)
+                            ChangeTable.addId(this, uuid(id))
+                            ChangeTable.addElementType(this, type)
+                            ChangeTable.addElement(this, value)
+                            ChangeTable.endElementChange(this)
+                        }.toIntArray()
+                val elements = OpenModelTable.createElementsVector(this, saved)
+                Command.OpenModel to OpenModelTable.createOpenModel(this, elements, command.clock)
+            }
+
             EngineCommand.BeginGesture -> {
                 BeginGestureTable.startBeginGesture(this)
                 Command.BeginGesture to BeginGestureTable.endBeginGesture(this)
@@ -210,6 +228,13 @@ internal object RequestEncoder {
             .map { script ->
                 ScriptTable.createScript(this, createString(script.name), createString(script.source))
             }.toIntArray()
+
+    private fun FlatBufferBuilder.element(element: EngineElement): Pair<Byte, Int> =
+        when (element) {
+            is Level -> Element.Level to LevelTable.createLevel(this, element.elevation.value, element.height.value)
+            is Wall -> Element.Wall to wall(element)
+            is Opening -> Element.Opening to opening(element)
+        }
 
     private fun FlatBufferBuilder.wall(wall: Wall): Int {
         WallTable.startWall(this)

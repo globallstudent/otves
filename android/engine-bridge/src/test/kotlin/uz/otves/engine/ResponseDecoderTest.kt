@@ -11,9 +11,11 @@ import uz.otves.schema.ErrorCode
 import uz.otves.schema.Response
 import java.nio.ByteBuffer
 import kotlin.uuid.Uuid
+import uz.otves.schema.CommandKind as CommandKindCode
 import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.LocationLine as LocationLineCode
+import uz.otves.schema.LogEntry as LogEntryTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.OpeningOutline as OpeningOutlineTable
 import uz.otves.schema.PointM as PointMStruct
@@ -71,6 +73,39 @@ class ResponseDecoderTest {
             .isEqualTo(Takeoff.Lines(listOf(QuantityLine("masonry", "masonry_unit", QuantityUnit.PIECE, 2767.0))))
         assertThat(decoded.openings)
             .containsExactly(OpeningOutline(window, level, OpeningKind.DOOR, listOf(PointM(1.0, -0.19), PointM(1.9, -0.19))))
+    }
+
+    @Test
+    fun logEntriesComeBackWithTheirBytes() {
+        val builder = FlatBufferBuilder(1024)
+        val ops = LogEntryTable.createOpsVector(builder, byteArrayOf(1, 2, 3))
+        LogEntryTable.startLogEntry(builder)
+        LogEntryTable.addId(builder, builder.uuid(wall))
+        LogEntryTable.addKind(builder, CommandKindCode.Undo)
+        LogEntryTable.addHlc(builder, 42L)
+        LogEntryTable.addDevice(builder, builder.uuid(level))
+        LogEntryTable.addOrigin(builder, builder.uuid(gone))
+        LogEntryTable.addOps(builder, ops)
+        val undone = LogEntryTable.endLogEntry(builder)
+        val noOps = LogEntryTable.createOpsVector(builder, byteArrayOf())
+        LogEntryTable.startLogEntry(builder)
+        LogEntryTable.addId(builder, builder.uuid(window))
+        LogEntryTable.addDevice(builder, builder.uuid(level))
+        LogEntryTable.addOrigin(builder, UuidStruct.createUuid(builder, 0, 0))
+        LogEntryTable.addOps(builder, noOps)
+        val added = LogEntryTable.endLogEntry(builder)
+        val log = Response.createLogVector(builder, intArrayOf(undone, added))
+        Response.startResponse(builder)
+        Response.addLog(builder, log)
+        builder.finish(Response.endResponse(builder), "OTVS")
+
+        val decoded = ResponseDecoder.decode(builder.dataBuffer())
+
+        assertThat(decoded.log)
+            .containsExactly(
+                LogEntry(wall.uuid, CommandKindCode.Undo, 42L, level.uuid, gone.uuid, byteArrayOf(1, 2, 3)),
+                LogEntry(window.uuid, CommandKindCode.AddLevel, 0L, level.uuid, null, byteArrayOf()),
+            ).inOrder()
     }
 
     @Test
@@ -137,6 +172,7 @@ class ResponseDecoderTest {
                 0,
                 0,
                 ErrorCode.None,
+                0,
                 0,
                 0,
             )

@@ -98,6 +98,16 @@ public sealed interface EngineCommand {
         public val kind: OpeningKind,
     ) : EngineCommand
 
+    /**
+     * Replaces the open model with a saved job's [elements] and starts an empty log with no undo
+     * or redo (docs/adr/0007). [clock] is the newest stamp in the job's log, so later stamps sort
+     * after it. A broken set fails with [EngineError.CORRUPT_DATA] and changes nothing.
+     */
+    public data class OpenModel(
+        public val elements: Map<ElementId, EngineElement>,
+        public val clock: Long,
+    ) : EngineCommand
+
     /** Commands until [EndGesture] fold into one undo step, as a drag does. */
     public data object BeginGesture : EngineCommand
 
