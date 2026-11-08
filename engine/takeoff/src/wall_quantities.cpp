@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <expected>
 #include <limits>
+#include <map>
 #include <span>
 #include <utility>
 #include <vector>
@@ -288,6 +289,57 @@ Result<Measurement> measure_walls(std::span<const geom::WallInput> walls,
       result.issues.push_back({.opening = input->id, .kind = OpeningIssueKind::kNoWall});
     }
   }
+  std::ranges::sort(result.lintels, {}, &Lintel::opening);
+  std::ranges::sort(result.issues);
+  const auto [first, last] = std::ranges::unique(result.issues);
+  result.issues.erase(first, last);
+  return result;
+}
+
+Result<Measurement> measure_levels(std::span<const geom::WallInput> walls,
+                                   std::span<const OpeningInput> openings,
+                                   const LintelSpec& lintels) {
+  std::map<ElementId, std::vector<geom::WallInput>> levels;
+  for (const geom::WallInput& input : walls) {
+    levels[input.wall.level].push_back(input);
+  }
+  std::vector<std::pair<ElementId, ElementId>> level_of;  // (wall, level), sorted by wall
+  level_of.reserve(walls.size());
+  for (const geom::WallInput& input : walls) {
+    level_of.emplace_back(input.id, input.wall.level);
+  }
+  std::ranges::sort(level_of);
+
+  std::map<ElementId, std::vector<OpeningInput>> openings_of;
+  Measurement result;
+  for (const OpeningInput& input : openings) {
+    const auto found = std::ranges::lower_bound(level_of, input.opening.wall, {},
+                                                &std::pair<ElementId, ElementId>::first);
+    if (found == level_of.end() || found->first != input.opening.wall) {
+      result.issues.push_back({.opening = input.id, .kind = OpeningIssueKind::kNoWall});
+      continue;
+    }
+    openings_of[found->second].push_back(input);
+  }
+
+  for (const auto& [level, level_walls] : levels) {
+    auto measured =
+        measure_walls(level_walls, openings_of[level], lintels, geom::join_walls(level_walls));
+    if (!measured) {
+      return std::unexpected{std::move(measured).error()};
+    }
+    Measurement& part = *measured;
+    result.walls.insert(result.walls.end(), part.walls.begin(), part.walls.end());
+    result.lintels.insert(result.lintels.end(), part.lintels.begin(), part.lintels.end());
+    result.junctions.insert(result.junctions.end(), part.junctions.begin(), part.junctions.end());
+    result.issues.insert(result.issues.end(), part.issues.begin(), part.issues.end());
+  }
+  if (levels.empty()) {
+    if (auto valid = validate(lintels); !valid) {
+      return std::unexpected{std::move(valid).error()};
+    }
+  }
+  std::ranges::sort(result.walls, {}, &WallQuantities::id);
   std::ranges::sort(result.lintels, {}, &Lintel::opening);
   std::ranges::sort(result.issues);
   const auto [first, last] = std::ranges::unique(result.issues);

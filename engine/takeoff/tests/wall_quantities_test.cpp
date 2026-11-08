@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -248,6 +250,50 @@ TEST(WallQuantities, JunctionTakesTheLowerWallsHeight) {
   ASSERT_EQ(m.junctions.size(), 1U);
   EXPECT_EQ(m.junctions[0].walls, (std::vector{id(1), id(2)}));
   EXPECT_NEAR(m.junctions[0].height, 2.1, kTolerance);
+}
+
+// Wall lengths in mm and openings areas in dm², rounded for exact comparison.
+std::pair<std::vector<double>, std::vector<double>> rounded(const Measurement& m) {
+  std::vector<double> lengths;
+  std::vector<double> openings;
+  for (const WallQuantities& q : m.walls) {
+    lengths.push_back(std::round(q.length * 1000));
+    openings.push_back(std::round(q.openings_area * 100));
+  }
+  return {lengths, openings};
+}
+
+TEST(WallQuantities, LevelsAreJoinedApart) {
+  // The same L-shaped corner on the ground floor and on the floor above.
+  const ElementId ground{Uuid::v7(100, 0, 0)};
+  const ElementId first{Uuid::v7(101, 0, 0)};
+  const auto on = [](geom::WallInput input, ElementId level) {
+    input.wall.level = level;
+    return input;
+  };
+  const std::vector walls{on(wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}, 380_mm), ground),
+                          on(wall(2, {0_mm, 0_mm}, {0_mm, 4000_mm}, 380_mm), ground),
+                          on(wall(3, {0_mm, 0_mm}, {6400_mm, 0_mm}, 380_mm), first),
+                          on(wall(4, {0_mm, 0_mm}, {0_mm, 4000_mm}, 380_mm), first)};
+
+  const auto m = measure_levels(walls, std::vector{window(10, 3), window(11, 9)}, kLintels);
+
+  ASSERT_TRUE(m.has_value());
+  // Joined together, walls 1 and 3 would overlap; apart, each floor has one corner.
+  const auto [lengths, openings] = rounded(*m);
+  EXPECT_EQ(lengths, (std::vector<double>{6400, 4000, 6400, 4000}));
+  EXPECT_EQ(openings, (std::vector<double>{0, 0, 225, 0}));
+  EXPECT_EQ(m->junctions.size(), 2U);
+  EXPECT_EQ(m->lintels.size(), 1U);
+  const std::vector<OpeningIssue> expected{{.opening = id(11), .kind = OpeningIssueKind::kNoWall}};
+  EXPECT_EQ(m->issues, expected);
+}
+
+TEST(WallQuantities, LevelsCheckTheLintelSpecEvenWithoutWalls) {
+  LintelSpec flat = kLintels;
+  flat.height = 0_mm;
+
+  EXPECT_EQ(measure_levels({}, {}, flat).error().code, ErrorCode::kHeightNotPositive);
 }
 
 }  // namespace

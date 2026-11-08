@@ -96,4 +96,10 @@ struct Measurement {
                                                 const LintelSpec& lintels,
                                                 const geom::WallJoins& joins);
 
+// Joins and measures the walls of each level on their own, so walls on different floors never
+// meet, and merges the results: walls sorted by id, lintels by opening, junctions level by level.
+[[nodiscard]] Result<Measurement> measure_levels(std::span<const geom::WallInput> walls,
+                                                 std::span<const OpeningInput> openings,
+                                                 const LintelSpec& lintels);
+
 }  // namespace otves::takeoff

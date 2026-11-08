@@ -25,7 +25,7 @@ flowchart TB
 
 | Module | Role | Status |
 |---|---|---|
-| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, walls and openings, commands, document with op log, undo and gestures | exists |
+| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels, walls and openings, commands, document with op log, undo and gestures | exists |
 | `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`) | exists |
 | `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar, Luau rules sandbox (`RuleSet`) | exists |
 | `content/` | Norm tables and rules in Luau: masonry units, mortar, cement, lintels, ring beams, junction meshes | exists |
