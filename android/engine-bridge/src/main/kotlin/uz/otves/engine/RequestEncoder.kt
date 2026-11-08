@@ -21,6 +21,7 @@ import uz.otves.schema.MoveWallEnd as MoveWallEndTable
 import uz.otves.schema.OpenModel as OpenModelTable
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.Pick as PickTable
 import uz.otves.schema.PlaceOpening as PlaceOpeningTable
 import uz.otves.schema.PointMm as PointTable
 import uz.otves.schema.Redo as RedoTable
@@ -194,6 +195,14 @@ internal object RequestEncoder {
                         }.toIntArray()
                 val elements = OpenModelTable.createElementsVector(this, saved)
                 Command.OpenModel to OpenModelTable.createOpenModel(this, elements, command.clock)
+            }
+
+            is EngineCommand.Pick -> {
+                PickTable.startPick(this)
+                PickTable.addLevel(this, uuid(command.level))
+                PickTable.addAt(this, point(command.at))
+                PickTable.addReach(this, command.reach.value)
+                Command.Pick to PickTable.endPick(this)
             }
 
             EngineCommand.BeginGesture -> {

@@ -120,7 +120,7 @@ internal object ResponseDecoder {
 
     private fun result(result: ResultTable): CommandResult =
         when (val error = error(result.error())) {
-            null -> CommandResult.Done(created = result.created()?.let(::id))
+            null -> CommandResult.Done(created = result.created()?.let(::id), picked = result.picked()?.let(::id))
             else -> CommandResult.Failed(error = error, message = result.message().orEmpty())
         }
 

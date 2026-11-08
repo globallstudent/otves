@@ -15,6 +15,7 @@ import uz.otves.schema.MoveWallEnd as MoveWallEndTable
 import uz.otves.schema.OpenModel as OpenModelTable
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.Pick as PickTable
 import uz.otves.schema.PlaceOpening as PlaceOpeningTable
 import uz.otves.schema.WallEnd as WallEndCode
 
@@ -130,6 +131,16 @@ class RequestEncoderTest {
         val saved = opened.elements(2)
         assertThat(Uuid.fromLongs(saved.id().high(), saved.id().low())).isEqualTo(opening.uuid)
         assertThat((saved.element(OpeningTable()) as OpeningTable).sill()).isEqualTo(900L)
+    }
+
+    @Test
+    fun pickCarriesTheTap() {
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(EngineCommand.Pick(level, PointMm(10.mm, (-20).mm), 300.mm))))
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.Pick)
+        val pick = request.commands(0).command(PickTable()) as PickTable
+        assertThat(pick.at().y()).isEqualTo(-20L)
+        assertThat(pick.reach()).isEqualTo(300L)
     }
 
     @Test

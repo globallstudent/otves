@@ -1,6 +1,7 @@
 package uz.otves.engine
 
 import uz.otves.core.model.ElementId
+import uz.otves.schema.CommandKind
 import kotlin.uuid.Uuid
 
 /** Why the engine refused a command. The app shows translated text for each value. */
@@ -39,6 +40,8 @@ public enum class EngineError {
 public sealed interface CommandResult {
     public data class Done(
         public val created: ElementId?,
+        /** What a [EngineCommand.Pick] found. */
+        public val picked: ElementId? = null,
     ) : CommandResult
 
     /** [message] is English context for logs, not for the screen. */
@@ -80,6 +83,12 @@ public class LogEntry(
     public val origin: Uuid?,
     public val ops: ByteArray,
 ) {
+    /** The group reverts an earlier one. */
+    public val isUndo: Boolean get() = kind == CommandKind.Undo
+
+    /** The group repeats one that was undone. */
+    public val isRedo: Boolean get() = kind == CommandKind.Redo
+
     override fun equals(other: Any?): Boolean =
         other is LogEntry &&
             id == other.id &&

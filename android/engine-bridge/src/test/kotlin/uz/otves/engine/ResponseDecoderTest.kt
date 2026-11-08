@@ -38,7 +38,7 @@ class ResponseDecoderTest {
 
         assertThat(decoded.results)
             .containsExactly(
-                CommandResult.Done(created = wall),
+                CommandResult.Done(created = wall, picked = window),
                 CommandResult.Failed(error = EngineError.NOT_FOUND, message = "wall not found"),
             ).inOrder()
         assertThat(decoded.changes)
@@ -106,6 +106,8 @@ class ResponseDecoderTest {
                 LogEntry(wall.uuid, CommandKindCode.Undo, 42L, level.uuid, gone.uuid, byteArrayOf(1, 2, 3)),
                 LogEntry(window.uuid, CommandKindCode.AddLevel, 0L, level.uuid, null, byteArrayOf()),
             ).inOrder()
+        assertThat(decoded.log.map { it.isUndo }).containsExactly(true, false).inOrder()
+        assertThat(decoded.log.map { it.isRedo }).containsExactly(false, false).inOrder()
     }
 
     @Test
@@ -137,6 +139,7 @@ class ResponseDecoderTest {
 
         ResultTable.startCommandResult(builder)
         ResultTable.addCreated(builder, builder.uuid(wall))
+        ResultTable.addPicked(builder, builder.uuid(window))
         val done = ResultTable.endCommandResult(builder)
         ResultTable.startCommandResult(builder)
         ResultTable.addError(builder, errorCode)

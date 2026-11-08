@@ -108,6 +108,16 @@ public sealed interface EngineCommand {
         public val clock: Long,
     ) : EngineCommand
 
+    /**
+     * What the user tapped on [level]: an opening or wall under [at], else the nearest within
+     * [reach], openings first. Changes nothing; the result's `picked` names the element.
+     */
+    public data class Pick(
+        public val level: ElementId,
+        public val at: PointMm,
+        public val reach: Mm,
+    ) : EngineCommand
+
     /** Commands until [EndGesture] fold into one undo step, as a drag does. */
     public data object BeginGesture : EngineCommand
 
