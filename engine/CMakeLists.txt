@@ -14,6 +14,9 @@ endif()
 project(otves_engine VERSION 0.1.0 DESCRIPTION "Otves design engine" LANGUAGES CXX)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
+# The static engine libraries end up inside libdesign.so. macOS and Android build PIC anyway;
+# Linux does not unless asked.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(OTVES_BUILD_TESTS "Build engine tests" ${PROJECT_IS_TOP_LEVEL})
 set(OTVES_SANITIZERS "" CACHE STRING "Sanitizers: address;undefined | thread | hwaddress")
