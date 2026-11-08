@@ -65,11 +65,17 @@ TEST(Document, RejectsInvalidWallAndChangesNothing) {
   Document document{test_environment()};
   Wall flat = wall_4();
   flat.thickness = 0_mm;
+  Wall low = wall_4();
+  low.height = -1_mm;
   Wall point = wall_4();
   point.end = point.start;
 
-  EXPECT_EQ(document.execute(AddWall{.wall = flat}).error().code, ErrorCode::kInvalidArgument);
-  EXPECT_EQ(document.execute(AddWall{.wall = point}).error().code, ErrorCode::kInvalidArgument);
+  const auto code = [&document](const Wall& wall) {
+    return document.execute(AddWall{.wall = wall}).error().code;
+  };
+  EXPECT_EQ(code(flat), ErrorCode::kThicknessNotPositive);
+  EXPECT_EQ(code(low), ErrorCode::kHeightNotPositive);
+  EXPECT_EQ(code(point), ErrorCode::kZeroLength);
   EXPECT_TRUE(document.log().empty());
   EXPECT_EQ(document.model().wall_count(), 0U);
 }
@@ -131,7 +137,7 @@ TEST(Document, NewCommandClearsRedo) {
   ASSERT_TRUE(document.execute(SetWallThickness{.wall = id, .thickness = 250_mm}));
 
   EXPECT_FALSE(document.can_redo());
-  EXPECT_EQ(document.redo().error().code, ErrorCode::kOutOfRange);
+  EXPECT_EQ(document.redo().error().code, ErrorCode::kNothingToRedo);
 }
 
 TEST(Document, UndoingRemovalRestoresTheSameWall) {
@@ -208,9 +214,11 @@ TEST(Document, GestureLeftOpenIsLoggedWhenTheNextOneBegins) {
 
 TEST(Document, UndoIsRefusedDuringGesture) {
   Document document{test_environment()};
+  EXPECT_EQ(document.undo().error().code, ErrorCode::kNothingToUndo);
   ASSERT_TRUE(document.execute(AddWall{.wall = wall_4()}));
   document.begin_gesture();
-  EXPECT_EQ(document.undo().error().code, ErrorCode::kInvalidArgument);
+  EXPECT_EQ(document.undo().error().code, ErrorCode::kGestureOpen);
+  EXPECT_EQ(document.redo().error().code, ErrorCode::kGestureOpen);
   static_cast<void>(document.end_gesture());
   EXPECT_TRUE(document.undo());
 }

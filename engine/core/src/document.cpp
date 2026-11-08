@@ -113,10 +113,10 @@ std::optional<GroupId> Document::end_gesture() {
 
 std::expected<void, Error> Document::undo() {
   if (gesture_) {
-    return make_error(ErrorCode::kInvalidArgument, "cannot undo during a gesture");
+    return make_error(ErrorCode::kGestureOpen, "cannot undo during a gesture");
   }
   if (undo_.empty()) {
-    return make_error(ErrorCode::kOutOfRange, "nothing to undo");
+    return make_error(ErrorCode::kNothingToUndo, "nothing to undo");
   }
   const std::size_t index = undo_.back();
   undo_.pop_back();
@@ -134,10 +134,10 @@ std::expected<void, Error> Document::undo() {
 
 std::expected<void, Error> Document::redo() {
   if (gesture_) {
-    return make_error(ErrorCode::kInvalidArgument, "cannot redo during a gesture");
+    return make_error(ErrorCode::kGestureOpen, "cannot redo during a gesture");
   }
   if (redo_.empty()) {
-    return make_error(ErrorCode::kOutOfRange, "nothing to redo");
+    return make_error(ErrorCode::kNothingToRedo, "nothing to redo");
   }
   const std::size_t index = redo_.back();
   redo_.pop_back();

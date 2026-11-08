@@ -23,13 +23,13 @@ void assign(T& target, const WallValue& value) {
 
 std::expected<void, Error> validate(const Wall& wall) {
   if (wall.start == wall.end) {
-    return make_error(ErrorCode::kInvalidArgument, "wall start and end coincide");
+    return make_error(ErrorCode::kZeroLength, "wall start and end coincide");
   }
   if (wall.thickness <= Mm{0}) {
-    return make_error(ErrorCode::kInvalidArgument, "wall thickness must be positive");
+    return make_error(ErrorCode::kThicknessNotPositive, "wall thickness must be positive");
   }
   if (wall.height <= Mm{0}) {
-    return make_error(ErrorCode::kInvalidArgument, "wall height must be positive");
+    return make_error(ErrorCode::kHeightNotPositive, "wall height must be positive");
   }
   return {};
 }

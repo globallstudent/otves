@@ -8,24 +8,24 @@
 namespace otves {
 namespace {
 
-Result<Mm> positive_length(std::int64_t value) {
+Result<Mm> positive_thickness(std::int64_t value) {
   if (value <= 0) {
-    return make_error(ErrorCode::kInvalidArgument, "length must be positive");
+    return make_error(ErrorCode::kThicknessNotPositive, "thickness must be positive");
   }
   return Mm{value};
 }
 
 TEST(Result, CarriesValueOnSuccess) {
-  const auto length = positive_length(6400);
-  ASSERT_TRUE(length.has_value());
-  EXPECT_EQ(length->value(), 6400);
+  const auto thickness = positive_thickness(6400);
+  ASSERT_TRUE(thickness.has_value());
+  EXPECT_EQ(thickness->value(), 6400);
 }
 
 TEST(Result, CarriesCodeAndMessageOnFailure) {
-  const auto length = positive_length(0);
-  ASSERT_FALSE(length.has_value());
-  EXPECT_EQ(length.error().code, ErrorCode::kInvalidArgument);
-  EXPECT_EQ(length.error().message, "length must be positive");
+  const auto thickness = positive_thickness(0);
+  ASSERT_FALSE(thickness.has_value());
+  EXPECT_EQ(thickness.error().code, ErrorCode::kThicknessNotPositive);
+  EXPECT_EQ(thickness.error().message, "thickness must be positive");
 }
 
 }  // namespace
