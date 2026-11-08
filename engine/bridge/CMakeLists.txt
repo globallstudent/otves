@@ -24,6 +24,7 @@ add_dependencies(otves_schema otves_schema_code)
 
 add_library(otves_bridge
   src/convert.cpp
+  src/derived.cpp
   src/session.cpp)
 add_library(otves::bridge ALIAS otves_bridge)
 
@@ -31,7 +32,7 @@ target_include_directories(otves_bridge PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT
 target_compile_features(otves_bridge PUBLIC cxx_std_23)
 target_link_libraries(otves_bridge
   PUBLIC otves::core
-  PRIVATE otves::build_options otves::schema)
+  PRIVATE otves::build_options otves::schema otves::takeoff)
 add_dependencies(otves_bridge otves_schema_code)
 
 # libdesign.so for the app. Desktop builds it too when a JDK is found, so JNI code compiles in CI.
@@ -51,5 +52,7 @@ endif()
 if(OTVES_BUILD_TESTS)
   otves_add_test(otves_bridge_tests tests/session_test.cpp)
   target_link_libraries(otves_bridge_tests PRIVATE otves::bridge otves::schema)
+  target_compile_definitions(otves_bridge_tests PRIVATE
+    OTVES_CONTENT_DIR="${PROJECT_SOURCE_DIR}/../content")
   add_dependencies(otves_bridge_tests otves_schema_code)
 endif()

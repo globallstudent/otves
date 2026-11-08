@@ -1,5 +1,11 @@
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <span>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <flatbuffers/flatbuffers.h>
@@ -66,6 +72,24 @@ class Request {
     return add(Command::EndGesture, schema::CreateEndGesture(builder_).Union());
   }
   Request& undo() { return add(Command::Undo, schema::CreateUndo(builder_).Union()); }
+
+  // Script files as (name, source); the name is a norm's key or a rule's tag.
+  using Files = std::vector<std::pair<std::string, std::string>>;
+
+  Request& load_content(const Files& norms, const Files& rules) {
+    const auto scripts = [this](const Files& files) {
+      std::vector<flatbuffers::Offset<schema::Script>> out;
+      for (const auto& [name, source] : files) {
+        out.push_back(schema::CreateScript(builder_, builder_.CreateString(name),
+                                           builder_.CreateString(source)));
+      }
+      return builder_.CreateVector(out);
+    };
+    const auto norm_scripts = scripts(norms);
+    const auto rule_scripts = scripts(rules);
+    return add(Command::LoadContent,
+               schema::CreateLoadContent(builder_, norm_scripts, rule_scripts).Union());
+  }
   Request& redo() { return add(Command::Redo, schema::CreateRedo(builder_).Union()); }
 
   // A union entry with its type set but no table, which the verifier lets through.
@@ -247,6 +271,90 @@ TEST(Session, RemovingAWallReportsItsOpeningsGone) {
     const ElementId id = to_id(change->id());
     EXPECT_TRUE(id == wall || id == window);
   }
+}
+
+std::pair<std::string, std::string> content_file(std::string_view folder, std::string_view name) {
+  std::ifstream in{std::filesystem::path{OTVES_CONTENT_DIR} / folder /
+                   (std::string{name} + ".luau")};
+  EXPECT_TRUE(in.good()) << name;
+  return {std::string{name},
+          std::string{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}}};
+}
+
+// Everything in content/, as the app sends it from its assets.
+std::vector<std::uint8_t> load_all_content() {
+  Request::Files norms;
+  for (const std::string_view name :
+       {"losses", "masonry", "mortar", "practice", "rebar", "seismic"}) {
+    norms.push_back(content_file("norms", name));
+  }
+  Request::Files rules;
+  for (const std::string_view name : {"masonry", "lintels", "ring_beam", "junction_meshes"}) {
+    rules.push_back(content_file("rules", name));
+  }
+  return Request{}.load_content(norms, rules).bytes();
+}
+
+double amount(const schema::Response& response, std::string_view item) {
+  for (const schema::QuantityLine* line : *response.takeoff()) {
+    if (line->item()->string_view() == item) {
+      return line->amount();
+    }
+  }
+  ADD_FAILURE() << "no line " << item;
+  return 0.0;
+}
+
+TEST(Session, OutlinesFollowTheModelEvenWithoutContent) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+
+  const auto& built = respond(session, Request{}.add_wall(level, 6400).bytes());
+
+  ASSERT_NE(built.outlines(), nullptr);
+  ASSERT_EQ(built.outlines()->size(), 1U);
+  const auto* outline = built.outlines()->Get(0);
+  EXPECT_EQ(to_id(outline->level()), level);
+  // A free 6.4 m wall, 380 mm thick: a rectangle around its centre line, in metres.
+  ASSERT_EQ(outline->points()->size(), 4U);
+  EXPECT_DOUBLE_EQ(outline->points()->Get(1)->x(), 6.4);
+  EXPECT_EQ(built.takeoff(), nullptr);
+
+  // Nothing changed, so nothing derived is sent.
+  const auto& idle = respond(session, Request{}.set_height(ElementId{Uuid{7, 7}}, 3000).bytes());
+  EXPECT_EQ(idle.outlines(), nullptr);
+}
+
+TEST(Session, TakeoffRunsTheLoadedContent) {
+  Session session{kDevice};
+  const auto& loaded = respond(session, load_all_content());
+  ASSERT_EQ(loaded.results()->Get(0)->error(), schema::ErrorCode::None);
+  ASSERT_NE(loaded.takeoff(), nullptr);
+  EXPECT_EQ(loaded.takeoff_error(), schema::ErrorCode::None);
+
+  const ElementId level = add_level(session);
+  const auto& built = respond(session, Request{}.add_wall(level, 6400).bytes());
+
+  ASSERT_NE(built.takeoff(), nullptr);
+  EXPECT_EQ(built.takeoff_error(), schema::ErrorCode::None);
+  // 6.4 m × 2.8 m of 380 mm brick: about 2 686 units net, plus 3 % waste.
+  EXPECT_GT(amount(built, "masonry_unit"), 2686);
+  EXPECT_GT(amount(built, "concrete.b15"), 0.0);
+}
+
+TEST(Session, BrokenContentKeepsThePreviousContent) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+
+  const auto& broken =
+      respond(session, Request{}.load_content({}, {{"masonry", "return {"}}).bytes());
+  EXPECT_EQ(broken.results()->Get(0)->error(), schema::ErrorCode::RuleSyntax);
+  EXPECT_EQ(broken.takeoff(), nullptr);
+
+  const ElementId level = add_level(session);
+  const auto& built = respond(session, Request{}.add_wall(level, 6400).bytes());
+  EXPECT_GT(amount(built, "masonry_unit"), 0.0);
 }
 
 }  // namespace

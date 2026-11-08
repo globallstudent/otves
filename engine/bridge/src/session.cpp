@@ -7,6 +7,7 @@
 #include <random>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <flatbuffers/flatbuffers.h>
@@ -16,8 +17,10 @@
 #include <otves/core/document.h>
 #include <otves/core/error.h>
 #include <otves/core/uuid.h>
+#include <otves/takeoff/rules.h>
 
 #include "convert.h"
+#include "derived.h"
 #include "engine_generated.h"
 
 namespace otves::bridge {
@@ -58,10 +61,37 @@ struct Session::Impl {
         return document.undo().transform([] { return std::optional<ElementId>{}; });
       case schema::Command::Redo:
         return document.redo().transform([] { return std::optional<ElementId>{}; });
+      case schema::Command::LoadContent:
+        return load(entry.command_as_LoadContent());
       default:
         return decode(entry).and_then(
             [this](const Command& command) { return document.execute(command); });
     }
+  }
+
+  // Compiles first, so a broken bundle keeps the content that ran before it.
+  Outcome load(const schema::LoadContent* content) {
+    const auto scripts = [](const auto* list) {
+      std::vector<takeoff::Script> out;
+      if (list != nullptr) {
+        for (const schema::Script* script : *list) {
+          out.push_back({.name = script->name() != nullptr ? script->name()->str() : "",
+                         .source = script->source() != nullptr ? script->source()->str() : ""});
+        }
+      }
+      return out;
+    };
+    const std::vector<takeoff::Script> norms =
+        scripts(content != nullptr ? content->norms() : nullptr);
+    const std::vector<takeoff::Script> laws =
+        scripts(content != nullptr ? content->rules() : nullptr);
+    auto compiled = takeoff::RuleSet::compile({.norms = norms, .rules = laws});
+    if (!compiled) {
+      return std::unexpected{std::move(compiled).error()};
+    }
+    rules.emplace(*std::move(compiled));
+    content_changed = true;
+    return std::nullopt;
   }
 
   flatbuffers::Offset<schema::CommandResult> result(const Outcome& outcome) {
@@ -108,13 +138,23 @@ struct Session::Impl {
     for (const ElementId id : document.take_dirty()) {
       changes.push_back(encode_change(builder, document.model(), id));
     }
+    OutlinesOffset outlines;
+    TakeoffOffsets takeoff;
+    if (!changes.empty() || content_changed) {
+      outlines = encode_outlines(builder, document.model());
+      takeoff = encode_takeoff(builder, document.model(), rules);
+      content_changed = false;
+    }
     const auto response = schema::CreateResponse(builder, kVersion, builder.CreateVector(results),
                                                  builder.CreateVector(changes), document.can_undo(),
-                                                 document.can_redo());
+                                                 document.can_redo(), outlines, takeoff.lines,
+                                                 takeoff.error, takeoff.message);
     builder.Finish(response, kIdentifier);
   }
 
   Document document;
+  std::optional<takeoff::RuleSet> rules;
+  bool content_changed = false;
   flatbuffers::FlatBufferBuilder builder;
 };
 

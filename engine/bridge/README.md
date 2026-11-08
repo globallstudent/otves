@@ -36,6 +36,10 @@ sequenceDiagram
 | `results` | One per command, in order: `ErrorCode`, an English message for logs, the created element's id |
 | `changes` | Each changed level, wall or opening with its full value, or with no value when deleted; sorted by id |
 | `can_undo`, `can_redo` | For the toolbar |
+| `outlines` | Every wall's joined plan outline in metres, level by level; only when the model or the content changed |
+| `takeoff`, `takeoff_error` | Material lines from the loaded rules, or why they could not run; absent until `LoadContent` |
+
+`LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.
 
 A request that fails the `Verifier` or names another version gets a single `CorruptData` or `UnsupportedVersion` result and changes nothing.
 

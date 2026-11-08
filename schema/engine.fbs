@@ -64,6 +64,19 @@ table SetOpeningSill { opening:Uuid; sill:long; }
 table SetOpeningKind { opening:Uuid; kind:OpeningKind = Window; }
 table RemoveOpening { opening:Uuid; }
 
+// A Luau file from content/ (docs/adr/0005); the name is the file's stem.
+table Script {
+  name:string;
+  source:string;
+}
+
+// Replaces the norms and rules the take-off runs with. A script that does not compile fails the
+// command and keeps the previous content.
+table LoadContent {
+  norms:[Script];
+  rules:[Script];
+}
+
 // Commands between BeginGesture and EndGesture fold into one undo step.
 table BeginGesture {}
 table EndGesture {}
@@ -91,6 +104,7 @@ union Command {
   EndGesture,
   Undo,
   Redo,
+  LoadContent,
 }
 
 table CommandEntry {
@@ -135,6 +149,29 @@ table CommandResult {
 
 union Element { Level, Wall, Opening }
 
+// A point of derived geometry, in metres.
+struct PointM {
+  x:double;
+  y:double;
+}
+
+// A wall's plan outline after joining, counter-clockwise (engine/geom).
+table WallOutline {
+  wall:Uuid;
+  level:Uuid;
+  points:[PointM];
+}
+
+enum Unit:ubyte { Piece = 0, Metre = 1, SquareMetre = 2, CubicMetre = 3, Kilogram = 4 }
+
+// A material line from a content rule (engine/takeoff).
+table QuantityLine {
+  rule:string;
+  item:string;
+  unit:Unit = Piece;
+  amount:double;
+}
+
 // An element's new value, or its deletion when `element` is NONE.
 table ElementChange {
   id:Uuid;
@@ -147,6 +184,11 @@ table Response {
   changes:[ElementChange];  // sorted by id
   can_undo:bool;
   can_redo:bool;
+  // Present only when the model or the content changed since the previous response.
+  outlines:[WallOutline];   // every wall on every level
+  takeoff:[QuantityLine];   // absent until content is loaded
+  takeoff_error:ErrorCode = None;
+  takeoff_message:string;
 }
 
 root_type Request;
