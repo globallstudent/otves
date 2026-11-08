@@ -35,8 +35,8 @@ class Document {
   [[nodiscard]] const Model& model() const noexcept { return model_; }
   [[nodiscard]] std::span<const OpGroup> log() const noexcept { return log_; }
 
-  // On error nothing changes.
-  [[nodiscard]] std::expected<void, Error> execute(const Command& command);
+  // Returns the element the command created, if any. On error nothing changes.
+  [[nodiscard]] std::expected<std::optional<ElementId>, Error> execute(const Command& command);
 
   // A gesture still open (its touch-up was lost) is closed first, so its changes reach the log.
   void begin_gesture();

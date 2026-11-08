@@ -132,6 +132,21 @@ void fold_into(OpGroup& gesture, const Ops& ops) {
   }
 }
 
+std::optional<ElementId> created(const Ops& ops) {
+  for (const Op& op : ops) {
+    const std::optional<ElementId> id =
+        std::visit(Overloaded{[]<typename T>(const Create<T>& create) -> std::optional<ElementId> {
+                                return create.id;
+                              },
+                              [](const auto&) -> std::optional<ElementId> { return std::nullopt; }},
+                   op);
+    if (id) {
+      return id;
+    }
+  }
+  return std::nullopt;
+}
+
 bool is_no_op(const Op& op) {
   return std::visit(
       Overloaded{[]<typename T>(const SetField<T>& set) { return set.before == set.after; },
@@ -145,26 +160,27 @@ Document::Document(DocumentEnvironment environment) : environment_(std::move(env
   OTVES_ASSERT(environment_.unix_ms && environment_.random_u64);
 }
 
-std::expected<void, Error> Document::execute(const Command& command) {
+std::expected<std::optional<ElementId>, Error> Document::execute(const Command& command) {
   auto ops = plan(command);
   if (!ops) {
     return std::unexpected(std::move(ops.error()));
   }
   if (ops->empty()) {
-    return {};
+    return std::nullopt;
   }
+  const std::optional<ElementId> made = created(*ops);
   apply_all(*ops);
   if (gesture_) {
     if (gesture_->ops.empty()) {
       gesture_->kind = kind_of(command);
     }
     fold_into(*gesture_, *ops);
-    return {};
+    return made;
   }
   append(kind_of(command), GroupId{}, std::move(*ops));
   undo_.push_back(log_.size() - 1);
   redo_.clear();
-  return {};
+  return made;
 }
 
 void Document::begin_gesture() {

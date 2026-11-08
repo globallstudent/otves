@@ -73,6 +73,19 @@ TEST(Document, AddWallRecordsOneCreateOp) {
   EXPECT_EQ(*document.model().find<Wall>(create->id), wall_4(level));
 }
 
+TEST(Document, ExecuteReturnsTheCreatedElement) {
+  Document document{test_environment()};
+  const ElementId level = add_level(document);
+
+  const auto added = document.execute(AddWall{.wall = wall_4(level)});
+  const std::optional<ElementId> created = added.value_or(std::nullopt);
+  EXPECT_EQ(created, only_wall(document));
+  const auto moved = document.execute(MoveWallEnd{
+      .wall = created.value_or(ElementId{}), .end = WallEnd::kEnd, .to = {7000_mm, 0_mm}});
+  ASSERT_TRUE(moved.has_value());
+  EXPECT_FALSE(moved->has_value());
+}
+
 TEST(Document, RejectsInvalidWallAndChangesNothing) {
   Document document{test_environment()};
   const ElementId level = add_level(document);
