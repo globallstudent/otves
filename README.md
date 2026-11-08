@@ -24,7 +24,7 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 
 | Path | Contents |
 |---|---|
-| `android/` | Kotlin app: `app`, `core/model`, `core/designsystem`, convention plugins in `build-logic` |
+| `android/` | Kotlin app: `app`, `core/model`, `core/designsystem`, `engine-bridge` (JNI, `libdesign.so`), convention plugins in `build-logic` |
 | `engine/` | C++23 design engine: `core` (levels, walls and openings, commands, operation log, undo), `geom` (wall joins, plan outlines), `takeoff` (wall quantities, masonry units and mortar, Luau rules sandbox), `bridge` (FlatBuffers session, JNI) |
 | `schema/` | `engine.fbs`, the FlatBuffers contract between the app and the engine |
 | `content/` | Norm tables and take-off rules in Luau, shipped as a content bundle |
@@ -43,6 +43,8 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 | Kotlin format | `./gradlew spotlessApply` |
 
 Toolchain: CMake ≥ 4.0, Ninja, Clang (AppleClang or LLVM 23), LLVM 23 clang-format and clang-tidy, Android SDK platform 37. Exact versions are in `android/gradle/libs.versions.toml` and `engine/vcpkg.json`.
+
+The app builds `libdesign.so` from `engine/` through Gradle, so it also needs `VCPKG_ROOT` (or `otves.vcpkg.dir` in `~/.gradle/gradle.properties`), NDK r30 and SDK CMake 4.1.2: `sdkmanager "ndk;30.0.16248370" "cmake;4.1.2"`.
 
 Choose the compiler (`CC`, `CXX`) before the first configure of a build folder. vcpkg builds dependencies with the same one; sanitizer runtimes from two compilers do not link.
 

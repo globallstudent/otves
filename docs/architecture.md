@@ -34,7 +34,8 @@ flowchart TB
 | `android/core/model` | Value types shared by features: `Mm`, `Money` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme | exists |
 | `android/app` | Activity, splash, navigation root | exists |
-| `android/feature/*`, `data/*`, `device/*`, `engine-bridge` | Screens, persistence, hardware, the Kotlin side of the bridge | planned |
+| `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession` over the JNI functions | exists |
+| `android/feature/*`, `data/*`, `device/*`; schema codecs in `engine-bridge` | Screens, persistence, hardware, typed requests and responses | planned |
 
 ## Rules that hold everywhere
 

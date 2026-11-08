@@ -26,3 +26,4 @@ rootProject.name = "otves"
 include(":app")
 include(":core:designsystem")
 include(":core:model")
+include(":engine-bridge")

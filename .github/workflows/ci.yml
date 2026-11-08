@@ -68,6 +68,12 @@ jobs:
 
   android:
     runs-on: ubuntu-24.04
+    env:
+      # Keep NDK and CMake in step with android/gradle/libs.versions.toml.
+      NDK: "30.0.16248370"
+      SDK_CMAKE: "4.1.2"
+      VCPKG_ROOT: ${{ github.workspace }}/../vcpkg
+      VCPKG_TAG: "2026.10.16"
     defaults:
       run:
         working-directory: android
@@ -78,6 +84,19 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
+
+      - name: Install NDK and CMake
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK" "cmake;$SDK_CMAKE" > /dev/null
+
+      - name: Install vcpkg
+        run: |
+          git clone --depth 1 --branch "$VCPKG_TAG" https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-android-${{ runner.os }}-${{ hashFiles('engine/vcpkg.json', 'engine/vcpkg-configuration.json', 'engine/ports/**') }}
 
       - uses: gradle/actions/setup-gradle@v6
 

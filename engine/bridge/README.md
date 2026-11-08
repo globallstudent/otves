@@ -39,6 +39,10 @@ sequenceDiagram
 
 A request that fails the `Verifier` or names another version gets a single `CorruptData` or `UnsupportedVersion` result and changes nothing.
 
+## Android build
+
+`android/engine-bridge` builds the `otves_design` target with the engine's own `CMakeLists.txt`: vcpkg as the toolchain, the arm64-android triplet, and NDK r30 chained in from the `ANDROID_NDK` that Gradle passes. The AAR carries `jni/arm64-v8a/libdesign.so`; `EngineSession` in Kotlin owns one session handle.
+
 ## Invariants
 
 - A session is used from one thread. JNI functions and `handle` are `noexcept`; an exception becomes an `Internal` result.
