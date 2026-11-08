@@ -69,6 +69,8 @@ TEST(Document, RejectsInvalidWallAndChangesNothing) {
   low.height = -1_mm;
   Wall point = wall_4();
   point.end = point.start;
+  Wall far = wall_4();
+  far.end.x = kMaxCoordinate + 1_mm;
 
   const auto code = [&document](const Wall& wall) {
     return document.execute(AddWall{.wall = wall}).error().code;
@@ -76,6 +78,7 @@ TEST(Document, RejectsInvalidWallAndChangesNothing) {
   EXPECT_EQ(code(flat), ErrorCode::kThicknessNotPositive);
   EXPECT_EQ(code(low), ErrorCode::kHeightNotPositive);
   EXPECT_EQ(code(point), ErrorCode::kZeroLength);
+  EXPECT_EQ(code(far), ErrorCode::kOffPlan);
   EXPECT_TRUE(document.log().empty());
   EXPECT_EQ(document.model().wall_count(), 0U);
 }

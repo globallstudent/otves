@@ -10,6 +10,11 @@
 namespace otves {
 namespace {
 
+constexpr bool on_plan(PointMm point) {
+  const auto within = [](Mm value) { return value >= -kMaxCoordinate && value <= kMaxCoordinate; };
+  return within(point.x) && within(point.y);
+}
+
 template <typename T>
 void assign(T& target, const WallValue& value) {
   const T* typed = std::get_if<T>(&value);
@@ -22,6 +27,9 @@ void assign(T& target, const WallValue& value) {
 }  // namespace
 
 std::expected<void, Error> validate(const Wall& wall) {
+  if (!on_plan(wall.start) || !on_plan(wall.end)) {
+    return make_error(ErrorCode::kOffPlan, "wall point lies more than 100 km from the origin");
+  }
   if (wall.start == wall.end) {
     return make_error(ErrorCode::kZeroLength, "wall start and end coincide");
   }

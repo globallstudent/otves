@@ -11,6 +11,7 @@ namespace otves {
 // for logs and tests and never reaches the screen.
 enum class ErrorCode : std::uint8_t {
   kNotFound,
+  kOffPlan,  // a point lies more than kMaxCoordinate from the origin
   kZeroLength,
   kThicknessNotPositive,
   kHeightNotPositive,
