@@ -1,6 +1,6 @@
 # engine/takeoff
 
-Quantities from the joined plan: wall lengths, areas and volumes, then masonry units and mortar (расход кирпича и раствора). Pure functions; the same input gives the same output bits on every platform.
+Quantities from the joined plan: wall lengths, areas and volumes, masonry units and mortar (расход кирпича и раствора), then material lines from the Luau rules in `content/`. The same input gives the same output bits on every platform.
 
 ```mermaid
 flowchart LR
@@ -9,7 +9,9 @@ flowchart LR
   W --> M
   M -- "WallQuantities" --> C["count_masonry"]
   S["MasonrySpec<br/>catalog + norm profile"] --> C
-  C -- "units, mortar, issues" --> E["estimate rules (planned)"]
+  C -- "units, mortar" --> R["RuleSet::run"]
+  K["content/<br/>norms, rules"] --> R
+  R -- "item, unit, amount" --> L["quantity lines"]
 ```
 
 ## Entry points
@@ -19,6 +21,8 @@ flowchart LR
 | `measure_walls(walls, joins)` | Length, footprint area, face area and volume of each wall, sorted by id |
 | `count_masonry(quantities, spec)` | Units and mortar per wall and in total, plus issues |
 | `validate(spec)` | Checks unit and joint sizes typed by the user or read from content |
+| `RuleSet::compile({.norms, .rules})` | Compiles Luau scripts from `content/`; the caller passes their text |
+| `RuleSet::run(walls, masonry, settings)` | Runs every rule in a fresh sandbox and returns validated lines |
 
 ## Formulas
 
@@ -49,10 +53,22 @@ Per m² of face that gives 149.9 units and 0.088 m³ mortar, matching the table 
 | Thickness between whole wythes (300 mm of 120 mm brick) | Units pro rata, issue `kPartialWythe` |
 | Wall thinner than one unit | No units, no mortar, issue `kThinnerThanUnit` |
 
+## Rules sandbox
+
+[ADR 0005](../../docs/adr/0005-norm-rules-in-sandboxed-luau.md) records the decision; `content/README.md` has the contract for script authors.
+
+| Guard | How |
+|---|---|
+| Same bits on every platform | Only `base`, `table`, `string` and exact `math`; compiled at level 0, so no builtin fast path reaches a removed function |
+| No outside effects | No `os`, `debug`, `print`, `pcall`, `getfenv`; script text comes from the caller |
+| No shared state | A fresh state per run, a fresh thread per script; norms, input, settings and globals are read-only |
+| Bounded run | 1 000 000 steps per script call, 32 MiB per run; both end the run with `kRuleFailed` |
+| Checked output | Lines must be `{ item, unit, amount }` with a known unit and a finite amount ≥ 0, else `kRuleOutput` |
+
 ## Invariants
 
 - Joined outlines tile the plan, so lengths, volumes, units and mortar add up across walls with every corner counted once.
 - Walls with a join overlap are measured as drawn; the overlap counts in both walls.
-- Quantities are net. Waste allowances (запас), rounding to whole units or pallets and labour are estimate rules from `content/`.
+- `measure_walls` and `count_masonry` give net quantities. Waste (запас), rounding and cement come from the rules in `content/`.
 - Openings are not subtracted yet; they arrive with the opening model.
-- Coordinates and quantities use only `+ − × ÷`, so arm64 and x86-64 give the same bits.
+- Coordinates and quantities use only `+ − × ÷` and `√`, so arm64 and x86-64 give the same bits.

@@ -17,6 +17,9 @@ enum class ErrorCode : std::uint8_t {
   kHeightNotPositive,
   kUnitSizeNotPositive,  // a brick or block dimension
   kJointNegative,        // a mortar joint thickness
+  kRuleSyntax,           // a content script does not compile or has a bad name
+  kRuleFailed,           // a content script raised an error or ran out of steps or memory
+  kRuleOutput,           // a content script returned values of the wrong shape
   kGestureOpen,          // undo or redo while a gesture is open
   kNothingToUndo,
   kNothingToRedo,
