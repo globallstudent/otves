@@ -240,5 +240,15 @@ TEST(WallQuantities, RejectsInvalidLintelSpec) {
             ErrorCode::kBearingNegative);
 }
 
+TEST(WallQuantities, JunctionTakesTheLowerWallsHeight) {
+  geom::WallInput low = wall(2, {6400_mm, 0_mm}, {6400_mm, 4000_mm}, 380_mm);
+  low.wall.height = 2100_mm;
+  const Measurement m = measure({wall_1(), low}, {});
+
+  ASSERT_EQ(m.junctions.size(), 1U);
+  EXPECT_EQ(m.junctions[0].walls, (std::vector{id(1), id(2)}));
+  EXPECT_NEAR(m.junctions[0].height, 2.1, kTolerance);
+}
+
 }  // namespace
 }  // namespace otves::takeoff

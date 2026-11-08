@@ -21,7 +21,7 @@ flowchart LR
 
 | API | Use |
 |---|---|
-| `measure_walls(walls, openings, lintels, joins)` | Length, footprint area, face area, volume and openings area of each wall, sorted by id; a lintel over each opening; opening issues |
+| `measure_walls(walls, openings, lintels, joins)` | Length, footprint area, face area, volume and openings area of each wall, sorted by id; a lintel over each opening; each junction with the height of its lowest wall; opening issues |
 | `count_masonry(quantities, spec)` | Units and mortar per wall and in total, plus issues |
 | `validate(spec)` | Checks unit and joint sizes typed by the user or read from content |
 | `RuleSet::compile({.norms, .rules})` | Compiles Luau scripts from `content/`; the caller passes their text |

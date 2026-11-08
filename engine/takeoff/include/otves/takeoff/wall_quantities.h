@@ -52,6 +52,12 @@ struct WallQuantities {
   double openings_area = 0.0;   // m², the openings cut from one face
 };
 
+// A place where walls meet, with the height they share there.
+struct JunctionQuantities {
+  std::vector<ElementId> walls;  // sorted
+  double height = 0.0;           // m, the lowest of the walls
+};
+
 enum class OpeningIssueKind : std::uint8_t {
   // The opening reaches past its wall's ends, below its base or above its top; only the part
   // inside the wall is cut.
@@ -75,9 +81,10 @@ struct OpeningIssue {
 };
 
 struct Measurement {
-  std::vector<WallQuantities> walls;  // one per footprint in the joins, sorted by id
-  std::vector<Lintel> lintels;        // one per opening inside a wall, sorted by opening
-  std::vector<OpeningIssue> issues;   // sorted, no duplicates
+  std::vector<WallQuantities> walls;          // one per footprint in the joins, sorted by id
+  std::vector<Lintel> lintels;                // one per opening inside a wall, sorted by opening
+  std::vector<JunctionQuantities> junctions;  // in the order of the joins' junctions
+  std::vector<OpeningIssue> issues;           // sorted, no duplicates
 };
 
 // Walls are measured as drawn: where join_walls reported an overlap, the shared part counts in

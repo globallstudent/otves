@@ -34,6 +34,7 @@ constexpr std::size_t kMaxItemLength = 64;
 constexpr int kWallFields = 7;
 constexpr int kMasonryWallFields = 3;
 constexpr int kLintelFields = 5;
+constexpr int kJunctionFields = 2;
 
 struct UnitName {
   std::string_view name;
@@ -112,11 +113,12 @@ void close_element(lua_State* state, std::size_t index) {
 // input = { walls = { { id, thickness, footprint_area, length, face_area, volume, openings_area }
 // },
 //           lintels = { { opening, wall, length, height, thickness } },
+//           junctions = { { walls = { id }, height } },
 //           masonry = { units, mortar, walls = { { id, units, mortar } } } }, in metres.
 void push_input(lua_State* state, const Measurement& measurement, const Masonry& masonry) {
   const std::span<const WallQuantities> walls = measurement.walls;
   const std::span<const Lintel> lintels = measurement.lintels;
-  lua_createtable(state, 0, 3);
+  lua_createtable(state, 0, 4);
 
   lua_createtable(state, static_cast<int>(walls.size()), 0);
   for (std::size_t i = 0; i < walls.size(); ++i) {
@@ -145,6 +147,22 @@ void push_input(lua_State* state, const Measurement& measurement, const Masonry&
     close_element(state, i);
   }
   close_table(state, "lintels");
+
+  const std::span<const JunctionQuantities> junctions = measurement.junctions;
+  lua_createtable(state, static_cast<int>(junctions.size()), 0);
+  for (std::size_t i = 0; i < junctions.size(); ++i) {
+    const JunctionQuantities& junction = junctions[i];
+    lua_createtable(state, 0, kJunctionFields);
+    lua_createtable(state, static_cast<int>(junction.walls.size()), 0);
+    for (std::size_t w = 0; w < junction.walls.size(); ++w) {
+      push_string(state, junction.walls[w].uuid().to_string());
+      lua_rawseti(state, -2, static_cast<int>(w + 1));
+    }
+    close_table(state, "walls");
+    set_field(state, "height", junction.height);
+    close_element(state, i);
+  }
+  close_table(state, "junctions");
 
   lua_createtable(state, 0, 3);
   set_field(state, "units", masonry.units);

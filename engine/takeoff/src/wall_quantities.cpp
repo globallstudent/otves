@@ -265,6 +265,22 @@ Result<Measurement> measure_walls(std::span<const geom::WallInput> walls,
                             .openings_area = openings_area});
   }
 
+  for (const geom::Junction& junction : joins.junctions) {
+    JunctionQuantities quantities;
+    double height = std::numeric_limits<double>::infinity();
+    for (const ElementId id : junction.walls) {
+      const auto found = std::ranges::lower_bound(by_id, id, {}, wall_id);
+      if (found != by_id.end() && (*found)->id == id) {
+        quantities.walls.push_back(id);
+        height = std::min(height, to_metres((*found)->wall.height));
+      }
+    }
+    if (quantities.walls.size() >= 2) {
+      quantities.height = height;
+      result.junctions.push_back(std::move(quantities));
+    }
+  }
+
   for (const OpeningInput* input : by_host) {
     const bool measured =
         std::ranges::binary_search(result.walls, input->opening.wall, {}, &WallQuantities::id);

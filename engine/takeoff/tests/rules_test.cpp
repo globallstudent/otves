@@ -41,6 +41,7 @@ const Measurement& measurement() {
           },
       .lintels =
           {{.opening = id(10), .wall = id(1), .length = 2.0, .height = 0.14, .thickness = 380_mm}},
+      .junctions = {{.walls = {id(1), id(2)}, .height = 2.8}},
       .issues = {}};
   return kMeasurement;
 }
@@ -104,6 +105,8 @@ TEST(Rules, InputSettingsAndNormsReachTheRule) {
                             { item = "wall_units", unit = "pcs", amount = input.masonry.walls[2].units },
                             { item = "norm", unit = "kg", amount = norms.table1.per_m3 },
                             { item = "lintel", unit = "m", amount = input.lintels[1].length },
+                            { item = "junction", unit = "m", amount = input.junctions[1].height },
+                            { item = "junction_walls", unit = "pcs", amount = #input.junctions[1].walls },
                             { item = "lintel_wall", unit = "pcs", amount = if input.lintels[1].wall == input.walls[1].id then 1 else 0 },
                             { item = "waste", unit = "kg", amount = settings.waste },
                             { item = "grade", unit = "pcs", amount = if settings.grade == "M100" then 1 else 0 },
@@ -126,6 +129,8 @@ TEST(Rules, InputSettingsAndNormsReachTheRule) {
   EXPECT_EQ(amount("wall_units"), 1119);
   EXPECT_EQ(amount("norm"), 300);
   EXPECT_EQ(amount("lintel"), 2.0);
+  EXPECT_EQ(amount("junction"), 2.8);
+  EXPECT_EQ(amount("junction_walls"), 2);
   EXPECT_EQ(amount("lintel_wall"), 1);
   EXPECT_EQ(amount("waste"), 0.05);
   EXPECT_EQ(amount("grade"), 1);
