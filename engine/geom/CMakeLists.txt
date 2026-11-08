@@ -1,4 +1,5 @@
 add_library(otves_geom
+  src/openings.cpp
   src/polygon.cpp
   src/wall_joins.cpp)
 add_library(otves::geom ALIAS otves_geom)
@@ -11,6 +12,7 @@ target_link_libraries(otves_geom
 
 if(OTVES_BUILD_TESTS)
   otves_add_test(otves_geom_tests
+    tests/openings_test.cpp
     tests/polygon_test.cpp
     tests/wall_joins_test.cpp)
   target_link_libraries(otves_geom_tests PRIVATE otves::geom)

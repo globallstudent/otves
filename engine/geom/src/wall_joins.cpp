@@ -15,6 +15,8 @@
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
+#include "faces.h"
+
 namespace otves::geom {
 namespace {
 
@@ -96,18 +98,9 @@ Frame make_frame(const Wall& wall) {
   frame.dir = (frame.end - frame.start) * (1.0 / frame.length);
   frame.left = perp(frame.dir);
   frame.thickness = to_metres(wall.thickness);
-  switch (wall.location_line) {
-    case LocationLine::kCenter:
-      frame.left_offset = frame.thickness / 2;
-      frame.right_offset = frame.thickness / 2;
-      break;
-    case LocationLine::kLeftFace:
-      frame.right_offset = frame.thickness;
-      break;
-    case LocationLine::kRightFace:
-      frame.left_offset = frame.thickness;
-      break;
-  }
+  const Faces offsets = faces(wall);
+  frame.left_offset = offsets.left;
+  frame.right_offset = offsets.right;
   return frame;
 }
 
