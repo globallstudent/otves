@@ -29,15 +29,15 @@ flowchart TB
 | `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`); the wall under a point and opening outlines | exists |
 | `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar, Luau rules sandbox (`RuleSet`) | exists |
 | `content/` | Norm tables and rules in Luau: masonry units, mortar, cement, lintels, ring beams, junction meshes | exists |
-| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement at a tap, outlines, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
+| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement and picking at a tap, outlines with lengths, issues, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
 | `engine/render`, `export` | Drawing, PDF/DXF/IFC | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money`, `ElementId` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme, segmented control | exists |
 | `android/app` | Activity, splash, Navigation 3 back stack from the job list to the editor | exists |
 | `android/data/project` | One Room file per job (`<job id>.job`): element rows and the op log, written after every engine response (ADR 0007) | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
-| `android/feature/projects` | The jobs on this phone, newest first; create one | exists |
-| `android/feature/editor` | Plan of a job storey by storey: walls by two taps, windows and doors by a tap on a wall, a select tool with an inspector (thickness, kind, size, delete), undo/redo, the take-off below; drawn from engine outlines | exists |
+| `android/feature/projects` | The jobs on this phone, newest first; create, rename, delete | exists |
+| `android/feature/editor` | Plan of a job storey by storey: walls by two taps, windows and doors by a tap on a wall, a select tool with an inspector (thickness, kind, size, delete), wall lengths and issues on the plan, undo/redo, the take-off below, shared as text; drawn from engine outlines | exists |
 | `android/feature/*` (estimate, ledger, …), `data/catalog`, `device/*` | Screens, prices, hardware | planned |
 
 ## Rules that hold everywhere
