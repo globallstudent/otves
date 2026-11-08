@@ -251,5 +251,47 @@ TEST(WallJoins, NearlyParallelWallsAreCutSquare) {
   expect_outline(joins, 1, {{0, -0.19}, {5, -0.19}, {5, 0.19}, {0, 0.19}});
 }
 
+TEST(WallJoins, JunctionsListWhereWallsMeet) {
+  // A room with a partition butting into its bottom wall, and a free wall elsewhere.
+  const std::vector walls{wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}, 380_mm),
+                          wall(2, {6400_mm, 0_mm}, {6400_mm, 4000_mm}, 380_mm),
+                          wall(3, {6400_mm, 4000_mm}, {0_mm, 4000_mm}, 380_mm),
+                          wall(4, {0_mm, 4000_mm}, {0_mm, 0_mm}, 380_mm),
+                          wall(5, {3200_mm, 0_mm}, {3200_mm, 2000_mm}, 120_mm),
+                          wall(6, {10000_mm, 0_mm}, {12000_mm, 0_mm}, 250_mm)};
+
+  const WallJoins joins = join_walls(walls);
+
+  const std::vector<Junction> expected{
+      {.at = {0_mm, 0_mm}, .walls = {id(1), id(4)}},
+      {.at = {0_mm, 4000_mm}, .walls = {id(3), id(4)}},
+      {.at = {3200_mm, 0_mm}, .walls = {id(1), id(5)}},
+      {.at = {6400_mm, 0_mm}, .walls = {id(1), id(2)}},
+      {.at = {6400_mm, 4000_mm}, .walls = {id(2), id(3)}},
+  };
+  EXPECT_EQ(joins.junctions, expected);
+}
+
+TEST(WallJoins, ThreeWallsAtOnePointFormOneJunction) {
+  const std::vector walls{wall(1, {0_mm, 0_mm}, {4000_mm, 0_mm}, 380_mm),
+                          wall(2, {0_mm, 0_mm}, {-4000_mm, 0_mm}, 380_mm),
+                          wall(3, {0_mm, 0_mm}, {0_mm, 3000_mm}, 250_mm)};
+
+  const WallJoins joins = join_walls(walls);
+
+  ASSERT_EQ(joins.junctions.size(), 1U);
+  EXPECT_EQ(joins.junctions[0].walls, (std::vector{id(1), id(2), id(3)}));
+}
+
+TEST(WallJoins, StraightRunAndOverlapAreNotJunctions) {
+  const std::vector straight{wall(1, {0_mm, 0_mm}, {4000_mm, 0_mm}, 380_mm),
+                             wall(2, {4000_mm, 0_mm}, {8000_mm, 0_mm}, 250_mm)};
+  const std::vector overlap{wall(1, {0_mm, 0_mm}, {4000_mm, 0_mm}, 380_mm),
+                            wall(2, {0_mm, 0_mm}, {2000_mm, 0_mm}, 380_mm)};
+
+  EXPECT_TRUE(join_walls(straight).junctions.empty());
+  EXPECT_TRUE(join_walls(overlap).junctions.empty());
+}
+
 }  // namespace
 }  // namespace otves::geom

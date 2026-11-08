@@ -24,6 +24,15 @@ struct WallFootprint {
   std::vector<Vec2> outline;
 };
 
+// A point where walls meet: a corner, a T, or several walls around one point. Two walls running
+// on in a straight line do not form a junction.
+struct Junction {
+  PointMm at;
+  std::vector<ElementId> walls;  // sorted
+
+  bool operator==(const Junction&) const = default;
+};
+
 enum class JoinIssueKind : std::uint8_t {
   // Two walls run along the same line from one point, or a wall lies inside another.
   kOverlap,
@@ -41,6 +50,7 @@ struct JoinIssue {
 
 struct WallJoins {
   std::vector<WallFootprint> footprints;  // sorted by id
+  std::vector<Junction> junctions;        // sorted by point
   std::vector<JoinIssue> issues;          // sorted, no duplicates
 };
 

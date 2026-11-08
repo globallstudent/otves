@@ -177,8 +177,12 @@ class Joiner {
     }
     for (auto& [at, ends] : points) {
       if (const std::optional<std::size_t> host = host_at(to_vec2(at))) {
+        record(at, ends, host);
         butt_all(at, *host, ends);
       } else if (ends.size() > 1) {
+        if (!in_line(ends)) {
+          record(at, ends, std::nullopt);
+        }
         join_at(at, std::move(ends));
       }
     }
@@ -187,6 +191,30 @@ class Joiner {
   }
 
  private:
+  // Two ends along one line: a straight run, or an overlap that join_at reports.
+  [[nodiscard]] bool in_line(std::span<const End> ends) const {
+    return ends.size() == 2 && cross(out_step(ends[0]), out_step(ends[1])) == 0;
+  }
+
+  // An end running along its host overlaps it rather than meeting it, so it is left out.
+  void record(PointMm at, std::span<const End> ends, std::optional<std::size_t> host) {
+    Junction junction{.at = at, .walls = {}};
+    for (const End end : ends) {
+      if (!host || cross(frames_[*host].step, out_step(end)) != 0) {
+        junction.walls.push_back(walls_[end.wall].id);
+      }
+    }
+    if (host) {
+      junction.walls.push_back(walls_[*host].id);
+    }
+    std::ranges::sort(junction.walls);
+    const auto [first, last] = std::ranges::unique(junction.walls);
+    junction.walls.erase(first, last);
+    if (junction.walls.size() >= 2) {
+      junctions_.push_back(std::move(junction));
+    }
+  }
+
   // Mitres between neighbours in counter-clockwise order around the shared point.
   void join_at(PointMm at, std::vector<End> ends) {
     std::ranges::sort(ends, [this](End lhs, End rhs) {
@@ -330,6 +358,7 @@ class Joiner {
       }
       result.footprints.push_back({.id = walls_[i].id, .outline = drop_repeats(outline)});
     }
+    result.junctions = std::move(junctions_);
     std::ranges::sort(issues_);
     const auto [first, last] = std::ranges::unique(issues_);
     issues_.erase(first, last);
@@ -384,6 +413,7 @@ class Joiner {
   std::vector<WallInput> walls_;
   std::vector<Frame> frames_;
   std::vector<Corners> corners_;
+  std::vector<Junction> junctions_;  // in point order, as the join loop visits them
   std::vector<JoinIssue> issues_;
 };
 
