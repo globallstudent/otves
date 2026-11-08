@@ -25,9 +25,9 @@ flowchart TB
 
 | Module | Role | Status |
 |---|---|---|
-| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, wall model, commands, document with op log, undo and gestures | exists |
+| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, walls and openings, commands, document with op log, undo and gestures | exists |
 | `engine/geom` | Wall joins and plan outlines (`join_walls`) | exists |
-| `engine/takeoff` | Wall quantities, masonry units and mortar, Luau rules sandbox (`RuleSet`) | exists |
+| `engine/takeoff` | Wall quantities net of openings, masonry units and mortar, Luau rules sandbox (`RuleSet`) | exists |
 | `content/` | Norm tables and rules in Luau: masonry units, mortar, cement | exists |
 | `engine/render`, `export`, `bridge` | Drawing, PDF/DXF/IFC, JNI | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money` | exists |

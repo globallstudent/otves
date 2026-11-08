@@ -21,7 +21,7 @@ flowchart LR
 
 | Value | Fields |
 |---|---|
-| `input.walls[i]` | `id`, `thickness` m, `footprint_area` m², `length` m, `face_area` m², `volume` m³ |
+| `input.walls[i]` | `id`, `thickness` m, `footprint_area` m², `length` m, `face_area` m² and `volume` m³ net of openings, `openings_area` m² |
 | `input.masonry` | `units`, `mortar` m³, `walls[i]` with `id`, `units`, `mortar` |
 | `settings` | Job settings by name, numbers or strings; absent ones are `nil` |
 | line | `item` (`a-z 0-9 _ .`, ≤ 64), `unit` (`pcs`, `m`, `m2`, `m3`, `kg`), `amount` (finite, ≥ 0) |

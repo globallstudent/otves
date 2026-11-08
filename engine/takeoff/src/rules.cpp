@@ -29,7 +29,7 @@ namespace otves::takeoff {
 namespace {
 
 constexpr std::size_t kMaxItemLength = 64;
-constexpr int kWallFields = 6;
+constexpr int kWallFields = 7;
 constexpr int kMasonryWallFields = 3;
 
 struct UnitName {
@@ -106,7 +106,8 @@ void close_element(lua_State* state, std::size_t index) {
   lua_rawseti(state, -2, static_cast<int>(index + 1));
 }
 
-// input = { walls = { { id, thickness, footprint_area, length, face_area, volume } },
+// input = { walls = { { id, thickness, footprint_area, length, face_area, volume, openings_area }
+// },
 //           masonry = { units, mortar, walls = { { id, units, mortar } } } }, in metres.
 void push_input(lua_State* state, std::span<const WallQuantities> walls, const Masonry& masonry) {
   lua_createtable(state, 0, 2);
@@ -121,6 +122,7 @@ void push_input(lua_State* state, std::span<const WallQuantities> walls, const M
     set_field(state, "length", wall.length);
     set_field(state, "face_area", wall.face_area);
     set_field(state, "volume", wall.volume);
+    set_field(state, "openings_area", wall.openings_area);
     close_element(state, i);
   }
   close_table(state, "walls");

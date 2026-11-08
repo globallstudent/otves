@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <otves/core/error.h>
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
@@ -45,7 +46,7 @@ struct Room {
   Masonry masonry;
 };
 
-Room room() {
+Room room(const std::vector<OpeningInput>& openings = {}) {
   const auto wall = [](std::int64_t n, PointMm start, PointMm end) {
     return geom::WallInput{
         .id = ElementId{Uuid::v7(n, 0, 0)},
@@ -57,7 +58,7 @@ Room room() {
   const MasonrySpec brick{.unit = {.length = 250_mm, .width = 120_mm, .height = 65_mm},
                           .joints = {.bed = 12_mm, .head = 10_mm}};
   Room result;
-  result.walls = measure_walls(walls, geom::join_walls(walls));
+  result.walls = measure_walls(walls, openings, geom::join_walls(walls)).walls;
   result.masonry = count_masonry(result.walls, brick).value();
   return result;
 }
@@ -112,6 +113,25 @@ TEST(Content, MasonryRuleRejectsUnknownMixAndBadWaste) {
   const auto bad_waste = rules.run(r.walls, r.masonry, {{"unit_waste", 1.5}});
   ASSERT_FALSE(bad_waste.has_value());
   EXPECT_NE(bad_waste.error().message.find("unit_waste must be a fraction"), std::string::npos);
+}
+
+TEST(Content, WindowSavesBricksAndMortar) {
+  const OpeningInput window{.id = ElementId{Uuid::v7(10, 0, 0)},
+                            .opening = {.wall = ElementId{Uuid::v7(1, 0, 0)},
+                                        .offset = 1200_mm,
+                                        .width = 1500_mm,
+                                        .height = 1500_mm,
+                                        .sill = 900_mm,
+                                        .kind = OpeningKind::kWindow}};
+  const Room solid = room();
+  const Room with_window = room({window});
+  const auto lines = masonry_rules().run(with_window.walls, with_window.masonry, {});
+
+  ASSERT_TRUE(lines.has_value()) << lines.error().message;
+  // 2.25 m² less face, three wythes of 0.26 × 0.077 m cells.
+  EXPECT_NEAR(solid.masonry.units - with_window.masonry.units, 2.25 * 3 / (0.26 * 0.077), 1e-6);
+  EXPECT_EQ(amount(*lines, "masonry_unit"), std::ceil(with_window.masonry.units * 1.03));
+  EXPECT_LT(with_window.masonry.mortar, solid.masonry.mortar);
 }
 
 }  // namespace

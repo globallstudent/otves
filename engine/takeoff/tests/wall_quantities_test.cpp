@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
@@ -24,8 +25,26 @@ geom::WallInput wall(std::int64_t n, PointMm start, PointMm end, Mm thickness) {
 }
 
 std::vector<WallQuantities> measure(const std::vector<geom::WallInput>& walls) {
-  return measure_walls(walls, geom::join_walls(walls));
+  return measure_walls(walls, {}, geom::join_walls(walls)).walls;
 }
+
+Measurement measure(const std::vector<geom::WallInput>& walls,
+                    const std::vector<OpeningInput>& openings) {
+  return measure_walls(walls, openings, geom::join_walls(walls));
+}
+
+// Window ОК-1: 1 500 × 1 500 on a 900 mm sill, 1 200 mm along wall 1.
+OpeningInput window(std::int64_t n, std::int64_t wall_n, Mm offset = 1200_mm, Mm sill = 900_mm) {
+  return {.id = id(n),
+          .opening = {.wall = id(wall_n),
+                      .offset = offset,
+                      .width = 1500_mm,
+                      .height = 1500_mm,
+                      .sill = sill,
+                      .kind = OpeningKind::kWindow}};
+}
+
+geom::WallInput wall_1() { return wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}, 380_mm); }
 
 TEST(WallQuantities, FreeWallMeasuresItsRectangle) {
   const auto quantities = measure({wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}, 380_mm)});
@@ -85,6 +104,72 @@ TEST(WallQuantities, OutputIsSortedByIdWhateverTheInputOrder) {
   EXPECT_EQ(quantities[0].id, id(1));
   EXPECT_EQ(quantities[1].id, id(2));
   EXPECT_EQ(quantities[2].id, id(3));
+}
+
+TEST(WallQuantities, WindowIsCutFromFaceAndVolume) {
+  const Measurement m = measure({wall_1()}, {window(10, 1)});
+
+  ASSERT_EQ(m.walls.size(), 1U);
+  const WallQuantities& q = m.walls[0];
+  EXPECT_NEAR(q.openings_area, 2.25, kTolerance);
+  EXPECT_NEAR(q.face_area, (6.4 * 2.8) - 2.25, kTolerance);
+  EXPECT_NEAR(q.volume, (6.4 * 0.38 * 2.8) - (2.25 * 0.38), kTolerance);
+  EXPECT_NEAR(q.footprint_area, 6.4 * 0.38, kTolerance);
+  EXPECT_TRUE(m.issues.empty());
+}
+
+TEST(WallQuantities, OpeningPastTheWallIsClippedAndReported) {
+  // 400 mm of the first window fits before the wall's end; the second reaches 600 mm above the
+  // top; the third lies wholly past the end.
+  const Measurement m =
+      measure({wall_1()},
+              {window(10, 1, 6000_mm), window(11, 1, 1200_mm, 1900_mm), window(12, 1, 7000_mm)});
+
+  EXPECT_NEAR(m.walls[0].openings_area, (0.4 * 1.5) + (1.5 * 0.9), kTolerance);
+  const std::vector<OpeningIssue> expected{
+      {.opening = id(10), .kind = OpeningIssueKind::kOutsideWall},
+      {.opening = id(11), .kind = OpeningIssueKind::kOutsideWall},
+      {.opening = id(12), .kind = OpeningIssueKind::kOutsideWall},
+  };
+  EXPECT_EQ(m.issues, expected);
+}
+
+TEST(WallQuantities, OpeningEndingAtTheWallEndFits) {
+  const Measurement m = measure({wall_1()}, {window(10, 1, 4900_mm)});
+
+  EXPECT_NEAR(m.walls[0].openings_area, 2.25, kTolerance);
+  EXPECT_TRUE(m.issues.empty());
+}
+
+TEST(WallQuantities, OverlappingOpeningsAreCutOnce) {
+  // The second window starts 500 mm into the first and 300 mm higher.
+  const Measurement m =
+      measure({wall_1()}, {window(10, 1), window(11, 1, 1700_mm, 1200_mm), window(12, 1, 4500_mm)});
+
+  const double shared = 1.0 * 1.2;
+  EXPECT_NEAR(m.walls[0].openings_area, (3 * 2.25) - shared, kTolerance);
+  const std::vector<OpeningIssue> expected{
+      {.opening = id(10), .kind = OpeningIssueKind::kOverlap},
+      {.opening = id(11), .kind = OpeningIssueKind::kOverlap},
+  };
+  EXPECT_EQ(m.issues, expected);
+}
+
+TEST(WallQuantities, OpeningWithoutItsWallIsIgnoredAndReported) {
+  const Measurement m = measure({wall_1()}, {window(10, 7)});
+
+  EXPECT_EQ(m.walls[0].openings_area, 0.0);
+  const std::vector<OpeningIssue> expected{{.opening = id(10), .kind = OpeningIssueKind::kNoWall}};
+  EXPECT_EQ(m.issues, expected);
+}
+
+TEST(WallQuantities, OpeningsFollowTheirOwnWall) {
+  const Measurement m = measure({wall(2, {6400_mm, 0_mm}, {6400_mm, 4000_mm}, 380_mm), wall_1()},
+                                {window(10, 2), window(11, 1), window(12, 1, 4000_mm)});
+
+  ASSERT_EQ(m.walls.size(), 2U);
+  EXPECT_NEAR(m.walls[0].openings_area, 2 * 2.25, kTolerance);
+  EXPECT_NEAR(m.walls[1].openings_area, 2.25, kTolerance);
 }
 
 }  // namespace
