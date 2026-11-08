@@ -1,0 +1,152 @@
+// The contract between the Kotlin app and the C++ engine (docs/adr/0006). Add fields only at
+// the end of a table, with a default; never renumber, retype or remove one: deprecate it. Enum
+// values never change once released. Lengths are whole millimetres.
+
+namespace otves.schema;
+
+file_identifier "OTVS";
+
+struct Uuid {
+  high:ulong;
+  low:ulong;
+}
+
+struct PointMm {
+  x:long;
+  y:long;
+}
+
+enum LocationLine:ubyte { Center = 0, LeftFace = 1, RightFace = 2 }
+
+enum OpeningKind:ubyte { Window = 0, Door = 1, Empty = 2 }
+
+enum WallEnd:ubyte { Start = 0, End = 1 }
+
+table Level {
+  elevation:long;
+  height:long;
+}
+
+table Wall {
+  level:Uuid;
+  start:PointMm;
+  end:PointMm;
+  thickness:long;
+  height:long;
+  location_line:LocationLine = Center;
+}
+
+table Opening {
+  wall:Uuid;
+  offset:long;
+  width:long;
+  height:long;
+  sill:long;
+  kind:OpeningKind = Window;
+}
+
+table AddLevel { level:Level; }
+table SetLevelElevation { level:Uuid; elevation:long; }
+table SetLevelHeight { level:Uuid; height:long; }
+table RemoveLevel { level:Uuid; }
+
+table AddWall { wall:Wall; }
+table MoveWallEnd { wall:Uuid; end:WallEnd = End; to:PointMm; }
+table SetWallThickness { wall:Uuid; thickness:long; }
+table SetWallHeight { wall:Uuid; height:long; }
+table SetWallLocationLine { wall:Uuid; location_line:LocationLine = Center; }
+table RemoveWall { wall:Uuid; }
+
+table AddOpening { opening:Opening; }
+table MoveOpening { opening:Uuid; offset:long; }
+table ResizeOpening { opening:Uuid; width:long; height:long; }
+table SetOpeningSill { opening:Uuid; sill:long; }
+table SetOpeningKind { opening:Uuid; kind:OpeningKind = Window; }
+table RemoveOpening { opening:Uuid; }
+
+// Commands between BeginGesture and EndGesture fold into one undo step.
+table BeginGesture {}
+table EndGesture {}
+table Undo {}
+table Redo {}
+
+union Command {
+  AddLevel,
+  SetLevelElevation,
+  SetLevelHeight,
+  RemoveLevel,
+  AddWall,
+  MoveWallEnd,
+  SetWallThickness,
+  SetWallHeight,
+  SetWallLocationLine,
+  RemoveWall,
+  AddOpening,
+  MoveOpening,
+  ResizeOpening,
+  SetOpeningSill,
+  SetOpeningKind,
+  RemoveOpening,
+  BeginGesture,
+  EndGesture,
+  Undo,
+  Redo,
+}
+
+table CommandEntry {
+  command:Command;
+}
+
+// Commands run in order; one that fails changes nothing and the rest still run.
+table Request {
+  version:uint = 1;
+  commands:[CommandEntry];
+}
+
+enum ErrorCode:ubyte {
+  None = 0,
+  NotFound = 1,
+  OffPlan = 2,
+  ZeroLength = 3,
+  ThicknessNotPositive = 4,
+  HeightNotPositive = 5,
+  WidthNotPositive = 6,
+  OffsetNegative = 7,
+  SillNegative = 8,
+  BearingNegative = 9,
+  UnitSizeNotPositive = 10,
+  JointNegative = 11,
+  RuleSyntax = 12,
+  RuleFailed = 13,
+  RuleOutput = 14,
+  GestureOpen = 15,
+  NothingToUndo = 16,
+  NothingToRedo = 17,
+  CorruptData = 18,
+  UnsupportedVersion = 19,
+  Internal = 20,
+}
+
+table CommandResult {
+  error:ErrorCode = None;
+  message:string;  // English context for logs; the app shows translated text for `error`
+  created:Uuid;    // the element the command created, if any
+}
+
+union Element { Level, Wall, Opening }
+
+// An element's new value, or its deletion when `element` is NONE.
+table ElementChange {
+  id:Uuid;
+  element:Element;
+}
+
+table Response {
+  version:uint = 1;
+  results:[CommandResult];  // one per command, in order
+  changes:[ElementChange];  // sorted by id
+  can_undo:bool;
+  can_redo:bool;
+}
+
+root_type Request;

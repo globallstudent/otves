@@ -29,11 +29,12 @@ flowchart TB
 | `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`) | exists |
 | `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar, Luau rules sandbox (`RuleSet`) | exists |
 | `content/` | Norm tables and rules in Luau: masonry units, mortar, cement, lintels, ring beams, junction meshes | exists |
-| `engine/render`, `export`, `bridge` | Drawing, PDF/DXF/IFC, JNI | planned |
+| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`), JNI functions of `libdesign.so` | exists |
+| `engine/render`, `export` | Drawing, PDF/DXF/IFC | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme | exists |
 | `android/app` | Activity, splash, navigation root | exists |
-| `android/feature/*`, `data/*`, `device/*`, `engine-bridge` | Screens, persistence, hardware, engine binding | planned |
+| `android/feature/*`, `data/*`, `device/*`, `engine-bridge` | Screens, persistence, hardware, the Kotlin side of the bridge | planned |
 
 ## Rules that hold everywhere
 

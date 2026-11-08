@@ -1,0 +1,4 @@
+InheritParentConfig: true
+# flatbuffers.h and jni.h are umbrella headers; generated code and the JNI spec use them as such.
+CheckOptions:
+  misc-include-cleaner.IgnoreHeaders: 'flatbuffers/.*;jni\.h;jni_md\.h'
