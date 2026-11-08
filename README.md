@@ -42,6 +42,8 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 
 Toolchain: CMake ≥ 4.0, Ninja, Clang (AppleClang or LLVM 23), LLVM 23 clang-format and clang-tidy, Android SDK platform 37. Exact versions are in `android/gradle/libs.versions.toml` and `engine/vcpkg.json`.
 
+Choose the compiler (`CC`, `CXX`) before the first configure of a build folder. vcpkg builds dependencies with the same one; sanitizer runtimes from two compilers do not link.
+
 ## Docs
 
 - [Architecture](docs/architecture.md)
