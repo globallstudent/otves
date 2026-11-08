@@ -5,6 +5,7 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | Code | Russian (UI) | Uzbek | Meaning |
 |---|---|---|---|
 | job | объект | obyekt | One construction site; one `.job` file |
+| op log | журнал изменений | o‘zgarishlar jurnali | Property-level changes of a job in order; undo, history and sync read it (ADR 0003, 0007) |
 | part | часть | qism | House, summer kitchen, fence, yard inside a job |
 | level | этаж | qavat | Storey, including basement (подвал) and foundation; walls stand on one, heights measured from its floor |
 | wall | стена | devor | Masonry or block wall with thickness in bricks; its height is the masonry, below the ring beam |

@@ -25,18 +25,20 @@ flowchart TB
 
 | Module | Role | Status |
 |---|---|---|
-| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels, walls and openings, commands, document with op log, undo and gestures | exists |
-| `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`) | exists |
+| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels, walls and openings, commands, document with op log, undo, gestures and opening a saved job | exists |
+| `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`); the wall under a point and opening outlines | exists |
 | `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar, Luau rules sandbox (`RuleSet`) | exists |
 | `content/` | Norm tables and rules in Luau: masonry units, mortar, cement, lintels, ring beams, junction meshes | exists |
-| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`), JNI functions of `libdesign.so` | exists |
+| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement at a tap, outlines, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
 | `engine/render`, `export` | Drawing, PDF/DXF/IFC | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money`, `ElementId` | exists |
-| `android/core/designsystem` | Colour roles, dimensions, theme | exists |
-| `android/app` | Activity, splash, navigation root | exists |
+| `android/core/designsystem` | Colour roles, dimensions, theme, segmented control | exists |
+| `android/app` | Activity, splash, Navigation 3 back stack from the job list to the editor | exists |
+| `android/data/project` | One Room file per job (`<job id>.job`): element rows and the op log, written after every engine response (ADR 0007) | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
-| `android/feature/editor` | Plan of one storey: tap two points for a wall, undo/redo, the take-off below; drawn from engine outlines | exists |
-| `android/feature/*` (projects, estimate, …), `data/*`, `device/*` | Screens, persistence, hardware | planned |
+| `android/feature/projects` | The jobs on this phone, newest first; create one | exists |
+| `android/feature/editor` | Plan of a job storey by storey: walls by two taps, windows and doors by a tap on a wall, undo/redo, the take-off below; drawn from engine outlines | exists |
+| `android/feature/*` (estimate, ledger, …), `data/catalog`, `device/*` | Screens, prices, hardware | planned |
 
 ## Rules that hold everywhere
 
@@ -47,6 +49,23 @@ flowchart TB
 5. Numbers from standards (КМК, СП, ГОСТ, EN) live in `content/`, not in code.
 6. UI text goes through resources: Russian first, Uzbek Latin and Cyrillic second.
 7. A change merges only with formatting, lint, tests and sanitizers green.
+
+## Saving a job
+
+```mermaid
+sequenceDiagram
+  participant E as editor ViewModel
+  participant G as engine (libdesign.so)
+  participant J as data/project (Room)
+  E->>J: load()
+  J-->>E: element rows, newest stamp
+  E->>G: LoadContent, OpenModel
+  loop every edit
+    E->>G: command
+    G-->>E: changes, outlines, take-off, log groups
+    E->>J: record(response), one transaction
+  end
+```
 
 ## Threads
 
