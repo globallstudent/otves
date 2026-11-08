@@ -34,14 +34,15 @@ import kotlin.math.floor
 import kotlin.math.roundToLong
 
 /**
- * The plan as the engine derived it: wall and opening outlines in metres, drawn with y up. Pinch
- * to zoom, drag to pan, tap to build. Taps go out in plan millimetres, with how far around the
- * finger still counts as touched at the current zoom.
+ * The plan as the engine derived it: wall and opening outlines in metres, drawn with y up, over
+ * the storey below in outline. Pinch to zoom, drag to pan, tap to build. Taps go out in plan
+ * millimetres, with how far around the finger still counts as touched at the current zoom.
  */
 @Composable
 internal fun PlanCanvas(
     outlines: List<WallOutline>,
     openings: List<OpeningOutline>,
+    below: List<WallOutline>,
     wallStart: PointMm?,
     onTap: (at: PointMm, reach: Mm) -> Unit,
     modifier: Modifier = Modifier,
@@ -66,15 +67,11 @@ internal fun PlanCanvas(
                 },
     ) {
         grid(view, colors.divider, colors.border)
+        for (outline in below) {
+            drawPath(path(view, outline), colors.inkTertiary, style = Stroke(width = wallStroke))
+        }
         for (outline in outlines) {
-            val path =
-                Path().apply {
-                    outline.points.forEachIndexed { index, point ->
-                        val at = view.toScreen(point.x, point.y)
-                        if (index == 0) moveTo(at.x, at.y) else lineTo(at.x, at.y)
-                    }
-                    close()
-                }
+            val path = path(view, outline)
             drawPath(path, colors.inkTertiary)
             drawPath(path, colors.ink, style = Stroke(width = wallStroke))
         }
@@ -128,6 +125,18 @@ private class PlanView(
         return PointMm(Mm((x * MM_PER_METRE).roundToLong()), Mm((y * MM_PER_METRE).roundToLong()))
     }
 }
+
+private fun path(
+    view: PlanView,
+    outline: WallOutline,
+): Path =
+    Path().apply {
+        outline.points.forEachIndexed { index, point ->
+            val at = view.toScreen(point.x, point.y)
+            if (index == 0) moveTo(at.x, at.y) else lineTo(at.x, at.y)
+        }
+        close()
+    }
 
 // The gap an opening leaves in its wall, with the usual plan symbol: a window's glazing line, a
 // door's leaf and swing. Corners come counter-clockwise: near and far end on the right face, then

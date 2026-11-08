@@ -48,8 +48,14 @@ internal val DoorSizes: List<OpeningSize> =
 @Immutable
 internal data class EditorUiState(
     val ready: Boolean = false,
+    /** Storeys from the bottom up; the user works on [level]. */
+    val levels: List<ElementId> = emptyList(),
+    val level: ElementId? = null,
+    /** The current storey's walls and openings. */
     val outlines: List<WallOutline> = emptyList(),
     val openings: List<OpeningOutline> = emptyList(),
+    /** The walls of the storey below, drawn faintly to build on. */
+    val below: List<WallOutline> = emptyList(),
     val takeoff: List<QuantityLine> = emptyList(),
     val takeoffFailed: Boolean = false,
     /** The first tap of a wall still waiting for its second. */
@@ -65,8 +71,8 @@ internal data class EditorUiState(
 )
 
 /**
- * The plan of one storey. The engine owns the model; this keeps only what the screen draws and
- * the wall ends it snaps to, both taken from engine responses.
+ * The plan, one storey at a time. The engine owns the model; this keeps only what the screen
+ * draws and the wall ends it snaps to, all taken from engine responses.
  */
 internal class EditorViewModel(
     private val engine: Engine,
@@ -75,18 +81,19 @@ internal class EditorViewModel(
     private val state = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = state.asStateFlow()
 
-    private var level: ElementId? = null
-
     // The ground floor comes with a new job, so undo stops at the user's first step.
     private var userSteps = 0
+    private val levels = mutableMapOf<ElementId, Level>()
     private val walls = mutableMapOf<ElementId, Wall>()
+    private var outlines: List<WallOutline> = emptyList()
+    private var openings: List<OpeningOutline> = emptyList()
 
     init {
         viewModelScope.launch {
             val response = engine.send(listOf(loadContent(), EngineCommand.AddLevel(Ground)))
-            level = (response.results.getOrNull(1) as? CommandResult.Done)?.created
-            apply(response)
-            state.update { it.copy(ready = level != null) }
+            val ground = (response.results.getOrNull(1) as? CommandResult.Done)?.created
+            apply(response, show = ground)
+            state.update { it.copy(ready = ground != null) }
         }
     }
 
@@ -99,8 +106,8 @@ internal class EditorViewModel(
         at: PointMm,
         reach: Mm,
     ) {
-        val onLevel = level ?: return
         val current = state.value
+        val onLevel = current.level ?: return
         when (current.tool) {
             Tool.WALL -> tapWall(onLevel, at, reach)
             Tool.WINDOW -> place(onLevel, at, reach, OpeningKind.WINDOW, current.windowSize, WindowSill)
@@ -117,6 +124,19 @@ internal class EditorViewModel(
     fun selectWindowSize(size: OpeningSize) = state.update { it.copy(windowSize = size) }
 
     fun selectDoorSize(size: OpeningSize) = state.update { it.copy(doorSize = size) }
+
+    fun selectLevel(level: ElementId) {
+        if (level in levels) {
+            state.update { it.copy(refused = null) }
+            show(level)
+        }
+    }
+
+    /** A storey on top of the highest one, which the user then works on. */
+    fun addLevel() {
+        val top = levels.values.maxOfOrNull { it.elevation + it.height } ?: 0.mm
+        send(EngineCommand.AddLevel(Level(elevation = top, height = StoreyHeight)), showCreated = true)
+    }
 
     fun undo() = send(EngineCommand.Undo)
 
@@ -147,33 +167,43 @@ internal class EditorViewModel(
         sill: Mm,
     ) = send(EngineCommand.PlaceOpening(onLevel, at, reach, size.width, size.height, sill, kind))
 
-    private fun send(command: EngineCommand) {
+    private fun send(
+        command: EngineCommand,
+        showCreated: Boolean = false,
+    ) {
         viewModelScope.launch {
             val response = engine.send(listOf(command))
-            if (response.results.singleOrNull() is CommandResult.Done) {
+            val result = response.results.singleOrNull()
+            if (result is CommandResult.Done) {
                 userSteps +=
                     when (command) {
                         EngineCommand.Undo -> -1
-                        EngineCommand.Redo, is EngineCommand.AddWall, is EngineCommand.PlaceOpening -> 1
+                        EngineCommand.Redo, is EngineCommand.AddLevel, is EngineCommand.AddWall, is EngineCommand.PlaceOpening -> 1
                         else -> 0
                     }
             }
-            apply(response)
+            apply(response, show = if (showCreated) (result as? CommandResult.Done)?.created else null)
         }
     }
 
-    private fun apply(response: EngineResponse) {
+    // Mirrors the engine's changes, then shows [show], or else stays on the current storey while
+    // it exists; when undo removed it, the top storey left.
+    private fun apply(
+        response: EngineResponse,
+        show: ElementId? = null,
+    ) {
         for (change in response.changes) {
             when (val element = change.element) {
+                is Level -> levels[change.id] = element
                 is Wall -> walls[change.id] = element
-                null -> walls.remove(change.id)
+                null -> levels.remove(change.id) ?: walls.remove(change.id)
                 else -> Unit
             }
         }
+        outlines = response.outlines ?: outlines
+        openings = response.openings ?: openings
         state.update { current ->
             current.copy(
-                outlines = response.outlines ?: current.outlines,
-                openings = response.openings ?: current.openings,
                 takeoff =
                     when (val takeoff = response.takeoff) {
                         is Takeoff.Lines -> takeoff.lines
@@ -190,16 +220,43 @@ internal class EditorViewModel(
                         ?.error,
             )
         }
+        show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels })
     }
 
+    private fun show(level: ElementId?) {
+        val ordered = orderedLevels()
+        val shown = level ?: ordered.lastOrNull()
+        val below = ordered.getOrNull(ordered.indexOf(shown) - 1)
+        state.update { current ->
+            current.copy(
+                levels = ordered,
+                level = shown,
+                outlines = outlines.filter { it.level == shown },
+                openings = openings.filter { it.level == shown },
+                below = if (below == null) emptyList() else outlines.filter { it.level == below },
+                wallStart = if (shown == current.level) current.wallStart else null,
+            )
+        }
+    }
+
+    // By elevation; storeys at one elevation keep the order of their ids, which grow with time.
+    private fun orderedLevels(): List<ElementId> =
+        levels.entries
+            .sortedWith(compareBy<Map.Entry<ElementId, Level>> { it.value.elevation }.thenBy { it.key.uuid.toString() })
+            .map { it.key }
+
     // Ends join only where points are equal to the millimetre, so a tap within reach of a wall
-    // end lands on it; elsewhere it lands on the 100 mm grid.
+    // end lands on it; elsewhere it lands on the 100 mm grid. Ends on the storey below count too,
+    // so walls stand on walls.
     private fun snap(
         at: PointMm,
         reach: Mm,
     ): PointMm {
+        val current = state.value
+        val below = current.levels.getOrNull(current.levels.indexOf(current.level) - 1)
         val end =
             walls.values
+                .filter { it.level == current.level || it.level == below }
                 .flatMap { listOf(it.start, it.end) }
                 .minByOrNull { distance(it, at) }
         if (end != null && distance(end, at) <= reach.value) {
@@ -216,7 +273,8 @@ internal class EditorViewModel(
     private fun onGrid(value: Mm): Mm = Mm((value.value.toDouble() / Grid.value).roundToLong() * Grid.value)
 
     private companion object {
-        val Ground = Level(elevation = 0.mm, height = 3000.mm)
+        val StoreyHeight = 3000.mm
+        val Ground = Level(elevation = 0.mm, height = StoreyHeight)
         val WallHeight = 2800.mm
         val Grid = 100.mm
 

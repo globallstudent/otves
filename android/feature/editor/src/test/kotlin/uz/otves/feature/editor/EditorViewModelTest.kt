@@ -16,8 +16,10 @@ import uz.otves.engine.ContentScript
 import uz.otves.engine.ElementChange
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
+import uz.otves.engine.EngineElement
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
+import uz.otves.engine.Level
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
@@ -26,6 +28,7 @@ import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.QuantityUnit
 import uz.otves.engine.Takeoff
+import uz.otves.engine.Wall
 import uz.otves.engine.WallOutline
 import kotlin.uuid.Uuid
 
@@ -35,16 +38,15 @@ class EditorViewModelTest {
     private val reach = 300.mm
     private val content = EngineCommand.LoadContent(listOf(ContentScript("practice", "return {}")), emptyList())
 
-    /** Answers like the engine: the level on start, a new wall for every AddWall. */
+    /** A small engine: keeps the elements, reports changes and outlines, undoes the last step. */
     private class FakeEngine(
-        private val level: ElementId,
+        private val ground: ElementId,
     ) : Engine {
         val sent = mutableListOf<List<EngineCommand>>()
         var refuseNext: EngineError? = null
-        private var walls = 0L
-
-        // Like the engine's: the ground floor is on the stack too.
-        private var undoable = 0
+        private var next = 1L
+        private val elements = linkedMapOf<ElementId, EngineElement>()
+        private val steps = ArrayDeque<ElementId>()
 
         override suspend fun send(commands: List<EngineCommand>): EngineResponse {
             sent += commands
@@ -52,6 +54,16 @@ class EditorViewModelTest {
             refuseNext = null
             val results = mutableListOf<CommandResult>()
             val changes = mutableListOf<ElementChange>()
+
+            fun create(
+                element: EngineElement,
+                id: ElementId = ElementId(Uuid.fromLongs(++next, 0)),
+            ) {
+                elements[id] = element
+                steps.addLast(id)
+                results += CommandResult.Done(id)
+                changes += ElementChange(id, element)
+            }
             for (command in commands) {
                 when {
                     refusal != null -> {
@@ -59,27 +71,27 @@ class EditorViewModelTest {
                     }
 
                     command is EngineCommand.AddLevel -> {
-                        undoable++
-                        results += CommandResult.Done(level)
-                    }
-
-                    command is EngineCommand.Undo -> {
-                        undoable--
-                        results += CommandResult.Done(null)
-                    }
-
-                    command is EngineCommand.PlaceOpening -> {
-                        undoable++
-                        val id = ElementId(Uuid.fromLongs(++walls, 1))
-                        results += CommandResult.Done(id)
-                        changes += ElementChange(id, Opening(level, 0.mm, command.width, command.height, command.sill, command.kind))
+                        if (elements.isEmpty()) create(command.level, ground) else create(command.level)
                     }
 
                     command is EngineCommand.AddWall -> {
-                        undoable++
-                        val id = ElementId(Uuid.fromLongs(++walls, 0))
-                        results += CommandResult.Done(id)
-                        changes += ElementChange(id, command.wall)
+                        create(command.wall)
+                    }
+
+                    command is EngineCommand.PlaceOpening -> {
+                        val wall = elements.entries.firstOrNull { (it.value as? Wall)?.level == command.level }?.key
+                        if (wall == null) {
+                            results += CommandResult.Failed(EngineError.NO_WALL, "no wall")
+                        } else {
+                            create(Opening(wall, 0.mm, command.width, command.height, command.sill, command.kind))
+                        }
+                    }
+
+                    command is EngineCommand.Undo && steps.isNotEmpty() -> {
+                        val id = steps.removeLast()
+                        elements.remove(id)
+                        results += CommandResult.Done(null)
+                        changes += ElementChange(id, null)
                     }
 
                     else -> {
@@ -87,16 +99,14 @@ class EditorViewModelTest {
                     }
                 }
             }
+            val changed = changes.isNotEmpty()
             return EngineResponse(
                 results = results,
                 changes = changes,
-                canUndo = undoable > 0,
+                canUndo = steps.isNotEmpty(),
                 canRedo = false,
-                outlines = if (changes.isEmpty()) null else listOf(WallOutline(changes.first().id, level, listOf(PointM(0.0, 0.0)))),
-                openings =
-                    changes
-                        .filter { it.element is Opening }
-                        .map { OpeningOutline(it.id, level, (it.element as Opening).kind, listOf(PointM(0.0, 0.0))) },
+                outlines = if (changed) wallOutlines() else null,
+                openings = if (changed) openingOutlines() else null,
                 takeoff =
                     if (refusal == EngineError.RULE_FAILED) {
                         Takeoff.Failed(refusal, "boom")
@@ -105,6 +115,17 @@ class EditorViewModelTest {
                     },
             )
         }
+
+        private fun wallOutlines(): List<WallOutline> =
+            elements.mapNotNull { (id, element) -> (element as? Wall)?.let { WallOutline(id, it.level, listOf(PointM(0.0, 0.0))) } }
+
+        private fun openingOutlines(): List<OpeningOutline> =
+            elements.mapNotNull { (id, element) ->
+                (element as? Opening)?.let {
+                    val level = (elements.getValue(it.wall) as Wall).level
+                    OpeningOutline(id, level, it.kind, listOf(PointM(0.0, 0.0)))
+                }
+            }
     }
 
     private val engine = FakeEngine(level)
@@ -172,6 +193,8 @@ class EditorViewModelTest {
     @Test
     fun aWindowGoesIntoTheTappedWallWithTheChosenSize() {
         val viewModel = EditorViewModel(engine) { content }
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.selectTool(Tool.WINDOW)
         viewModel.selectWindowSize(WindowSizes[2])
 
@@ -214,6 +237,64 @@ class EditorViewModelTest {
         viewModel.selectTool(Tool.WINDOW)
 
         assertThat(viewModel.uiState.value.wallStart).isNull()
+    }
+
+    @Test
+    fun aNewStoreyStandsOnTheTopOneAndIsShownOverIt() {
+        val viewModel = EditorViewModel(engine) { content }
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
+
+        viewModel.addLevel()
+
+        val add = engine.sent.last().single() as EngineCommand.AddLevel
+        assertThat(add.level).isEqualTo(Level(elevation = 3_000.mm, height = 3_000.mm))
+        val state = viewModel.uiState.value
+        assertThat(state.levels).hasSize(2)
+        assertThat(state.levels.first()).isEqualTo(level)
+        assertThat(state.level).isEqualTo(state.levels.last())
+        assertThat(state.outlines).isEmpty()
+        assertThat(state.below).hasSize(1)
+        assertThat(state.canUndo).isTrue()
+    }
+
+    @Test
+    fun choosingAStoreyShowsItsWalls() {
+        val viewModel = EditorViewModel(engine) { content }
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
+        viewModel.addLevel()
+
+        viewModel.selectLevel(level)
+
+        val state = viewModel.uiState.value
+        assertThat(state.level).isEqualTo(level)
+        assertThat(state.outlines).hasSize(1)
+        assertThat(state.below).isEmpty()
+    }
+
+    @Test
+    fun undoingAStoreyGoesBackDown() {
+        val viewModel = EditorViewModel(engine) { content }
+        viewModel.addLevel()
+
+        viewModel.undo()
+
+        assertThat(viewModel.uiState.value.levels).containsExactly(level)
+        assertThat(viewModel.uiState.value.level).isEqualTo(level)
+        assertThat(viewModel.uiState.value.canUndo).isFalse()
+    }
+
+    @Test
+    fun aWallEndOnTheStoreyBelowCatchesTaps() {
+        val viewModel = EditorViewModel(engine) { content }
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.tap(PointMm(6_437.mm, 0.mm), reach)
+        viewModel.addLevel()
+
+        viewModel.tap(PointMm(6_250.mm, 180.mm), reach)
+
+        assertThat(viewModel.uiState.value.wallStart).isEqualTo(PointMm(6_400.mm, 0.mm))
     }
 
     @Test

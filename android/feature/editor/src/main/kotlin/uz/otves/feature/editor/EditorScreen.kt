@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -27,6 +29,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -69,6 +74,8 @@ fun EditorRoute(
                 onThickness = viewModel::selectThickness,
                 onWindowSize = viewModel::selectWindowSize,
                 onDoorSize = viewModel::selectDoorSize,
+                onLevel = viewModel::selectLevel,
+                onAddLevel = viewModel::addLevel,
                 onUndo = viewModel::undo,
                 onRedo = viewModel::redo,
             ),
@@ -84,6 +91,8 @@ internal data class EditorActions(
     val onThickness: (Mm) -> Unit = {},
     val onWindowSize: (OpeningSize) -> Unit = {},
     val onDoorSize: (OpeningSize) -> Unit = {},
+    val onLevel: (ElementId) -> Unit = {},
+    val onAddLevel: () -> Unit = {},
     val onUndo: () -> Unit = {},
     val onRedo: () -> Unit = {},
 )
@@ -102,8 +111,9 @@ internal fun EditorScreen(
             ) {
                 // One line and the same buttons always: a taller bar would shift the plan under
                 // the user's finger between the two taps of a wall.
+                val storey = state.levels.indexOf(state.level) + 1
                 Text(
-                    text = stringResource(R.string.editor_title),
+                    text = if (storey > 0) stringResource(R.string.level_name, storey) else stringResource(R.string.editor_title),
                     style = MaterialTheme.typography.titleLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -127,6 +137,7 @@ internal fun EditorScreen(
                 PlanCanvas(
                     outlines = state.outlines,
                     openings = state.openings,
+                    below = state.below,
                     wallStart = state.wallStart,
                     onTap = actions.onTap,
                     modifier = Modifier.fillMaxSize(),
@@ -158,8 +169,70 @@ internal fun EditorScreen(
                         }
                     }
                 }
+                if (state.ready) {
+                    LevelPicker(
+                        levels = state.levels,
+                        current = state.level,
+                        onLevel = actions.onLevel,
+                        onAdd = actions.onAddLevel,
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(OtvesDimens.gutter),
+                    )
+                }
             }
             TakeoffPanel(state)
+        }
+    }
+}
+
+// Storeys as round buttons, the top one first, under a button for a new storey. They sit on the
+// right, away from where the plan starts.
+@Composable
+private fun LevelPicker(
+    levels: List<ElementId>,
+    current: ElementId?,
+    onLevel: (ElementId) -> Unit,
+    onAdd: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val addLabel = stringResource(R.string.level_add)
+        RoundButton(text = "+", selected = false, onClick = onAdd, description = addLabel)
+        levels.asReversed().forEach { level ->
+            val number = levels.indexOf(level) + 1
+            RoundButton(
+                text = number.toString(),
+                selected = level == current,
+                onClick = { onLevel(level) },
+                description = stringResource(R.string.level_name, number),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoundButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    description: String,
+) {
+    val colors = OtvesTheme.colors
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (selected) colors.ink else colors.surface,
+        contentColor = if (selected) colors.surface else colors.ink,
+        shadowElevation = 2.dp,
+        modifier =
+            Modifier
+                .size(OtvesDimens.minTarget)
+                .semantics {
+                    contentDescription = description
+                    this.selected = selected
+                },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(text, style = MaterialTheme.typography.titleMedium)
         }
     }
 }
@@ -294,6 +367,8 @@ private fun EditorScreenPreview() {
             state =
                 EditorUiState(
                     ready = true,
+                    levels = listOf(level),
+                    level = level,
                     outlines =
                         listOf(
                             WallOutline(
