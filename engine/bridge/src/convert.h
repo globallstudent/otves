@@ -39,6 +39,16 @@ namespace otves::bridge {
 // enum holds an unknown value. Gesture and undo/redo entries are not core commands.
 [[nodiscard]] std::expected<Command, Error> decode(const schema::CommandEntry& entry);
 
+// A tap on the plan of a level, with how far around it still counts as touched.
+struct Tap {
+  ElementId level;
+  PointMm at;
+  Mm reach;
+};
+
+// kCorruptData when the point is missing.
+[[nodiscard]] std::expected<Tap, Error> decode(const schema::Pick* pick);
+
 // A tap that places an opening (schema PlaceOpening); the opening's wall and offset are unset.
 struct OpeningPlacement {
   ElementId level;

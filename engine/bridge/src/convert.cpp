@@ -314,6 +314,14 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
   }
 }
 
+std::expected<Tap, Error> decode(const schema::Pick* pick) {
+  if (pick == nullptr || pick->at() == nullptr) {
+    return corrupt("pick or its point is missing");
+  }
+  return Tap{
+      .level = to_id(pick->level()), .at = to_point(*pick->at()), .reach = Mm{pick->reach()}};
+}
+
 std::expected<OpeningPlacement, Error> decode(const schema::PlaceOpening* place) {
   if (place == nullptr || place->at() == nullptr) {
     return corrupt("placement or its point is missing");

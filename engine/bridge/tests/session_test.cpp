@@ -77,6 +77,12 @@ class Request {
     return add(Command::RemoveWall, schema::CreateRemoveWall(builder_, &id).Union());
   }
 
+  // What a tap with a 300 mm reach picks.
+  Request& pick(ElementId level, schema::PointMm at) {
+    const schema::Uuid on = key(level);
+    return add(Command::Pick, schema::CreatePick(builder_, &on, &at, 300).Union());
+  }
+
   // A saved ground floor (Uuid{10, 1}) with a 6.4 m wall (Uuid{10, 2}) and, if asked, a window
   // in it (Uuid{10, 3}) or one in a wall that is not saved.
   enum class Window : std::uint8_t { kNone, kInWall, kOrphan };
@@ -403,6 +409,33 @@ TEST(Session, ResponsesCarryTheGroupsAddedToTheLog) {
 
   const auto& idle = respond(session, Request{}.undo().bytes());
   EXPECT_EQ(idle.log()->size(), 0U);
+}
+
+TEST(Session, PickFindsWhatIsUnderTheTapOpeningsFirst) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const ElementId wall = add_wall(session, level);
+  const auto& placed = respond(session, Request{}.place(level, {3000, 0}).bytes());
+  const ElementId window = to_id(placed.results()->Get(0)->created());
+
+  // The window spans 2 250…3 750 mm; the wall's faces are 190 mm either side of its line.
+  const auto& picked = respond(session, Request{}
+                                            .pick(level, {3000, 100})
+                                            .pick(level, {2100, 100})
+                                            .pick(level, {3000, 400})
+                                            .pick(level, {3000, 900})
+                                            .pick(ElementId{Uuid{7, 7}}, {0, 0})
+                                            .bytes());
+
+  ASSERT_EQ(picked.results()->size(), 5U);
+  EXPECT_EQ(to_id(picked.results()->Get(0)->picked()), window);
+  EXPECT_EQ(to_id(picked.results()->Get(1)->picked()), wall);
+  EXPECT_EQ(to_id(picked.results()->Get(2)->picked()), window);
+  EXPECT_EQ(picked.results()->Get(3)->picked(), nullptr);
+  EXPECT_EQ(picked.results()->Get(4)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(picked.changes()->size(), 0U);
+  EXPECT_EQ(picked.log()->size(), 0U);
+  EXPECT_EQ(picked.outlines(), nullptr);
 }
 
 std::vector<ElementId> deleted(const schema::Response& response) {

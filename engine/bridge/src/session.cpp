@@ -131,6 +131,21 @@ struct Session::Impl {
     return schema::CreateCommandResult(builder, schema::ErrorCode::None, 0, &created);
   }
 
+  // A pick reads the model and answers with the element it found.
+  flatbuffers::Offset<schema::CommandResult> picked(const schema::CommandEntry& entry) {
+    const auto found = decode(entry.command_as_Pick()).and_then([this](const Tap& tap) {
+      return pick(document.model(), tap);
+    });
+    if (!found) {
+      return error(found.error().code, found.error().message);
+    }
+    if (!found->has_value()) {
+      return schema::CreateCommandResult(builder);
+    }
+    const schema::Uuid id = to_schema(**found);
+    return schema::CreateCommandResult(builder, schema::ErrorCode::None, 0, nullptr, &id);
+  }
+
   flatbuffers::Offset<schema::CommandResult> error(ErrorCode code, const std::string& message) {
     return error(to_schema(code), message);
   }
@@ -153,7 +168,8 @@ struct Session::Impl {
     } else if (parsed->commands() != nullptr) {
       results.reserve(parsed->commands()->size());
       for (const schema::CommandEntry* entry : *parsed->commands()) {
-        results.push_back(result(execute(*entry)));
+        results.push_back(entry->command_type() == schema::Command::Pick ? picked(*entry)
+                                                                         : result(execute(*entry)));
       }
     }
     finish(results);
