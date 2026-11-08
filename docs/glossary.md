@@ -19,6 +19,7 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | opening | проём | teshik | Window, door or empty opening in a wall |
 | hole | отверстие | teshik (plitada) | Opening through a slab or roof, not a wall |
 | lintel | перемычка | peremichka | Beam over an opening (ГОСТ 948) |
+| bearing | опирание | tayanish | Length of a lintel or slab resting on the masonry on each side |
 | ring beam | армопояс | armopoyas, seysmopoyas | Seismic reinforced-concrete belt (КМК 2.01.03-19) |
 | core column | сердечник | o‘zak | Reinforced-concrete core in masonry at corners and piers |
 | strip footing | ленточный фундамент | lentali poydevor | Continuous foundation under walls |

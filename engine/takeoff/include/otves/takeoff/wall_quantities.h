@@ -2,9 +2,11 @@
 
 #include <compare>
 #include <cstdint>
+#include <expected>
 #include <span>
 #include <vector>
 
+#include <otves/core/error.h>
 #include <otves/core/opening.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
@@ -17,15 +19,36 @@ struct OpeningInput {
   Opening opening;
 };
 
+// Precast lintels (перемычки) over openings: the wall's full thickness, resting on the masonry on
+// both sides. Bearings come from the norm profile, the height from the chosen lintel section.
+struct LintelSpec {
+  Mm height;         // section height, such as 140 mm for 2ПБ
+  Mm bearing;        // on each side of the opening
+  Mm short_bearing;  // on each side of an opening no wider than short_span
+  Mm short_span;
+};
+
+// Checks values that come from content or the user; never asserts.
+[[nodiscard]] std::expected<void, Error> validate(const LintelSpec& spec);
+
+struct Lintel {
+  ElementId opening;
+  ElementId wall;
+  double length = 0.0;  // m to order: opening width plus both bearings
+  double height = 0.0;  // m
+  Mm thickness;         // the wall's
+};
+
 // What one joined wall measures. Joined outlines tile the plan, so a corner is split between its
-// walls and every quantity adds up across walls. Face area and volume are net of openings.
+// walls and every quantity adds up across walls. Face area and volume are net of openings and
+// lintels: neither is masonry.
 struct WallQuantities {
   ElementId id;
   Mm thickness;
   double footprint_area = 0.0;  // m², the joined plan outline
   double length = 0.0;          // m, footprint area over thickness
-  double face_area = 0.0;       // m², one face: length × height, less openings
-  double volume = 0.0;          // m³, footprint area × height, less openings × thickness
+  double face_area = 0.0;       // m², one face: length × height, less openings and lintels
+  double volume = 0.0;          // m³, footprint area × height, less their face × thickness
   double openings_area = 0.0;   // m², the openings cut from one face
 };
 
@@ -37,6 +60,11 @@ enum class OpeningIssueKind : std::uint8_t {
   kOverlap,
   // The opening's wall is not among the measured walls; it is ignored.
   kNoWall,
+  // The lintel's bearing runs past the wall's end, into another opening or into another lintel:
+  // the pier beside the opening is too narrow.
+  kShortBearing,
+  // The lintel rises above the wall's top; only the part inside the wall is deducted.
+  kNoRoomForLintel,
 };
 
 struct OpeningIssue {
@@ -48,14 +76,17 @@ struct OpeningIssue {
 
 struct Measurement {
   std::vector<WallQuantities> walls;  // one per footprint in the joins, sorted by id
+  std::vector<Lintel> lintels;        // one per opening inside a wall, sorted by opening
   std::vector<OpeningIssue> issues;   // sorted, no duplicates
 };
 
 // Walls are measured as drawn: where join_walls reported an overlap, the shared part counts in
-// both walls. Openings sit on the wall's location line, from its start and up from its base.
+// both walls. Openings sit on the wall's location line, from its start and up from its base; a
+// lintel sits on top of each. Fails only when `lintels` is invalid.
 // Precondition: `joins` is join_walls(walls), and every opening passes validate().
-[[nodiscard]] Measurement measure_walls(std::span<const geom::WallInput> walls,
-                                        std::span<const OpeningInput> openings,
-                                        const geom::WallJoins& joins);
+[[nodiscard]] Result<Measurement> measure_walls(std::span<const geom::WallInput> walls,
+                                                std::span<const OpeningInput> openings,
+                                                const LintelSpec& lintels,
+                                                const geom::WallJoins& joins);
 
 }  // namespace otves::takeoff

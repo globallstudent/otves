@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <iterator>
@@ -18,6 +19,7 @@
 
 #include <otves/core/error.h>
 #include <otves/core/overloaded.h>
+#include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/takeoff/masonry.h>
 #include <otves/takeoff/rules.h>
@@ -31,6 +33,7 @@ namespace {
 constexpr std::size_t kMaxItemLength = 64;
 constexpr int kWallFields = 7;
 constexpr int kMasonryWallFields = 3;
+constexpr int kLintelFields = 5;
 
 struct UnitName {
   std::string_view name;
@@ -108,9 +111,12 @@ void close_element(lua_State* state, std::size_t index) {
 
 // input = { walls = { { id, thickness, footprint_area, length, face_area, volume, openings_area }
 // },
+//           lintels = { { opening, wall, length, height, thickness } },
 //           masonry = { units, mortar, walls = { { id, units, mortar } } } }, in metres.
-void push_input(lua_State* state, std::span<const WallQuantities> walls, const Masonry& masonry) {
-  lua_createtable(state, 0, 2);
+void push_input(lua_State* state, const Measurement& measurement, const Masonry& masonry) {
+  const std::span<const WallQuantities> walls = measurement.walls;
+  const std::span<const Lintel> lintels = measurement.lintels;
+  lua_createtable(state, 0, 3);
 
   lua_createtable(state, static_cast<int>(walls.size()), 0);
   for (std::size_t i = 0; i < walls.size(); ++i) {
@@ -126,6 +132,19 @@ void push_input(lua_State* state, std::span<const WallQuantities> walls, const M
     close_element(state, i);
   }
   close_table(state, "walls");
+
+  lua_createtable(state, static_cast<int>(lintels.size()), 0);
+  for (std::size_t i = 0; i < lintels.size(); ++i) {
+    const Lintel& lintel = lintels[i];
+    lua_createtable(state, 0, kLintelFields);
+    set_field(state, "opening", lintel.opening.uuid().to_string());
+    set_field(state, "wall", lintel.wall.uuid().to_string());
+    set_field(state, "length", lintel.length);
+    set_field(state, "height", lintel.height);
+    set_field(state, "thickness", to_metres(lintel.thickness));
+    close_element(state, i);
+  }
+  close_table(state, "lintels");
 
   lua_createtable(state, 0, 3);
   set_field(state, "units", masonry.units);
@@ -297,7 +316,7 @@ Result<RuleSet> RuleSet::compile(const Scripts& scripts) {
   return set;
 }
 
-Result<std::vector<QuantityLine>> RuleSet::run(std::span<const WallQuantities> walls,
+Result<std::vector<QuantityLine>> RuleSet::run(const Measurement& measurement,
                                                const Masonry& masonry,
                                                const Settings& settings) const {
   Sandbox sandbox;
@@ -305,7 +324,7 @@ Result<std::vector<QuantityLine>> RuleSet::run(std::span<const WallQuantities> w
   std::vector<QuantityLine> lines;
   Result<void> outcome;
   std::function<void()> body = [&] {
-    push_input(state, walls, masonry);
+    push_input(state, measurement, masonry);
     const int input = lua_gettop(state);
     push_settings(state, settings);
     const int settings_index = lua_gettop(state);
@@ -340,6 +359,74 @@ Result<std::vector<QuantityLine>> RuleSet::run(std::span<const WallQuantities> w
     return std::unexpected{std::move(outcome).error()};
   }
   return lines;
+}
+
+Result<Mm> RuleSet::length(std::string_view norm, std::span<const std::string_view> path) const {
+  const auto found = std::ranges::find(norms_, norm, &CompiledScript::name);
+  if (found == norms_.end()) {
+    return make_error(ErrorCode::kNotFound, "norm '" + std::string{norm} + "' not found");
+  }
+  std::string where = found->name;
+  for (const std::string_view key : path) {
+    where += "." + std::string{key};
+  }
+
+  Sandbox sandbox;
+  lua_State* state = sandbox.state();
+  std::optional<double> value;
+  Result<void> outcome;
+  std::function<void()> body = [&] {
+    outcome = sandbox.load(found->name, found->bytecode);
+    if (!outcome) {
+      return;
+    }
+    for (const std::string_view key : path) {
+      if (!lua_istable(state, -1)) {
+        return;
+      }
+      push_string(state, key);
+      lua_rawget(state, -2);
+      lua_remove(state, -2);
+    }
+    if (lua_type(state, -1) == LUA_TNUMBER) {
+      value = lua_tonumber(state, -1);
+    }
+  };
+  if (auto ran = sandbox.protect(body); !ran) {
+    return std::unexpected{std::move(ran).error()};
+  }
+  if (!outcome) {
+    return std::unexpected{std::move(outcome).error()};
+  }
+  const auto max = static_cast<double>(kMaxCoordinate.value());
+  if (!value || *value < 0.0 || *value > max || *value != std::floor(*value)) {
+    return make_error(ErrorCode::kRuleOutput, where + " must be a whole number of millimetres");
+  }
+  return Mm{static_cast<std::int64_t>(*value)};
+}
+
+Result<LintelSpec> lintel_spec(const RuleSet& rules) {
+  const auto read = [&rules](std::string_view norm, std::string_view key) {
+    const std::array<std::string_view, 2> path{"lintel", key};
+    return rules.length(norm, path);
+  };
+  const Result<Mm> height = read("practice", "height");
+  const Result<Mm> bearing = read("seismic", "bearing");
+  const Result<Mm> short_bearing = read("seismic", "short_bearing");
+  const Result<Mm> short_span = read("seismic", "short_span");
+  for (const Result<Mm>* value : {&height, &bearing, &short_bearing, &short_span}) {
+    if (!*value) {
+      return std::unexpected{value->error()};
+    }
+  }
+  const LintelSpec spec{.height = *height,
+                        .bearing = *bearing,
+                        .short_bearing = *short_bearing,
+                        .short_span = *short_span};
+  if (auto valid = validate(spec); !valid) {
+    return std::unexpected{std::move(valid).error()};
+  }
+  return spec;
 }
 
 }  // namespace otves::takeoff

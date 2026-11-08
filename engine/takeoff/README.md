@@ -1,6 +1,6 @@
 # engine/takeoff
 
-Quantities from the joined plan: wall lengths, areas and volumes net of openings (проёмы), masonry units and mortar (расход кирпича и раствора), then material lines from the Luau rules in `content/`. The same input gives the same output bits on every platform.
+Quantities from the joined plan: wall lengths, areas and volumes net of openings (проёмы) and their lintels (перемычки), masonry units and mortar (расход кирпича и раствора), then material lines from the Luau rules in `content/`. The same input gives the same output bits on every platform.
 
 ```mermaid
 flowchart LR
@@ -8,10 +8,12 @@ flowchart LR
   J -- "footprints" --> M["measure_walls"]
   W --> M
   O["openings"] --> M
-  M -- "WallQuantities" --> C["count_masonry"]
+  K -- "lintel_spec" --> M
+  M -- "WallQuantities, lintels" --> C["count_masonry"]
   S["MasonrySpec<br/>catalog + norm profile"] --> C
   C -- "units, mortar" --> R["RuleSet::run"]
   K["content/<br/>norms, rules"] --> R
+  M -- "lintels" --> R
   R -- "item, unit, amount" --> L["quantity lines"]
 ```
 
@@ -19,11 +21,13 @@ flowchart LR
 
 | API | Use |
 |---|---|
-| `measure_walls(walls, openings, joins)` | Length, footprint area, face area, volume and openings area of each wall, sorted by id, plus opening issues |
+| `measure_walls(walls, openings, lintels, joins)` | Length, footprint area, face area, volume and openings area of each wall, sorted by id; a lintel over each opening; opening issues |
 | `count_masonry(quantities, spec)` | Units and mortar per wall and in total, plus issues |
 | `validate(spec)` | Checks unit and joint sizes typed by the user or read from content |
 | `RuleSet::compile({.norms, .rules})` | Compiles Luau scripts from `content/`; the caller passes their text |
-| `RuleSet::run(walls, masonry, settings)` | Runs every rule in a fresh sandbox and returns validated lines |
+| `RuleSet::run(measurement, masonry, settings)` | Runs every rule in a fresh sandbox and returns validated lines |
+| `RuleSet::length(norm, path)` | Reads a whole-millimetre value from a norm, so engine inputs stay out of code |
+| `lintel_spec(rules)` | Lintel height and bearings from `norms.practice` and `norms.seismic` |
 
 ## Formulas
 
@@ -31,8 +35,10 @@ flowchart LR
 |---|---|
 | length, m | footprint area / thickness |
 | openings area, m² | union of the wall's openings on its face, clipped to the wall |
-| face area, m² | length × height − openings area |
-| volume, m³ | footprint area × height − openings area × thickness |
+| lintel bearing | 250 mm for an opening up to 1 500 mm wide, else 350 mm (КМК 2.01.03-19, 3.5.15) |
+| lintel length, m | opening width + 2 × bearing, the wall's full thickness, on top of the opening |
+| face area, m² | length × height − union of openings and lintels |
+| volume, m³ | footprint area × height − that union × thickness |
 | wythes n | (thickness + head joint) / (unit width + head joint) |
 | units | face area × n / ((unit length + head joint) × (unit height + bed joint)) |
 | mortar, m³ | volume − units × unit volume |
@@ -55,6 +61,8 @@ Per m² of face that gives 149.9 units and 0.088 m³ mortar, matching the table 
 | Opening past the wall's end or above its top | Only the part inside is cut, issue `kOutsideWall` |
 | Two openings in one wall overlap | The shared part is cut once, issue `kOverlap` on both |
 | Opening whose wall is missing (after a merge) | Ignored, issue `kNoWall` |
+| Lintel bearing past the wall's end, or into another opening or lintel | Lintel ordered whole, only its part in the wall deducted, issue `kShortBearing` |
+| Lintel above the wall's top (a door up to the ring beam) | Cut at the top, or left out if nothing fits, issue `kNoRoomForLintel` |
 | Thickness between whole wythes (300 mm of 120 mm brick) | Units pro rata, issue `kPartialWythe` |
 | Wall thinner than one unit | No units, no mortar, issue `kThinnerThanUnit` |
 

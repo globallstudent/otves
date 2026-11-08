@@ -22,6 +22,7 @@ flowchart LR
 | Value | Fields |
 |---|---|
 | `input.walls[i]` | `id`, `thickness` m, `footprint_area` m², `length` m, `face_area` m² and `volume` m³ net of openings, `openings_area` m² |
+| `input.lintels[i]` | `opening`, `wall`, `length` m to order, `height` m, `thickness` m |
 | `input.masonry` | `units`, `mortar` m³, `walls[i]` with `id`, `units`, `mortar` |
 | `settings` | Job settings by name, numbers or strings; absent ones are `nil` |
 | line | `item` (`a-z 0-9 _ .`, ≤ 64), `unit` (`pcs`, `m`, `m2`, `m3`, `kg`), `amount` (finite, ≥ 0) |
@@ -40,5 +41,9 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 | File | Content | Source |
 |---|---|---|
 | `norms/mortar.luau` | Cement per m³ of masonry mortar by cement and mortar grade | СП 82-101-98, tables 4–5 |
-| `norms/practice.luau` | Waste allowances (запас), default cement and mortar grade | Practice; editable in job settings |
-| `rules/masonry.luau` | Units and mortar with waste, cement in that mortar | Uses both norms above |
+| `norms/practice.luau` | Waste allowances (запас), default cement and mortar grade, lintel bar 2ПБ 120 × 140 | Practice; ГОСТ 948-2016 table 1; editable in job settings |
+| `norms/seismic.luau` | Lintel bearing: 350 mm, 250 mm up to a 1 500 mm opening | КМК 2.01.03-19, 3.5.15 |
+| `rules/masonry.luau` | Units and mortar with waste, cement in that mortar | `mortar`, `practice` |
+| `rules/lintels.luau` | Bar lintels by length: `lintel.bar.l22` is a bar at least 2.2 m long, as many side by side as the wall is thick | `practice` |
+
+The engine also reads `seismic.lintel` and `practice.lintel.height` itself to place lintels, through `lintel_spec`. GOST 948 marks are not chosen yet: their length table is not verified.

@@ -6,10 +6,12 @@
 #include <map>
 #include <span>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 #include <otves/core/error.h>
+#include <otves/core/units.h>
 #include <otves/takeoff/masonry.h>
 #include <otves/takeoff/wall_quantities.h>
 
@@ -64,13 +66,23 @@ class RuleSet {
 
   // Runs every rule in one fresh sandbox (docs/adr/0005). Lines come grouped by rule in the order
   // the rules were given, sorted by item and unit within a rule.
-  [[nodiscard]] Result<std::vector<QuantityLine>> run(std::span<const WallQuantities> walls,
+  [[nodiscard]] Result<std::vector<QuantityLine>> run(const Measurement& measurement,
                                                       const Masonry& masonry,
                                                       const Settings& settings) const;
+
+  // A length in whole millimetres from a norm table, such as {"lintel", "bearing"} in `seismic`,
+  // so engine inputs that come from norms stay out of code. Fails with kNotFound for an unknown
+  // norm and kRuleOutput when the path does not end at a whole number from 0 to kMaxCoordinate.
+  [[nodiscard]] Result<Mm> length(std::string_view norm,
+                                  std::span<const std::string_view> path) const;
 
  private:
   std::vector<CompiledScript> norms_;
   std::vector<CompiledScript> rules_;
 };
+
+// Lintels from content: bearings from norms.seismic.lintel, the section height from
+// norms.practice.lintel.
+[[nodiscard]] Result<LintelSpec> lintel_spec(const RuleSet& rules);
 
 }  // namespace otves::takeoff

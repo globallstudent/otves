@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdint>
 #include <expected>
 #include <string>
@@ -21,22 +22,27 @@ using namespace otves::literals;
 
 ElementId id(std::int64_t n) { return ElementId{Uuid::v7(n, 0, 0)}; }
 
-const std::vector<WallQuantities>& walls() {
-  static const std::vector<WallQuantities> kWalls{
-      {.id = id(1),
-       .thickness = 380_mm,
-       .footprint_area = 2.432,
-       .length = 6.4,
-       .face_area = 17.92,
-       .volume = 6.8096},
-      {.id = id(2),
-       .thickness = 250_mm,
-       .footprint_area = 1.0,
-       .length = 4.0,
-       .face_area = 11.2,
-       .volume = 2.8},
-  };
-  return kWalls;
+const Measurement& measurement() {
+  static const Measurement kMeasurement{
+      .walls =
+          {
+              {.id = id(1),
+               .thickness = 380_mm,
+               .footprint_area = 2.432,
+               .length = 6.4,
+               .face_area = 17.92,
+               .volume = 6.8096},
+              {.id = id(2),
+               .thickness = 250_mm,
+               .footprint_area = 1.0,
+               .length = 4.0,
+               .face_area = 11.2,
+               .volume = 2.8},
+          },
+      .lintels =
+          {{.opening = id(10), .wall = id(1), .length = 2.0, .height = 0.14, .thickness = 380_mm}},
+      .issues = {}};
+  return kMeasurement;
 }
 
 const Masonry& masonry() {
@@ -55,7 +61,7 @@ Result<std::vector<QuantityLine>> run(const std::vector<Script>& norms,
   if (!set) {
     return std::unexpected{set.error()};
   }
-  return set->run(walls(), masonry(), settings);
+  return set->run(measurement(), masonry(), settings);
 }
 
 // A rule whose run body is `body`.
@@ -97,6 +103,8 @@ TEST(Rules, InputSettingsAndNormsReachTheRule) {
                             { item = "units", unit = "pcs", amount = input.masonry.units },
                             { item = "wall_units", unit = "pcs", amount = input.masonry.walls[2].units },
                             { item = "norm", unit = "kg", amount = norms.table1.per_m3 },
+                            { item = "lintel", unit = "m", amount = input.lintels[1].length },
+                            { item = "lintel_wall", unit = "pcs", amount = if input.lintels[1].wall == input.walls[1].id then 1 else 0 },
                             { item = "waste", unit = "kg", amount = settings.waste },
                             { item = "grade", unit = "pcs", amount = if settings.grade == "M100" then 1 else 0 },
                           })")},
@@ -117,6 +125,8 @@ TEST(Rules, InputSettingsAndNormsReachTheRule) {
   EXPECT_EQ(amount("units"), 3804.5);
   EXPECT_EQ(amount("wall_units"), 1119);
   EXPECT_EQ(amount("norm"), 300);
+  EXPECT_EQ(amount("lintel"), 2.0);
+  EXPECT_EQ(amount("lintel_wall"), 1);
   EXPECT_EQ(amount("waste"), 0.05);
   EXPECT_EQ(amount("grade"), 1);
 }
@@ -244,6 +254,28 @@ TEST(Rules, SameInputGivesSameLines) {
   ASSERT_TRUE(first.has_value()) << first.error().message;
   EXPECT_EQ(*first, *second);
   EXPECT_EQ(first->front().item, "a");
+}
+
+TEST(Rules, LengthReadsWholeMillimetresFromANorm) {
+  const std::vector<Script> norms{
+      {.name = "seismic",
+       .source = "return { lintel = { bearing = 350, half = 2.5, negative = -1, name = 'x' } }"}};
+  const auto set = RuleSet::compile({.norms = norms, .rules = {}});
+  ASSERT_TRUE(set.has_value()) << set.error().message;
+  const auto read = [&set](std::string_view key) {
+    const std::array<std::string_view, 2> path{"lintel", key};
+    return set->length("seismic", path);
+  };
+
+  ASSERT_TRUE(read("bearing").has_value());
+  EXPECT_EQ(*read("bearing"), 350_mm);
+  for (const std::string_view key : {"half", "negative", "name", "missing"}) {
+    EXPECT_EQ(read(key).error().code, ErrorCode::kRuleOutput) << key;
+  }
+  const std::array<std::string_view, 3> too_deep{"lintel", "bearing", "x"};
+  EXPECT_EQ(set->length("seismic", too_deep).error().code, ErrorCode::kRuleOutput);
+  EXPECT_EQ(set->length("mortar", too_deep).error().code, ErrorCode::kNotFound);
+  EXPECT_NE(read("half").error().message.find("seismic.lintel.half"), std::string::npos);
 }
 
 }  // namespace

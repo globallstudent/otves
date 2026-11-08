@@ -141,7 +141,9 @@ TEST(Masonry, ClosedRoomFromJoinedWalls) {
       wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}), wall(2, {6400_mm, 0_mm}, {6400_mm, 4000_mm}),
       wall(3, {6400_mm, 4000_mm}, {0_mm, 4000_mm}), wall(4, {0_mm, 4000_mm}, {0_mm, 0_mm})};
 
-  const Masonry masonry = count(measure_walls(walls, {}, geom::join_walls(walls)).walls);
+  const LintelSpec lintels{
+      .height = 140_mm, .bearing = 350_mm, .short_bearing = 250_mm, .short_span = 1500_mm};
+  const Masonry masonry = count(measure_walls(walls, {}, lintels, geom::join_walls(walls))->walls);
 
   const double face = 20.8 * 2.8;
   EXPECT_NEAR(masonry.units, face * 3.0 / (0.26 * 0.077), 1e-6);

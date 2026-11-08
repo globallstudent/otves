@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -32,25 +33,39 @@ Script load(const std::filesystem::path& file) {
       .source = std::string{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}}};
 }
 
-RuleSet masonry_rules() {
-  const std::vector norms{load("norms/practice.luau"), load("norms/mortar.luau")};
-  const std::vector rules{load("rules/masonry.luau")};
+// Everything in content/.
+RuleSet content() {
+  const std::vector norms{load("norms/mortar.luau"), load("norms/practice.luau"),
+                          load("norms/seismic.luau")};
+  const std::vector rules{load("rules/masonry.luau"), load("rules/lintels.luau")};
   auto set = RuleSet::compile({.norms = norms, .rules = rules});
   EXPECT_TRUE(set.has_value()) << set.error().message;
   return *std::move(set);
 }
 
-// A room 6 400 × 4 000 between centre lines, 380 mm of 1НФ brick with 12/10 mm joints, 2 800 high.
+ElementId id(std::int64_t n) { return ElementId{Uuid::v7(n, 0, 0)}; }
+
+OpeningInput window(std::int64_t n, Mm width) {
+  return {.id = id(n),
+          .opening = {.wall = id(1),
+                      .offset = 1200_mm,
+                      .width = width,
+                      .height = 1500_mm,
+                      .sill = 900_mm,
+                      .kind = OpeningKind::kWindow}};
+}
+
+// A room 6 400 × 4 000 between centre lines, 380 mm of 1НФ brick with 12/10 mm joints, 2 800 high,
+// with lintels from content.
 struct Room {
-  std::vector<WallQuantities> walls;
+  Measurement measurement;
   Masonry masonry;
 };
 
-Room room(const std::vector<OpeningInput>& openings = {}) {
+Room room(const RuleSet& rules, const std::vector<OpeningInput>& openings = {}) {
   const auto wall = [](std::int64_t n, PointMm start, PointMm end) {
     return geom::WallInput{
-        .id = ElementId{Uuid::v7(n, 0, 0)},
-        .wall = {.start = start, .end = end, .thickness = 380_mm, .height = 2800_mm}};
+        .id = id(n), .wall = {.start = start, .end = end, .thickness = 380_mm, .height = 2800_mm}};
   };
   const std::vector walls{
       wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}), wall(2, {6400_mm, 0_mm}, {6400_mm, 4000_mm}),
@@ -58,9 +73,20 @@ Room room(const std::vector<OpeningInput>& openings = {}) {
   const MasonrySpec brick{.unit = {.length = 250_mm, .width = 120_mm, .height = 65_mm},
                           .joints = {.bed = 12_mm, .head = 10_mm}};
   Room result;
-  result.walls = measure_walls(walls, openings, geom::join_walls(walls)).walls;
-  result.masonry = count_masonry(result.walls, brick).value();
+  result.measurement =
+      measure_walls(walls, openings, lintel_spec(rules).value(), geom::join_walls(walls)).value();
+  result.masonry = count_masonry(result.measurement.walls, brick).value();
   return result;
+}
+
+std::vector<QuantityLine> lines_of(const std::vector<QuantityLine>& lines, std::string_view rule) {
+  std::vector<QuantityLine> picked;
+  for (const QuantityLine& line : lines) {
+    if (line.rule == rule) {
+      picked.push_back(line);
+    }
+  }
+  return picked;
 }
 
 double amount(const std::vector<QuantityLine>& lines, std::string_view item) {
@@ -73,65 +99,97 @@ double amount(const std::vector<QuantityLine>& lines, std::string_view item) {
   return 0.0;
 }
 
-TEST(Content, MasonryRuleUsesPracticeDefaults) {
-  const Room r = room();
-  const auto lines = masonry_rules().run(r.walls, r.masonry, {});
+TEST(Content, LintelSpecComesFromNorms) {
+  const auto spec = lintel_spec(content());
 
-  ASSERT_TRUE(lines.has_value()) << lines.error().message;
-  ASSERT_EQ(lines->size(), 3U);
+  ASSERT_TRUE(spec.has_value()) << spec.error().message;
+  // КМК 2.01.03-19 3.5.15 bearings, 2ПБ section height.
+  EXPECT_EQ(spec->bearing, 350_mm);
+  EXPECT_EQ(spec->short_bearing, 250_mm);
+  EXPECT_EQ(spec->short_span, 1500_mm);
+  EXPECT_EQ(spec->height, 140_mm);
+}
+
+TEST(Content, MasonryRuleUsesPracticeDefaults) {
+  const RuleSet rules = content();
+  const Room r = room(rules);
+  const auto all = rules.run(r.measurement, r.masonry, {});
+
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  const auto lines = lines_of(*all, "masonry");
+  ASSERT_EQ(lines.size(), 3U);
   // 58.24 m² of face, three wythes: 8 727.3 net units.
-  EXPECT_EQ(amount(*lines, "masonry_unit"), std::ceil(r.masonry.units * 1.03));
-  EXPECT_DOUBLE_EQ(amount(*lines, "mortar"), r.masonry.mortar * 1.07);
+  EXPECT_EQ(amount(lines, "masonry_unit"), std::ceil(r.masonry.units * 1.03));
+  EXPECT_DOUBLE_EQ(amount(lines, "mortar"), r.masonry.mortar * 1.07);
   // СП 82-101-98: 300 kg of М400 cement per m³ of М100 mortar.
-  EXPECT_DOUBLE_EQ(amount(*lines, "mortar.cement"), r.masonry.mortar * 1.07 * 300);
+  EXPECT_DOUBLE_EQ(amount(lines, "mortar.cement"), r.masonry.mortar * 1.07 * 300);
+  EXPECT_TRUE(lines_of(*all, "lintels").empty());
 }
 
 TEST(Content, MasonryRuleFollowsJobSettings) {
-  const Room r = room();
+  const RuleSet rules = content();
+  const Room r = room(rules);
   const Settings settings{{"unit_waste", 0.05},
                           {"mortar_waste", 0.1},
                           {"cement", std::string{"PC500"}},
                           {"mortar_grade", std::string{"M150"}}};
-  const auto lines = masonry_rules().run(r.walls, r.masonry, settings);
+  const auto all = rules.run(r.measurement, r.masonry, settings);
 
-  ASSERT_TRUE(lines.has_value()) << lines.error().message;
-  EXPECT_EQ(amount(*lines, "masonry_unit"), std::ceil(r.masonry.units * 1.05));
-  EXPECT_DOUBLE_EQ(amount(*lines, "mortar.cement"), r.masonry.mortar * 1.1 * 330);
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  const auto lines = lines_of(*all, "masonry");
+  EXPECT_EQ(amount(lines, "masonry_unit"), std::ceil(r.masonry.units * 1.05));
+  EXPECT_DOUBLE_EQ(amount(lines, "mortar.cement"), r.masonry.mortar * 1.1 * 330);
 }
 
 TEST(Content, MasonryRuleRejectsUnknownMixAndBadWaste) {
-  const Room r = room();
-  const RuleSet rules = masonry_rules();
+  const RuleSet rules = content();
+  const Room r = room(rules);
 
-  const auto no_norm = rules.run(
-      r.walls, r.masonry, {{"cement", std::string{"PC500"}}, {"mortar_grade", std::string{"M50"}}});
+  const auto no_norm =
+      rules.run(r.measurement, r.masonry,
+                {{"cement", std::string{"PC500"}}, {"mortar_grade", std::string{"M50"}}});
   ASSERT_FALSE(no_norm.has_value());
   EXPECT_EQ(no_norm.error().code, ErrorCode::kRuleFailed);
   EXPECT_NE(no_norm.error().message.find("no cement norm for PC500 in mortar M50"),
             std::string::npos);
 
-  const auto bad_waste = rules.run(r.walls, r.masonry, {{"unit_waste", 1.5}});
+  const auto bad_waste = rules.run(r.measurement, r.masonry, {{"unit_waste", 1.5}});
   ASSERT_FALSE(bad_waste.has_value());
   EXPECT_NE(bad_waste.error().message.find("unit_waste must be a fraction"), std::string::npos);
 }
 
-TEST(Content, WindowSavesBricksAndMortar) {
-  const OpeningInput window{.id = ElementId{Uuid::v7(10, 0, 0)},
-                            .opening = {.wall = ElementId{Uuid::v7(1, 0, 0)},
-                                        .offset = 1200_mm,
-                                        .width = 1500_mm,
-                                        .height = 1500_mm,
-                                        .sill = 900_mm,
-                                        .kind = OpeningKind::kWindow}};
-  const Room solid = room();
-  const Room with_window = room({window});
-  const auto lines = masonry_rules().run(with_window.walls, with_window.masonry, {});
+TEST(Content, WindowAndLintelSaveBricksAndMortar) {
+  const RuleSet rules = content();
+  const Room solid = room(rules);
+  const Room with_window = room(rules, {window(10, 1500_mm)});
+  const auto all = rules.run(with_window.measurement, with_window.masonry, {});
 
-  ASSERT_TRUE(lines.has_value()) << lines.error().message;
-  // 2.25 m² less face, three wythes of 0.26 × 0.077 m cells.
-  EXPECT_NEAR(solid.masonry.units - with_window.masonry.units, 2.25 * 3 / (0.26 * 0.077), 1e-6);
-  EXPECT_EQ(amount(*lines, "masonry_unit"), std::ceil(with_window.masonry.units * 1.03));
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  // 2.25 m² of window and 2.0 × 0.14 m of lintel are not masonry: three wythes of 0.26 × 0.077 m
+  // cells each.
+  const double holes = 2.25 + (2.0 * 0.14);
+  EXPECT_NEAR(solid.masonry.units - with_window.masonry.units, holes * 3 / (0.26 * 0.077), 1e-6);
+  EXPECT_EQ(amount(lines_of(*all, "masonry"), "masonry_unit"),
+            std::ceil(with_window.masonry.units * 1.03));
   EXPECT_LT(with_window.masonry.mortar, solid.masonry.mortar);
+}
+
+TEST(Content, LintelsAreBarsSideBySideByLength) {
+  const RuleSet rules = content();
+  // 1 500 mm window: 250 mm bearings, 2.0 m bars. 1 800 mm window: 350 mm bearings, 2.5 m bars.
+  OpeningInput wide = window(11, 1800_mm);
+  wide.opening.offset = 3700_mm;
+  const Room r = room(rules, {window(10, 1500_mm), wide});
+  const auto all = rules.run(r.measurement, r.masonry, {});
+
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  EXPECT_TRUE(r.measurement.issues.empty());
+  // A 380 mm wall takes three 120 mm bars with 10 mm joints.
+  const std::vector<QuantityLine> expected{
+      {.rule = "lintels", .item = "lintel.bar.l20", .unit = Unit::kPiece, .amount = 3},
+      {.rule = "lintels", .item = "lintel.bar.l25", .unit = Unit::kPiece, .amount = 3},
+  };
+  EXPECT_EQ(lines_of(*all, "lintels"), expected);
 }
 
 }  // namespace
