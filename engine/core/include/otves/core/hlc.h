@@ -18,6 +18,9 @@ class HybridClock {
  public:
   [[nodiscard]] Hlc tick(std::int64_t unix_ms) noexcept;
 
+  // Every later tick is after `seen`, such as the newest stamp in a job opened from its file.
+  void observe(Hlc seen) noexcept;
+
  private:
   std::uint64_t last_ = 0;
 };

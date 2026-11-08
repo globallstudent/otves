@@ -25,5 +25,14 @@ TEST(HybridClock, FollowsWallClockForward) {
   EXPECT_EQ(clock.tick(2'000).value >> 16U, 2'000U);
 }
 
+TEST(HybridClock, TicksAfterAnObservedStamp) {
+  HybridClock clock;
+  const Hlc saved = clock.tick(9'000);
+  HybridClock reopened;
+  reopened.observe(saved);
+
+  EXPECT_GT(reopened.tick(1'000), saved);
+}
+
 }  // namespace
 }  // namespace otves

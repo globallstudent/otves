@@ -18,4 +18,6 @@ Hlc HybridClock::tick(std::int64_t unix_ms) noexcept {
   return Hlc{.value = last_};
 }
 
+void HybridClock::observe(Hlc seen) noexcept { last_ = std::max(last_, seen.value); }
+
 }  // namespace otves

@@ -10,8 +10,10 @@
 #include <otves/core/command.h>
 #include <otves/core/document.h>
 #include <otves/core/error.h>
+#include <otves/core/hlc.h>
 #include <otves/core/level.h>
 #include <otves/core/op.h>
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
@@ -310,6 +312,69 @@ TEST(Document, StampsGrowStrictly) {
     EXPECT_LT(log[i - 1].stamp.hlc, log[i].stamp.hlc);
     EXPECT_EQ(log[i].stamp.device, (DeviceId{Uuid{1, 1}}));
   }
+}
+
+// A saved ground floor with wall Ст-4 and a window in it.
+Snapshot saved_job() {
+  const ElementId level{Uuid{10, 1}};
+  const ElementId wall{Uuid{10, 2}};
+  return Snapshot{.levels = {{level, Level{.elevation = 0_mm, .height = 3000_mm}}},
+                  .walls = {{wall, wall_4(level)}},
+                  .openings = {{ElementId{Uuid{10, 3}}, Opening{.wall = wall,
+                                                                .offset = 1200_mm,
+                                                                .width = 1500_mm,
+                                                                .height = 1500_mm,
+                                                                .sill = 900_mm}}},
+                  .clock = Hlc{.value = 0xFFFF'0000'0000ULL}};
+}
+
+TEST(Document, OpenReplacesTheModelAndStartsAnEmptyLog) {
+  Document document{test_environment()};
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(add_level(document))}));
+  const ElementId old_wall = only_wall(document);
+  static_cast<void>(document.take_dirty());
+
+  ASSERT_TRUE(document.open(saved_job()));
+
+  EXPECT_EQ(document.model().count<Level>(), 1U);
+  EXPECT_EQ(document.model().find<Wall>(ElementId{Uuid{10, 2}})->end.x, 6400_mm);
+  EXPECT_EQ(document.model().find<Opening>(ElementId{Uuid{10, 3}})->sill, 900_mm);
+  EXPECT_EQ(document.model().find<Wall>(old_wall), nullptr);
+  EXPECT_TRUE(document.log().empty());
+  EXPECT_FALSE(document.can_undo());
+  const std::vector<ElementId> dirty = document.take_dirty();
+  EXPECT_EQ(dirty.size(), 5U);  // the old level and wall, and the three saved elements
+}
+
+TEST(Document, OpenRefusesABrokenSnapshotAndKeepsTheModel) {
+  Document document{test_environment()};
+  const ElementId level = add_level(document);
+
+  Snapshot orphan = saved_job();
+  orphan.levels.clear();
+  Snapshot repeated = saved_job();
+  repeated.walls.front().first = repeated.levels.front().first;
+  Snapshot invalid = saved_job();
+  invalid.walls.front().second.thickness = 0_mm;
+
+  for (const Snapshot& snapshot : {orphan, repeated, invalid}) {
+    const auto opened = document.open(snapshot);
+    ASSERT_FALSE(opened.has_value());
+    EXPECT_EQ(opened.error().code, ErrorCode::kCorruptData);
+  }
+  EXPECT_NE(document.model().find<Level>(level), nullptr);
+  EXPECT_TRUE(document.can_undo());
+}
+
+TEST(Document, GroupsAfterOpenStampAfterTheSavedClock) {
+  Document document{test_environment()};
+  const Snapshot snapshot = saved_job();
+  ASSERT_TRUE(document.open(snapshot));
+
+  ASSERT_TRUE(document.execute(AddLevel{.level = {.elevation = 3000_mm, .height = 3000_mm}}));
+
+  ASSERT_EQ(document.log().size(), 1U);
+  EXPECT_GT(document.log().front().stamp.hlc, snapshot.clock);
 }
 
 }  // namespace

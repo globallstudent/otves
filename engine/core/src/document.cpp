@@ -5,6 +5,7 @@
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -154,6 +155,75 @@ bool is_no_op(const Op& op) {
       op);
 }
 
+std::unexpected<Error> corrupt(std::string_view what, const Error& cause) {
+  return make_error(ErrorCode::kCorruptData, std::string{what} + ": " + cause.message);
+}
+
+// Inserts saved elements in id order, so the model visits them the same way on every device.
+template <typename T, typename Check>
+std::expected<void, Error> insert_saved(Model& model, std::vector<std::pair<ElementId, T>> saved,
+                                        const Check& check_parent) {
+  std::ranges::sort(saved, {}, &std::pair<ElementId, T>::first);
+  for (const auto& [id, element] : saved) {
+    if (auto valid = validate(element); !valid) {
+      return corrupt(std::string{"saved "} + std::string{ElementTraits<T>::kName}, valid.error());
+    }
+    if (auto parent = check_parent(model, element); !parent) {
+      return std::unexpected{std::move(parent).error()};
+    }
+    model.insert(id, element);
+  }
+  return {};
+}
+
+std::expected<Model, Error> load(const Snapshot& snapshot) {
+  std::vector<ElementId> ids;
+  ids.reserve(snapshot.levels.size() + snapshot.walls.size() + snapshot.openings.size());
+  for (const auto& [id, level] : snapshot.levels) {
+    ids.push_back(id);
+  }
+  for (const auto& [id, wall] : snapshot.walls) {
+    ids.push_back(id);
+  }
+  for (const auto& [id, opening] : snapshot.openings) {
+    ids.push_back(id);
+  }
+  std::ranges::sort(ids);
+  if (std::ranges::adjacent_find(ids) != ids.end() || (!ids.empty() && ids.front().is_nil())) {
+    return make_error(ErrorCode::kCorruptData, "saved ids are nil or repeat");
+  }
+  Model model;
+  const auto no_parent = [](const Model&, const Level&) -> std::expected<void, Error> {
+    return {};
+  };
+  const auto on_level = [](const Model& into, const Wall& wall) -> std::expected<void, Error> {
+    if (into.find<Level>(wall.level) == nullptr) {
+      return make_error(ErrorCode::kCorruptData, "saved wall on a missing level");
+    }
+    return {};
+  };
+  const auto in_wall = [](const Model& into, const Opening& opening) -> std::expected<void, Error> {
+    if (into.find<Wall>(opening.wall) == nullptr) {
+      return make_error(ErrorCode::kCorruptData, "saved opening in a missing wall");
+    }
+    return {};
+  };
+  auto loaded = insert_saved(model, snapshot.levels, no_parent)
+                    .and_then([&] { return insert_saved(model, snapshot.walls, on_level); })
+                    .and_then([&] { return insert_saved(model, snapshot.openings, in_wall); });
+  if (!loaded) {
+    return std::unexpected{std::move(loaded).error()};
+  }
+  return model;
+}
+
+void collect_ids(const Model& model, std::vector<ElementId>& ids) {
+  const auto add = [&ids](ElementId id, const auto&) { ids.push_back(id); };
+  model.for_each<Level>(add);
+  model.for_each<Wall>(add);
+  model.for_each<Opening>(add);
+}
+
 }  // namespace
 
 Document::Document(DocumentEnvironment environment) : environment_(std::move(environment)) {
@@ -181,6 +251,22 @@ std::expected<std::optional<ElementId>, Error> Document::execute(const Command& 
   undo_.push_back(log_.size() - 1);
   redo_.clear();
   return made;
+}
+
+std::expected<void, Error> Document::open(const Snapshot& snapshot) {
+  auto loaded = load(snapshot);
+  if (!loaded) {
+    return std::unexpected{std::move(loaded).error()};
+  }
+  collect_ids(model_, dirty_);
+  model_ = *std::move(loaded);
+  collect_ids(model_, dirty_);
+  log_.clear();
+  undo_.clear();
+  redo_.clear();
+  gesture_.reset();
+  clock_.observe(snapshot.clock);
+  return {};
 }
 
 void Document::begin_gesture() {

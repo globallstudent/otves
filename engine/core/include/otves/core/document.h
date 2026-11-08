@@ -5,14 +5,18 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include <otves/core/command.h>
 #include <otves/core/error.h>
 #include <otves/core/hlc.h>
+#include <otves/core/level.h>
 #include <otves/core/model.h>
 #include <otves/core/op.h>
+#include <otves/core/opening.h>
 #include <otves/core/uuid.h>
+#include <otves/core/wall.h>
 
 namespace otves {
 
@@ -21,6 +25,14 @@ struct DocumentEnvironment {
   DeviceId device;
   std::function<std::int64_t()> unix_ms;
   std::function<std::uint64_t()> random_u64;
+};
+
+// The elements of a saved job, as the app read them from its file (docs/adr/0007).
+struct Snapshot {
+  std::vector<std::pair<ElementId, Level>> levels;
+  std::vector<std::pair<ElementId, Wall>> walls;
+  std::vector<std::pair<ElementId, Opening>> openings;
+  Hlc clock;  // the newest stamp in the saved log
 };
 
 // Owns a model and its append-only operation log; the only way to change the model.
@@ -37,6 +49,12 @@ class Document {
 
   // Returns the element the command created, if any. On error nothing changes.
   [[nodiscard]] std::expected<std::optional<ElementId>, Error> execute(const Command& command);
+
+  // Replaces the model with a saved one and starts an empty log with no undo or redo, as when a
+  // job is opened; later stamps sort after the snapshot's clock. Every element of the old and the
+  // new model is dirty. Fails with kCorruptData, changing nothing, when an element is invalid,
+  // an id repeats, or a wall or opening refers to a missing level or wall.
+  [[nodiscard]] std::expected<void, Error> open(const Snapshot& snapshot);
 
   // A gesture still open (its touch-up was lost) is closed first, so its changes reach the log.
   void begin_gesture();
