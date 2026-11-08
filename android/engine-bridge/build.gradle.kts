@@ -29,6 +29,7 @@ android {
     ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += "arm64-v8a"
         }
@@ -67,4 +68,7 @@ dependencies {
     implementation(libs.flatbuffers.java)
     testImplementation(libs.junit4)
     testImplementation(libs.truth)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.truth)
 }

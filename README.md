@@ -40,6 +40,7 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 | C++ format check | `clang-format --dry-run --Werror` on `engine/**/*.{h,cpp}` |
 | C++ static analysis | `run-clang-tidy -p build/desktop-asan` (in `engine/`) |
 | App build, unit tests, Android Lint | `./gradlew build` (in `android/`) |
+| Bridge end to end on an arm64 device or emulator | `./gradlew :engine-bridge:connectedDebugAndroidTest` (in `android/`) |
 | Kotlin format | `./gradlew spotlessApply` |
 
 Toolchain: CMake ≥ 4.0, Ninja, Clang (AppleClang or LLVM 23), LLVM 23 clang-format and clang-tidy, Android SDK platform 37. Exact versions are in `android/gradle/libs.versions.toml` and `engine/vcpkg.json`.

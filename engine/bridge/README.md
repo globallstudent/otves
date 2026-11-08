@@ -43,7 +43,7 @@ A request that fails the `Verifier` or names another version gets a single `Corr
 
 `android/engine-bridge` builds the `otves_design` target with the engine's own `CMakeLists.txt`: vcpkg as the toolchain, the arm64-android triplet, and NDK r30 chained in from the `ANDROID_NDK` that Gradle passes. The AAR carries `jni/arm64-v8a/libdesign.so`.
 
-On the Kotlin side, `generateSchemaJava` downloads flatc 25.2.10 (SHA-256 pinned, matching `flatbuffers-java`) and generates `uz.otves.schema`. `EngineSession.send(commands)` encodes `EngineCommand`s, runs them and decodes an `EngineResponse` of typed results and element changes.
+On the Kotlin side, `generateSchemaJava` downloads flatc 25.2.10 (SHA-256 pinned, matching `flatbuffers-java`) and generates `uz.otves.schema`. `EngineSession.send(commands)` encodes `EngineCommand`s, runs them and decodes an `EngineResponse` of typed results and element changes. `EngineSessionTest` runs that path against the real `libdesign.so` on an arm64 device or emulator.
 
 ## Invariants
 
