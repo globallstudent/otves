@@ -24,10 +24,11 @@ public data class JobSummary(
     public val updatedAt: Long,
 )
 
-/** A saved job as the engine opens it: its elements and the newest stamp of its log. */
+/** A saved job as the editor opens it: its name, its elements and the newest stamp of its log. */
 public data class SavedJob(
     public val elements: Map<ElementId, EngineElement>,
     public val clock: Long,
+    public val name: String = "",
 )
 
 /** Where an open job lives while it is edited; closing it ends the editing. */
@@ -134,7 +135,7 @@ public class OpenJob internal constructor(
                 jobs.walls().forEach { this += it.element() }
                 jobs.openings().forEach { this += it.element() }
             }
-        return SavedJob(elements, clock = jobs.newestStamp() ?: 0L)
+        return SavedJob(elements, clock = jobs.newestStamp() ?: 0L, name = jobs.job()?.name.orEmpty())
     }
 
     override suspend fun record(response: EngineResponse) {

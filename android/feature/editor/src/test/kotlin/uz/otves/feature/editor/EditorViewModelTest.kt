@@ -269,7 +269,7 @@ class EditorViewModelTest {
                 upper to Level(3_000.mm, 3_000.mm),
                 wall to Wall(level, PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm), 380.mm, 2_800.mm),
             )
-        store = FakeStore(SavedJob(saved, clock = 42L))
+        store = FakeStore(SavedJob(saved, clock = 42L, name = "Дом на Чиланзаре"))
 
         val viewModel = EditorViewModel(engine, { content }, store)
 
@@ -279,6 +279,7 @@ class EditorViewModelTest {
         assertThat(state.level).isEqualTo(level)
         assertThat(state.outlines).hasSize(1)
         assertThat(state.canUndo).isFalse()
+        assertThat(state.name).isEqualTo("Дом на Чиланзаре")
     }
 
     @Test

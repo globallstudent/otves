@@ -54,7 +54,7 @@ class JobFilesTest {
 
             assertThat(files.list().map { it.name }).containsExactly("Баня", "Дом на Чиланзаре").inOrder()
             assertThat(first.id.toString()[14]).isEqualTo('7')
-            files.open(second.id).use { job -> assertThat(job.load()).isEqualTo(SavedJob(emptyMap(), clock = 0L)) }
+            files.open(second.id).use { job -> assertThat(job.load()).isEqualTo(SavedJob(emptyMap(), clock = 0L, name = "Баня")) }
         }
 
     @Test
@@ -77,7 +77,7 @@ class JobFilesTest {
             }
 
             files.open(created.id).use { job ->
-                assertThat(job.load()).isEqualTo(SavedJob(mapOf(level to storey, wall to masonry), clock = 400L))
+                assertThat(job.load()).isEqualTo(SavedJob(mapOf(level to storey, wall to masonry), clock = 400L, name = "Дом"))
             }
             assertThat(files.list().single().updatedAt).isGreaterThan(created.updatedAt)
         }

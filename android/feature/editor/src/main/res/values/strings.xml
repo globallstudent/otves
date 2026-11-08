@@ -54,4 +54,7 @@
     <string name="issue_wall_overlap">Стены накладываются друг на друга</string>
     <string name="issue_sharp_angle">Стены сходятся под слишком острым углом</string>
     <string name="issue_unknown">Ошибка в модели</string>
+    <string name="takeoff_share">Поделиться</string>
+    <string name="takeoff_share_title">%1$s — расход материалов</string>
+    <string name="takeoff_share_line">%1$s — %2$s %3$s</string>
 </resources>

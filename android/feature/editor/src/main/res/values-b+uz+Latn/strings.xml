@@ -53,4 +53,7 @@
     <string name="issue_wall_overlap">Devorlar bir-birining ustiga tushgan</string>
     <string name="issue_sharp_angle">Devorlar juda o‘tkir burchak ostida tutashgan</string>
     <string name="issue_unknown">Modelda xato</string>
+    <string name="takeoff_share">Ulashish</string>
+    <string name="takeoff_share_title">%1$s — material sarfi</string>
+    <string name="takeoff_share_line">%1$s — %2$s %3$s</string>
 </resources>

@@ -77,6 +77,8 @@ internal data class Dimension(
 @Immutable
 internal data class EditorUiState(
     val ready: Boolean = false,
+    /** The job's name, as the user gave it. */
+    val name: String = "",
     /** Storeys from the bottom up; the user works on [level]. */
     val levels: List<ElementId> = emptyList(),
     val level: ElementId? = null,
@@ -144,7 +146,7 @@ internal class EditorViewModel(
                 job.record(response)
                 apply(response)
                 show(orderedLevels().firstOrNull())
-                state.update { it.copy(ready = levels.isNotEmpty()) }
+                state.update { it.copy(ready = levels.isNotEmpty(), name = saved.name) }
             }
         }
     }

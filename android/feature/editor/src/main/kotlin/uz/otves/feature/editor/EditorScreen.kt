@@ -1,5 +1,7 @@
 package uz.otves.feature.editor
 
+import android.content.Context
+import android.content.Intent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -416,8 +419,20 @@ private fun InspectorRow(
 private fun TakeoffPanel(state: EditorUiState) {
     // A fixed height keeps the plan still when lines arrive, so taps land where the user aims.
     Surface(color = OtvesTheme.colors.surface, modifier = Modifier.fillMaxWidth().height(TakeoffHeight)) {
-        Column(modifier = Modifier.padding(OtvesDimens.gutter)) {
-            Text(stringResource(R.string.takeoff_title), style = MaterialTheme.typography.titleMedium)
+        Column(modifier = Modifier.padding(horizontal = OtvesDimens.gutter, vertical = 8.dp)) {
+            val lines = state.takeoff.filter { it.amount != 0.0 }
+            val context = LocalContext.current
+            val shared = takeoffText(state.name, lines)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.takeoff_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                TextButton(
+                    onClick = { context.share(shared) },
+                    enabled = lines.isNotEmpty() && !state.takeoffFailed,
+                    modifier = Modifier.heightIn(min = OtvesDimens.minTarget),
+                ) {
+                    Text(stringResource(R.string.takeoff_share))
+                }
+            }
             when {
                 state.takeoffFailed -> {
                     Text(stringResource(R.string.takeoff_failed), color = OtvesTheme.colors.warning)
@@ -441,6 +456,25 @@ private fun TakeoffPanel(state: EditorUiState) {
             }
         }
     }
+}
+
+// The take-off as plain text for a messenger: the job's name, then one material a line.
+@Composable
+private fun takeoffText(
+    name: String,
+    lines: List<QuantityLine>,
+): String {
+    val title = stringResource(R.string.takeoff_share_title, name.ifBlank { stringResource(R.string.editor_title) })
+    val rows = lines.map { stringResource(R.string.takeoff_share_line, itemName(it.item), amountText(it), unitName(it.unit)) }
+    return (listOf(title, "") + rows).joinToString("\n")
+}
+
+private fun Context.share(text: String) {
+    val send =
+        Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_TEXT, text)
+    startActivity(Intent.createChooser(send, null))
 }
 
 @Composable
