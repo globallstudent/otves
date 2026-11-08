@@ -24,6 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import uz.otves.core.designsystem.OtvesDimens
 import uz.otves.core.designsystem.OtvesTheme
+import uz.otves.core.designsystem.R as DesignR
 
 /** First-run screen until the projects feature lands. */
 @Composable
@@ -37,7 +38,7 @@ internal fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Image(painter = painterResource(R.drawable.ic_otves_mark), contentDescription = null)
+            Image(painter = painterResource(DesignR.drawable.ic_otves_mark), contentDescription = null)
             Spacer(Modifier.height(24.dp))
             Text(
                 text = stringResource(R.string.home_empty_title),

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projects_title">Объектлар</string>
+    <string name="projects_empty_title">Ҳозирча объектлар йўқ</string>
+    <string name="projects_empty_body">Объект яратинг: уй, девор, ҳаммом ёки бошқа қурилиш.</string>
+    <string name="projects_new">Янги объект</string>
+    <string name="projects_changed">Ўзгартирилган: %1$s</string>
+    <string name="projects_default_name">Объект %1$d</string>
+    <string name="projects_name">Номи</string>
+    <string name="projects_create">Яратиш</string>
+    <string name="projects_cancel">Бекор қилиш</string>
+</resources>

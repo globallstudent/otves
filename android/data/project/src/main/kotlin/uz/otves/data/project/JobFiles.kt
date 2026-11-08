@@ -30,12 +30,23 @@ public data class SavedJob(
     public val clock: Long,
 )
 
-/** Where an open job lives while it is edited. */
-public interface JobStore {
+/** Where an open job lives while it is edited; closing it ends the editing. */
+public interface JobStore : AutoCloseable {
     public suspend fun load(): SavedJob
 
     /** Writes the response's element changes and log groups in one transaction. */
     public suspend fun record(response: EngineResponse)
+}
+
+/** The jobs on this phone. */
+public interface Jobs {
+    /** Newest change first. */
+    public suspend fun list(): List<JobSummary>
+
+    public suspend fun create(name: String): JobSummary
+
+    /** The job for editing; close it when done. */
+    public fun open(id: Uuid): JobStore
 }
 
 /** The job files on this phone, one SQLite file each under [directory] (docs/adr/0007). */
@@ -44,11 +55,11 @@ public class JobFiles(
     private val directory: File = File(context.filesDir, "jobs"),
     private val now: () -> Long = System::currentTimeMillis,
     private val io: CoroutineDispatcher = Dispatchers.IO,
-) {
+) : Jobs {
     private val context = context.applicationContext
 
-    /** Newest change first. A file this app cannot read is left out. */
-    public suspend fun list(): List<JobSummary> =
+    /** A file this app cannot read is left out. */
+    override suspend fun list(): List<JobSummary> =
         withContext(io) {
             directory
                 .listFiles { file -> file.extension == EXTENSION }
@@ -57,7 +68,7 @@ public class JobFiles(
                 .sortedByDescending { it.updatedAt }
         }
 
-    public suspend fun create(name: String): JobSummary =
+    override suspend fun create(name: String): JobSummary =
         withContext(io) {
             directory.mkdirs()
             val created = now()
@@ -66,8 +77,7 @@ public class JobFiles(
             JobSummary(Uuid.parse(job.id), name, created)
         }
 
-    /** The job for editing; close it when done. */
-    public fun open(id: Uuid): OpenJob = OpenJob(database(file(id.toString())), now)
+    override fun open(id: Uuid): OpenJob = OpenJob(database(file(id.toString())), now)
 
     private suspend fun summary(file: File): JobSummary? =
         database(file).using { database ->
@@ -115,8 +125,7 @@ private const val VARIANT = Long.MIN_VALUE
 public class OpenJob internal constructor(
     private val database: ProjectDatabase,
     private val now: () -> Long,
-) : JobStore,
-    AutoCloseable {
+) : JobStore {
     override suspend fun load(): SavedJob {
         val jobs = database.jobs()
         val elements =

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projects_title">Obyektlar</string>
+    <string name="projects_empty_title">Hozircha obyektlar yo‘q</string>
+    <string name="projects_empty_body">Obyekt yarating: uy, devor, hammom yoki boshqa qurilish.</string>
+    <string name="projects_new">Yangi obyekt</string>
+    <string name="projects_changed">O‘zgartirilgan: %1$s</string>
+    <string name="projects_default_name">Obyekt %1$d</string>
+    <string name="projects_name">Nomi</string>
+    <string name="projects_create">Yaratish</string>
+    <string name="projects_cancel">Bekor qilish</string>
+</resources>

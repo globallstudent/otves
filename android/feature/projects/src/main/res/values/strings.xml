@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projects_title">Объекты</string>
+    <string name="projects_empty_title">Объектов пока нет</string>
+    <string name="projects_empty_body">Создайте объект: дом, забор, баню или любую другую стройку.</string>
+    <string name="projects_new">Новый объект</string>
+    <string name="projects_changed">Изменён %1$s</string>
+    <string name="projects_default_name">Объект %1$d</string>
+    <string name="projects_name">Название</string>
+    <string name="projects_create">Создать</string>
+    <string name="projects_cancel">Отмена</string>
+</resources>
