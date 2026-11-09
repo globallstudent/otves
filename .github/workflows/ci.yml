@@ -38,7 +38,12 @@ jobs:
       - name: Install vcpkg
         run: |
           git clone --depth 1 --branch "$VCPKG_TAG" https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
-          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          # The tool comes from GitHub releases, which sometimes answer 504 for a minute.
+          for attempt in 1 2 3 4; do
+            "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics && break
+            [ "$attempt" -eq 4 ] && exit 1
+            sleep 30
+          done
 
       - uses: actions/cache@v6
         with:
@@ -91,7 +96,12 @@ jobs:
       - name: Install vcpkg
         run: |
           git clone --depth 1 --branch "$VCPKG_TAG" https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
-          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          # The tool comes from GitHub releases, which sometimes answer 504 for a minute.
+          for attempt in 1 2 3 4; do
+            "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics && break
+            [ "$attempt" -eq 4 ] && exit 1
+            sleep 30
+          done
 
       - uses: actions/cache@v6
         with:
