@@ -240,7 +240,8 @@ internal fun EditorScreen(
 // One line that says what the next touch does, or what is wrong.
 @Composable
 private fun Notice(state: EditorUiState) {
-    val joinIssue = state.issues.firstOrNull { it.element == null }
+    // Where walls meet wrongly; what a storey lacks by the norms is said beside its choices.
+    val joinIssue = state.issues.firstOrNull { it.at != null }
     val drawing = state.tool == Tool.WALL && state.draft != null
     val text =
         when {
@@ -793,6 +794,16 @@ private fun MaterialPanel(
     }
 }
 
+// What the norms ask of the storey and it lacks. It is said, never added: the builder decides.
+@Composable
+private fun Advice(
+    state: EditorUiState,
+    kind: IssueKind,
+) {
+    if (state.issues.none { it.kind == kind }) return
+    Text(issueText(kind), style = MaterialTheme.typography.bodyMedium, color = OtvesTheme.colors.warning)
+}
+
 // The materials the model asks for, and what the storey's walls are reinforced with: the lines
 // follow these choices at once.
 @Composable
@@ -838,10 +849,12 @@ private fun TakeoffPanel(
                         Pill(grouped(height), state.ringBeam == height, { actions.onRingBeam(height) })
                     }
                 }
+                Advice(state, IssueKind.RING_BEAM_MISSING)
                 InspectorRow(stringResource(R.string.level_meshes)) {
                     Pill(stringResource(R.string.option_none), !state.junctionMeshes, { actions.onJunctionMeshes(false) })
                     Pill(stringResource(R.string.option_yes), state.junctionMeshes, { actions.onJunctionMeshes(true) })
                 }
+                Advice(state, IssueKind.JUNCTION_MESHES_MISSING)
                 LazyColumn(modifier = Modifier.padding(top = 8.dp).heightIn(max = TakeoffHeight)) {
                     items(lines) { line ->
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
@@ -894,6 +907,8 @@ private fun issueText(kind: IssueKind): String =
             IssueKind.WALL_OVERLAP -> R.string.issue_wall_overlap
             IssueKind.SHARP_ANGLE -> R.string.issue_sharp_angle
             IssueKind.MATERIAL_NOT_CHOSEN -> R.string.issue_material
+            IssueKind.RING_BEAM_MISSING -> R.string.issue_ring_beam
+            IssueKind.JUNCTION_MESHES_MISSING -> R.string.issue_meshes
             IssueKind.UNKNOWN -> R.string.issue_unknown
         },
     )

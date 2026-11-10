@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="editor_title">Qavat rejasi</string>
     <string name="editor_undo">Bekor qilish</string>
     <string name="editor_redo">Qaytarish</string>
@@ -82,4 +82,6 @@
     <string name="turn_left">Chapga</string>
     <string name="turn_straight">To‘g‘ri</string>
     <string name="turn_right">O‘ngga</string>
+    <string name="issue_ring_beam" tools:ignore="TypographyDashes">KMK 2.01.03-19 bo‘yicha qavatning yuk ko‘taruvchi devorlariga armopoyas kerak</string>
+    <string name="issue_meshes" tools:ignore="TypographyDashes">KMK 2.01.03-19 bo‘yicha yuk ko‘taruvchi devorlar tugunlariga to‘r kerak</string>
 </resources>

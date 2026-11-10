@@ -63,6 +63,12 @@ public enum class IssueKind {
     /** The wall has no masonry unit, so it is not in the take-off. */
     MATERIAL_NOT_CHOSEN,
 
+    /** The norm asks for a ring beam on the storey's load-bearing walls; names the level only. */
+    RING_BEAM_MISSING,
+
+    /** The norm asks for meshes where the storey's load-bearing walls meet; names the level only. */
+    JUNCTION_MESHES_MISSING,
+
     /** A kind from a newer engine than this app knows. */
     UNKNOWN,
 }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="editor_title">Қават режаси</string>
     <string name="editor_undo">Бекор қилиш</string>
     <string name="editor_redo">Қайтариш</string>
@@ -82,4 +82,6 @@
     <string name="turn_left">Чапга</string>
     <string name="turn_straight">Тўғри</string>
     <string name="turn_right">Ўнгга</string>
+    <string name="issue_ring_beam" tools:ignore="TypographyDashes">КМК 2.01.03-19 бўйича қаватнинг юк кўтарувчи деворларига армопояс керак</string>
+    <string name="issue_meshes" tools:ignore="TypographyDashes">КМК 2.01.03-19 бўйича юк кўтарувчи деворлар тугунларига тўр керак</string>
 </resources>

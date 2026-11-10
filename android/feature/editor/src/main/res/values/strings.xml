@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="editor_title">План этажа</string>
     <string name="editor_undo">Отменить</string>
     <string name="editor_redo">Повторить</string>
@@ -87,4 +87,6 @@
     <string name="turn_left">Налево</string>
     <string name="turn_straight">Прямо</string>
     <string name="turn_right">Направо</string>
+    <string name="issue_ring_beam" tools:ignore="TypographyDashes">По КМК 2.01.03-19 на несущих стенах этажа нужен армопояс</string>
+    <string name="issue_meshes" tools:ignore="TypographyDashes">По КМК 2.01.03-19 в узлах несущих стен нужны сетки</string>
 </resources>

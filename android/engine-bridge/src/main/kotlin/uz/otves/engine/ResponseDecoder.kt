@@ -110,6 +110,8 @@ internal object ResponseDecoder {
                     IssueKindCode.WallOverlap -> IssueKind.WALL_OVERLAP
                     IssueKindCode.SharpAngle -> IssueKind.SHARP_ANGLE
                     IssueKindCode.MaterialNotChosen -> IssueKind.MATERIAL_NOT_CHOSEN
+                    IssueKindCode.RingBeamMissing -> IssueKind.RING_BEAM_MISSING
+                    IssueKindCode.JunctionMeshesMissing -> IssueKind.JUNCTION_MESHES_MISSING
                     else -> IssueKind.UNKNOWN
                 },
             element = issue.element()?.let(::id),
