@@ -1,5 +1,8 @@
 package uz.otves.core.model
 
+import java.math.BigDecimal
+import java.math.RoundingMode
+
 /** ISO 4217 currencies the app prices in, with the number of minor-unit digits. */
 public enum class Currency(
     public val minorDigits: Int,
@@ -24,6 +27,10 @@ public data class Money(
     public operator fun minus(other: Money): Money = Money(minor - other.sameCurrency().minor, currency)
 
     public operator fun times(quantity: Long): Money = Money(minor * quantity, currency)
+
+    /** For a measured quantity such as 5,26 m³: exact, then rounded half up to the minor unit. */
+    public operator fun times(quantity: BigDecimal): Money =
+        Money(quantity.multiply(BigDecimal.valueOf(minor)).setScale(0, RoundingMode.HALF_UP).longValueExact(), currency)
 
     override fun compareTo(other: Money): Int = minor.compareTo(other.sameCurrency().minor)
 
