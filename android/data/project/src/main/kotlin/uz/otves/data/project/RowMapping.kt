@@ -2,6 +2,7 @@ package uz.otves.data.project
 
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
+import uz.otves.engine.Conditions
 import uz.otves.engine.EngineElement
 import uz.otves.engine.Level
 import uz.otves.engine.LocationLine
@@ -65,6 +66,12 @@ internal fun Opening.row(id: ElementId): OpeningRow =
                 OpeningKind.EMPTY -> EMPTY
             },
     )
+
+internal fun Conditions.row(id: ElementId): ConditionsRow =
+    ConditionsRow(id.key(), seismicIntensity, cementGrade, mortarGrade, unitWaste, mortarWaste)
+
+internal fun ConditionsRow.element(): Pair<ElementId, EngineElement> =
+    elementId(id) to Conditions(seismicIntensity, cementGrade, mortarGrade, unitWaste, mortarWaste)
 
 internal fun LevelRow.element(): Pair<ElementId, EngineElement> =
     elementId(id) to Level(Mm(elevation), Mm(height), Mm(ringBeam), junctionMeshes)

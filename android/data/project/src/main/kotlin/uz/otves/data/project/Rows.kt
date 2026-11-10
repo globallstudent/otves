@@ -5,7 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// Tables of a job file, schema version 2 (docs/adr/0007, 0008). Ids are canonical UUID text, lengths
+// Tables of a job file, schema version 3 (docs/adr/0007, 0008, 0009). Ids are canonical UUID text, lengths
 // whole millimetres, enums the codes of schema/engine.fbs.
 
 @Entity(tableName = "job")
@@ -51,6 +51,17 @@ internal data class OpeningRow(
     val height: Long,
     val sill: Long,
     val kind: Int,
+)
+
+/** The job's estimating conditions (docs/adr/0009): one row at most; null is left to the norm. */
+@Entity(tableName = "conditions")
+internal data class ConditionsRow(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "seismic_intensity") val seismicIntensity: Int?,
+    @ColumnInfo(name = "cement_grade") val cementGrade: Int?,
+    @ColumnInfo(name = "mortar_grade") val mortarGrade: Int?,
+    @ColumnInfo(name = "unit_waste") val unitWaste: Int?,
+    @ColumnInfo(name = "mortar_waste") val mortarWaste: Int?,
 )
 
 /** One group of the operation log; [seq] keeps the order the engine appended them in. */

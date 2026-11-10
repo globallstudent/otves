@@ -29,7 +29,12 @@ class MigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(2).use { connection ->
+        helper.runMigrationsAndValidate(3).use { connection ->
+            // docs/adr/0009: no conditions yet, so the norms' defaults apply.
+            connection.prepare("SELECT COUNT(*) FROM conditions").use { conditions ->
+                assertThat(conditions.step()).isTrue()
+                assertThat(conditions.getLong(0)).isEqualTo(0L)
+            }
             connection.prepare("SELECT thickness, unit_length, unit_width, unit_height FROM wall").use { wall ->
                 assertThat(wall.step()).isTrue()
                 assertThat((0..3).map(wall::getLong)).containsExactly(380L, 0L, 0L, 0L).inOrder()

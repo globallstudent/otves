@@ -11,11 +11,12 @@ import androidx.room.Upsert
 
 /** One job file (docs/adr/0007). */
 @Database(
-    entities = [JobRow::class, LevelRow::class, WallRow::class, OpeningRow::class, OpGroupRow::class],
-    version = 2,
+    entities = [JobRow::class, LevelRow::class, WallRow::class, OpeningRow::class, ConditionsRow::class, OpGroupRow::class],
+    version = 3,
     exportSchema = true,
     // Version 2 adds what the builder chose (docs/adr/0008): new columns, zero in old jobs.
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    // Version 3 adds the conditions table (docs/adr/0009), empty in old jobs.
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
 )
 internal abstract class ProjectDatabase : RoomDatabase() {
     abstract fun jobs(): JobDao
@@ -26,6 +27,7 @@ internal data class Recorded(
     val levels: List<LevelRow>,
     val walls: List<WallRow>,
     val openings: List<OpeningRow>,
+    val conditions: List<ConditionsRow>,
     val deleted: List<String>,
     val groups: List<OpGroupRow>,
 )
@@ -46,6 +48,15 @@ internal abstract class JobDao {
 
     @Query("SELECT * FROM opening")
     abstract suspend fun openings(): List<OpeningRow>
+
+    @Query("SELECT * FROM conditions")
+    abstract suspend fun conditions(): List<ConditionsRow>
+
+    @Upsert
+    abstract suspend fun upsertConditions(rows: List<ConditionsRow>)
+
+    @Query("DELETE FROM conditions WHERE id IN (:ids)")
+    abstract suspend fun deleteConditions(ids: List<String>)
 
     @Query("SELECT MAX(hlc) FROM op_group")
     abstract suspend fun newestStamp(): Long?
@@ -92,11 +103,13 @@ internal abstract class JobDao {
         upsertLevels(change.levels)
         upsertWalls(change.walls)
         upsertOpenings(change.openings)
+        upsertConditions(change.conditions)
         // A deletion does not say what it deleted; an id is in one table at most.
         if (change.deleted.isNotEmpty()) {
             deleteOpenings(change.deleted)
             deleteWalls(change.deleted)
             deleteLevels(change.deleted)
+            deleteConditions(change.deleted)
         }
         insertGroups(change.groups)
         touch(at)

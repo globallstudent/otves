@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uz.otves.core.model.ElementId
+import uz.otves.engine.Conditions
 import uz.otves.engine.EngineElement
 import uz.otves.engine.EngineResponse
 import uz.otves.engine.Level
@@ -157,6 +158,7 @@ public class OpenJob internal constructor(
                 jobs.levels().forEach { this += it.element() }
                 jobs.walls().forEach { this += it.element() }
                 jobs.openings().forEach { this += it.element() }
+                jobs.conditions().forEach { this += it.element() }
             }
         return SavedJob(elements, clock = jobs.newestStamp() ?: 0L, name = jobs.job()?.name.orEmpty())
     }
@@ -171,6 +173,7 @@ public class OpenJob internal constructor(
                 levels = changed.mapNotNull { change -> (change.element as? Level)?.row(change.id) },
                 walls = changed.mapNotNull { change -> (change.element as? Wall)?.row(change.id) },
                 openings = changed.mapNotNull { change -> (change.element as? Opening)?.row(change.id) },
+                conditions = changed.mapNotNull { change -> (change.element as? Conditions)?.row(change.id) },
                 deleted = response.changes.filter { it.element == null }.map { it.id.key() },
                 groups = response.log.map { it.row() },
             )
