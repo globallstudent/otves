@@ -113,4 +113,12 @@
     <string name="takeoff_share_total">Итого: %1$s</string>
     <string name="item_sand">Песок для раствора</string>
     <string name="item_cement_bags">Цемент, мешки по %1$s кг</string>
+    <string name="share_text">Текстом</string>
+    <string name="share_pdf">Сметой в PDF</string>
+    <string name="estimate_material">Материал</string>
+    <string name="estimate_amount">Количество</string>
+    <string name="estimate_price">Цена</string>
+    <string name="estimate_cost">Сумма</string>
+    <!-- The locale these strings are in, so dates match the text. -->
+    <string name="editor_date_locale">ru</string>
 </resources>

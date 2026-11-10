@@ -104,4 +104,12 @@
     <string name="takeoff_share_total">Jami: %1$s</string>
     <string name="item_sand">Qorishma uchun qum</string>
     <string name="item_cement_bags">Sement, %1$s kg li qop</string>
+    <string name="share_text">Matn qilib</string>
+    <string name="share_pdf">PDF smeta qilib</string>
+    <string name="estimate_material">Material</string>
+    <string name="estimate_amount">Miqdor</string>
+    <string name="estimate_price">Narx</string>
+    <string name="estimate_cost">Summa</string>
+    <!-- The locale these strings are in, so dates match the text. -->
+    <string name="editor_date_locale">uz-Latn</string>
 </resources>

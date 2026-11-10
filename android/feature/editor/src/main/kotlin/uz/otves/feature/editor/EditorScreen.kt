@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +59,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import uz.otves.core.designsystem.OtvesDimens
 import uz.otves.core.designsystem.OtvesIcons
 import uz.otves.core.designsystem.OtvesTheme
@@ -954,13 +956,13 @@ private fun TakeoffPanel(
     Panel {
         val lines = state.takeoff.filter { it.amount != 0.0 }
         val context = LocalContext.current
+        val scope = rememberCoroutineScope()
         val shared = takeoffText(state.name, lines, state.catalog.units, state.prices)
         PanelHeader(stringResource(R.string.takeoff_title)) {
-            PanelAction(
-                stringResource(R.string.takeoff_share),
-                { context.share(shared) },
-                enabled =
-                    lines.isNotEmpty() && !state.takeoffFailed,
+            ShareMenu(
+                enabled = lines.isNotEmpty() && !state.takeoffFailed,
+                onText = { context.share(shared) },
+                onPdf = { scope.launch { context.shareEstimate(state) } },
             )
             PanelAction(stringResource(R.string.takeoff_close), onClose)
         }
@@ -1029,6 +1031,35 @@ private fun takeoffText(
         }
     val sum = total(lines, prices)?.let { listOf("", stringResource(R.string.takeoff_share_total, moneyText(it))) }.orEmpty()
     return (listOf(title, "") + rows + sum).joinToString("\n")
+}
+
+// The materials go out as plain text for a chat, or as a sheet with the plan and the costs.
+@Composable
+private fun ShareMenu(
+    enabled: Boolean,
+    onText: () -> Unit,
+    onPdf: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        PanelAction(stringResource(R.string.takeoff_share), { open = true }, enabled = enabled)
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = OtvesTheme.colors.surface) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.share_text)) },
+                onClick = {
+                    open = false
+                    onText()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.share_pdf)) },
+                onClick = {
+                    open = false
+                    onPdf()
+                },
+            )
+        }
+    }
 }
 
 // One material: how much of it, and under that what one unit costs him and what the line comes to.

@@ -1,7 +1,8 @@
 package uz.otves.feature.editor
 
+import android.content.res.Resources
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalResources
 import uz.otves.core.model.Currency
 import uz.otves.core.model.Mm
 import uz.otves.core.model.Money
@@ -20,8 +21,8 @@ import java.util.Locale
  * The name of a take-off item in the UI language. Item ids come from content/rules; some carry a
  * parameter: `concrete.b15`, `rebar.a500c.d12`, `lintel.bar.l22`.
  */
-@Composable
 internal fun itemName(
+    resources: Resources,
     item: String,
     units: List<MasonryUnitOption>,
 ): String {
@@ -33,40 +34,40 @@ internal fun itemName(
     return when {
         masonry != null -> {
             val (length, width, height) = masonry.destructured
-            unitTitle(UnitSize(Mm(length.toLong()), Mm(width.toLong()), Mm(height.toLong())), units)
+            unitTitle(resources, UnitSize(Mm(length.toLong()), Mm(width.toLong()), Mm(height.toLong())), units)
         }
 
         item == "mortar" -> {
-            stringResource(R.string.item_mortar)
+            resources.getString(R.string.item_mortar)
         }
 
         item == "mortar.cement" -> {
-            stringResource(R.string.item_cement)
+            resources.getString(R.string.item_cement)
         }
 
         item == "mortar.sand" -> {
-            stringResource(R.string.item_sand)
+            resources.getString(R.string.item_sand)
         }
 
         bags != null -> {
-            stringResource(R.string.item_cement_bags, bags.groupValues[1])
+            resources.getString(R.string.item_cement_bags, bags.groupValues[1])
         }
 
         item == "mesh.junction" -> {
-            stringResource(R.string.item_junction_mesh)
+            resources.getString(R.string.item_junction_mesh)
         }
 
         concrete != null -> {
             val (whole, part) = concrete.destructured
-            stringResource(R.string.item_concrete, if (part.isEmpty()) whole else "$whole,$part")
+            resources.getString(R.string.item_concrete, if (part.isEmpty()) whole else "$whole,$part")
         }
 
         rebar != null -> {
-            stringResource(R.string.item_rebar, rebar.groupValues[1], rebar.groupValues[2])
+            resources.getString(R.string.item_rebar, rebar.groupValues[1], rebar.groupValues[2])
         }
 
         lintel != null -> {
-            stringResource(R.string.item_lintel, decimetres(lintel.groupValues[1]))
+            resources.getString(R.string.item_lintel, decimetres(lintel.groupValues[1]))
         }
 
         else -> {
@@ -76,30 +77,34 @@ internal fun itemName(
 }
 
 /** A masonry unit as builders call it: «Кирпич 1НФ», or with its size when it has no mark. */
-@Composable
 internal fun unitTitle(
+    resources: Resources,
     size: UnitSize,
     units: List<MasonryUnitOption>,
 ): String {
     val option = units.find { it.size == size }
     val kind =
-        stringResource(
+        resources.getString(
             when (option?.kind) {
                 MasonryUnitKind.BRICK -> R.string.unit_brick
                 MasonryUnitKind.STONE -> R.string.unit_stone
                 MasonryUnitKind.BLOCK, null -> R.string.unit_block
             },
         )
-    return if (option == null || option.mark.isEmpty()) "$kind ${unitSize(size)}" else "$kind ${option.mark}"
+    return if (option == null || option.mark.isEmpty()) "$kind ${unitSize(resources, size)}" else "$kind ${option.mark}"
 }
 
 /** Millimetres as laid: «250 × 120 × 65». */
-@Composable
-internal fun unitSize(size: UnitSize): String = stringResource(R.string.unit_size, size.length.value, size.width.value, size.height.value)
+internal fun unitSize(
+    resources: Resources,
+    size: UnitSize,
+): String = resources.getString(R.string.unit_size, size.length.value, size.width.value, size.height.value)
 
-@Composable
-internal fun unitName(unit: QuantityUnit): String =
-    stringResource(
+internal fun unitName(
+    resources: Resources,
+    unit: QuantityUnit,
+): String =
+    resources.getString(
         when (unit) {
             QuantityUnit.PIECE -> R.string.unit_piece
             QuantityUnit.METRE -> R.string.unit_metre
@@ -152,11 +157,13 @@ internal fun total(
 }
 
 /** Whole units of the currency with its name: «12 534 000 сум». */
-@Composable
-internal fun moneyText(money: Money): String {
+internal fun moneyText(
+    resources: Resources,
+    money: Money,
+): String {
     val whole = BigDecimal.valueOf(money.minor).movePointLeft(money.currency.minorDigits).setScale(0, RoundingMode.HALF_UP)
     val grouped = String.format(Locale.ROOT, "%,d", whole.toLong()).replace(',', '\u00A0')
-    return if (money.currency == Currency.UZS) stringResource(R.string.money_uzs, grouped) else "$grouped ${money.currency.name}"
+    return if (money.currency == Currency.UZS) resources.getString(R.string.money_uzs, grouped) else "$grouped ${money.currency.name}"
 }
 
 // "22" decimetres reads as "2,2" metres.
@@ -166,3 +173,26 @@ private fun decimetres(value: String): String {
 }
 
 private const val DECIMETRES_PER_METRE = 10
+
+// The same texts inside a composition, in its resources.
+
+@Composable
+internal fun itemName(
+    item: String,
+    units: List<MasonryUnitOption>,
+): String = itemName(LocalResources.current, item, units)
+
+@Composable
+internal fun unitTitle(
+    size: UnitSize,
+    units: List<MasonryUnitOption>,
+): String = unitTitle(LocalResources.current, size, units)
+
+@Composable
+internal fun unitSize(size: UnitSize): String = unitSize(LocalResources.current, size)
+
+@Composable
+internal fun unitName(unit: QuantityUnit): String = unitName(LocalResources.current, unit)
+
+@Composable
+internal fun moneyText(money: Money): String = moneyText(LocalResources.current, money)
