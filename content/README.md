@@ -29,7 +29,7 @@ flowchart LR
 | `settings` | The job's estimating conditions by name, numbers or strings; ones the builder left unset are `nil` |
 | line | `item` (`a-z 0-9 _ .`, ≤ 64), `unit` (`pcs`, `m`, `m2`, `m3`, `kg`), `amount` (finite, ≥ 0) |
 
-The engine adds no waste and no rounding; the rule does both. One rule may not return the same item and unit twice.
+The engine adds no waste and no rounding; the rule does both. An item is made of the items named after it and a dot (`mortar` of `mortar.cement` and `mortar.sand`, `mortar.cement` of `mortar.cement.bag50`); the app prices the parts, not the whole. One rule may not return the same item and unit twice.
 
 ## Writing rules
 
@@ -44,11 +44,11 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 |---|---|---|
 | `norms/losses.luau` | Concrete placement losses: 1.8 % foundations and slabs, 2.8 % beams and columns | Сборник типовых норм потерь (к РДС 82-202-96), table 1, item 42 |
 | `norms/masonry.luau` | Joints: 12 mm bed, 10 mm head | СП 70.13330.2012, 9.2.4 |
-| `norms/mortar.luau` | Cement per m³ of masonry mortar by cement and mortar grade | СП 82-101-98, tables 4–5 |
+| `norms/mortar.luau` | Cement per m³ of masonry mortar and per m³ of its sand, by cement and mortar grade | СП 82-101-98, tables 4–5 |
 | `norms/practice.luau` | Waste allowances (запас), default cement, mortar grade and seismic intensity, lintel bar 2ПБ 120 × 140, ring beam B15 A500С | Practice; ГОСТ 948-2016 table 1; editable in job settings |
 | `norms/rebar.luau` | Nominal bar mass per metre by diameter | ГОСТ 34028-2016, table 1 |
 | `norms/seismic.luau` | Detailing asked for from 7 points; lintel bearing 350 mm (250 mm up to a 1 500 mm opening); ring beam ≥ 150 mm, ≥ B12.5, 4Ø10 / 4Ø12 / 4Ø14 by intensity; junction meshes 1.5 m, ≥ 1 cm², every 700 mm (7–8 points) or 500 mm (9) | КМК 2.01.03-19, 3.5.10–3.5.12, 3.5.15 |
-| `rules/masonry.luau` | Units with waste, one line per unit size (`masonry_unit.250x120x65`), mortar with waste, cement in that mortar; nothing until a wall has a unit | `mortar`, `practice` |
+| `rules/masonry.luau` | Units with waste, one line per unit size (`masonry_unit.250x120x65`), mortar with waste, cement in that mortar by weight and in bags, its sand; nothing until a wall has a unit | `mortar`, `practice` |
 | `rules/lintels.luau` | Bar lintels by length: `lintel.bar.l22` is a bar at least 2.2 m long, as many side by side as the wall is thick | `practice` |
 | `rules/ring_beam.luau` | Ring beam on walls ≥ 250 mm of the storeys that ask for one: concrete `concrete.b15` with losses, bars `rebar.a500c.d12` with laps; fails under the КМК minimum of 150 mm | `seismic`, `losses`, `rebar`, `practice` |
 | `rules/junction_meshes.luau` | `mesh.junction` pieces where two or more walls ≥ 250 mm meet on the storeys that ask for them, one per pitch below the top; fails above 9 points, where КМК 3.5.1 meshes are not modelled |

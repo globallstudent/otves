@@ -23,6 +23,8 @@ return {
 		width = 120,
 		joint = 10,
 	},
+	-- Cement is sold in bags of this many kilograms.
+	cement_bag_kg = 50,
 	walls = {
 		-- Thinner walls are partitions (КМК 3.9.7): no ring beam and no junction meshes, until walls
 		-- carry a load-bearing flag. Millimetres.

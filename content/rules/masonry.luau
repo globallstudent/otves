@@ -1,6 +1,9 @@
 --!strict
 -- Masonry materials for the job: the units the walls are laid from, one line per unit size
--- ("masonry_unit.250x120x65", millimetres as laid), and mortar with waste and the cement in it.
+-- ("masonry_unit.250x120x65", millimetres as laid), and mortar with waste. The mortar is mixed on
+-- site, so it comes with what is bought for it: cement by weight and in whole bags
+-- ("mortar.cement.bag50"), and loose sand. An item is made of the items named after it and a dot,
+-- so the app prices those instead.
 -- Settings: unit_waste and mortar_waste (fractions), cement ("PC400", "PC500"),
 -- mortar_grade ("M50" to "M200"). Missing settings fall back to norms.practice.
 
@@ -33,7 +36,9 @@ return {
 
 		local by_grade = norms.mortar.cement_kg_per_m3[cement]
 		local cement_per_m3 = if by_grade then by_grade[grade] else nil
-		if cement_per_m3 == nil then
+		local by_grade_sand = norms.mortar.cement_kg_per_m3_sand[cement]
+		local cement_per_m3_sand = if by_grade_sand then by_grade_sand[grade] else nil
+		if cement_per_m3 == nil or cement_per_m3_sand == nil then
 			error(`no cement norm for {cement} in mortar {grade}`)
 		end
 
@@ -49,8 +54,16 @@ return {
 			return {} -- no wall has a unit yet
 		end
 		local mortar = input.masonry.mortar * (1 + mortar_waste)
+		local cement_kg = mortar * cement_per_m3
+		local bag = practice.cement_bag_kg
 		table.insert(lines, { item = "mortar", unit = "m3", amount = mortar })
-		table.insert(lines, { item = "mortar.cement", unit = "kg", amount = mortar * cement_per_m3 })
+		table.insert(lines, { item = "mortar.cement", unit = "kg", amount = cement_kg })
+		table.insert(lines, {
+			item = `mortar.cement.bag{bag}`,
+			unit = "pcs",
+			amount = math.max(0, math.ceil(cement_kg / bag - ROUNDING)),
+		})
+		table.insert(lines, { item = "mortar.sand", unit = "m3", amount = mortar * cement_per_m3 / cement_per_m3_sand })
 		return lines
 	end,
 }

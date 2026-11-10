@@ -617,7 +617,8 @@ TEST(Session, TakeoffRunsTheLoadedContent) {
   ASSERT_EQ(changed->size(), 2U);
 
   const auto& undone = respond(session, Request{}.undo().bytes());
-  EXPECT_EQ(undone.takeoff()->size(), 3U);  // the ring beam is gone, the brick stays
+  // The ring beam is gone; the brick stays with its mortar, cement, bags and sand.
+  EXPECT_EQ(undone.takeoff()->size(), 5U);
 }
 
 TEST(Session, ChoicesAreLoggedAndUndone) {

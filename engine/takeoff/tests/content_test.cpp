@@ -174,7 +174,7 @@ TEST(Content, EachUnitSizeGetsItsOwnLine) {
 
   ASSERT_TRUE(all.has_value()) << all.error().message;
   const auto lines = lines_of(*all, "masonry");
-  ASSERT_EQ(lines.size(), 4U);
+  ASSERT_EQ(lines.size(), 6U);
   ASSERT_EQ(masonry.by_unit.size(), 2U);
   EXPECT_EQ(amount(lines, "masonry_unit.250x120x65"), std::ceil(masonry.by_unit[0].units * 1.03));
   EXPECT_EQ(amount(lines, "masonry_unit.390x190x188"), std::ceil(masonry.by_unit[1].units * 1.03));
@@ -188,12 +188,15 @@ TEST(Content, MasonryRuleUsesPracticeDefaults) {
 
   ASSERT_TRUE(all.has_value()) << all.error().message;
   const auto lines = lines_of(*all, "masonry");
-  ASSERT_EQ(lines.size(), 3U);
+  ASSERT_EQ(lines.size(), 5U);
   // 58.24 m² of face, three wythes: 8 727.3 net units.
   EXPECT_EQ(amount(lines, "masonry_unit.250x120x65"), std::ceil(r.masonry.units * 1.03));
   EXPECT_DOUBLE_EQ(amount(lines, "mortar"), r.masonry.mortar * 1.07);
   // СП 82-101-98: 300 kg of М400 cement per m³ of М100 mortar.
   EXPECT_DOUBLE_EQ(amount(lines, "mortar.cement"), r.masonry.mortar * 1.07 * 300);
+  // Bought in whole 50 kg bags, with 300 / 255 m³ of loose sand to a m³ of mortar (table 4).
+  EXPECT_EQ(amount(lines, "mortar.cement.bag50"), std::ceil(r.masonry.mortar * 1.07 * 300 / 50));
+  EXPECT_NEAR(amount(lines, "mortar.sand"), r.masonry.mortar * 1.07 * 300 / 255, 1e-9);
   EXPECT_TRUE(lines_of(*all, "lintels").empty());
 }
 
