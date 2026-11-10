@@ -465,7 +465,7 @@ Result<LintelSpec> lintel_spec(const RuleSet& rules) {
   return spec;
 }
 
-Result<SeismicAdvice> seismic_advice(const RuleSet& rules) {
+Result<SeismicAdvice> seismic_advice(const RuleSet& rules, std::optional<std::int64_t> chosen) {
   // Intensities are whole points; `length` reads any whole number.
   const std::array<std::string_view, 1> from_path{"detailing_from"};
   const std::array<std::string_view, 2> intensity_path{"defaults", "seismic_intensity"};
@@ -478,7 +478,8 @@ Result<SeismicAdvice> seismic_advice(const RuleSet& rules) {
       return std::unexpected{value->error()};
     }
   }
-  return SeismicAdvice{.required = *intensity >= *from, .load_bearing = *thickness};
+  return SeismicAdvice{.required = chosen.value_or(intensity->value()) >= from->value(),
+                       .load_bearing = *thickness};
 }
 
 Result<Joints> masonry_joints(const RuleSet& rules) {

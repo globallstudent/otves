@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <otves/core/command.h>
+#include <otves/core/conditions.h>
 #include <otves/core/error.h>
 #include <otves/core/hlc.h>
 #include <otves/core/level.h>
@@ -32,7 +33,10 @@ struct Snapshot {
   std::vector<std::pair<ElementId, Level>> levels;
   std::vector<std::pair<ElementId, Wall>> walls;
   std::vector<std::pair<ElementId, Opening>> openings;
-  Hlc clock;  // the newest stamp in the saved log
+  // One at most (docs/adr/0009). The explicit initializer lets a snapshot be built without them.
+  std::vector<std::pair<ElementId, Conditions>>
+      conditions{};  // NOLINT(readability-redundant-member-init)
+  Hlc clock;         // the newest stamp in the saved log
 };
 
 // Owns a model and its append-only operation log; the only way to change the model.
@@ -53,7 +57,8 @@ class Document {
   // Replaces the model with a saved one and starts an empty log with no undo or redo, as when a
   // job is opened; later stamps sort after the snapshot's clock. Every element of the old and the
   // new model is dirty. Fails with kCorruptData, changing nothing, when an element is invalid,
-  // an id repeats, or a wall or opening refers to a missing level or wall.
+  // an id repeats, a wall or opening refers to a missing level or wall, or the job has more than
+  // one set of conditions.
   [[nodiscard]] std::expected<void, Error> open(const Snapshot& snapshot);
 
   // A gesture still open (its touch-up was lost) is closed first, so its changes reach the log.

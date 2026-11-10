@@ -4,6 +4,7 @@
 #include <variant>
 #include <vector>
 
+#include <otves/core/conditions.h>
 #include <otves/core/element.h>
 #include <otves/core/hlc.h>
 #include <otves/core/level.h>
@@ -50,9 +51,13 @@ using SetWallField = SetField<Wall>;
 using CreateOpening = Create<Opening>;
 using DeleteOpening = Delete<Opening>;
 using SetOpeningField = SetField<Opening>;
+using CreateConditions = Create<Conditions>;
+using DeleteConditions = Delete<Conditions>;
+using SetConditionsField = SetField<Conditions>;
 
 using Op = std::variant<CreateLevel, DeleteLevel, SetLevelField, CreateWall, DeleteWall,
-                        SetWallField, CreateOpening, DeleteOpening, SetOpeningField>;
+                        SetWallField, CreateOpening, DeleteOpening, SetOpeningField,
+                        CreateConditions, DeleteConditions, SetConditionsField>;
 
 [[nodiscard]] Op inverse(const Op& op);
 [[nodiscard]] ElementId target(const Op& op);
@@ -80,6 +85,7 @@ enum class CommandKind : std::uint8_t {
   kSetWallUnit,
   kSetLevelRingBeam,
   kSetLevelJunctionMeshes,
+  kSetCondition,
 };
 
 // Orders groups across devices: last writer wins per property.

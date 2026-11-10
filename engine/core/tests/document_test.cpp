@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include <otves/core/command.h>
+#include <otves/core/conditions.h>
 #include <otves/core/document.h>
 #include <otves/core/error.h>
 #include <otves/core/hlc.h>
@@ -325,6 +326,49 @@ TEST(Document, ALevelCarriesItsRingBeamAndMeshes) {
 
   ASSERT_TRUE(document.undo());
   EXPECT_FALSE(document.model().find<Level>(level)->junction_meshes);
+}
+
+TEST(Document, TheFirstConditionCreatesTheJobsConditionsAndLaterOnesSetFields) {
+  Document document{test_environment()};
+
+  // Unsetting what was never set records nothing.
+  ASSERT_TRUE(document.execute(SetCondition{.field = ConditionsField::kCementGrade}));
+  EXPECT_EQ(document.log().size(), 0U);
+
+  const auto created =
+      document.execute(SetCondition{.field = ConditionsField::kCementGrade, .value = 500});
+  ASSERT_TRUE(created.has_value());
+  const ElementId id = created->value_or(ElementId{});
+  ASSERT_TRUE(document.execute(SetCondition{.field = ConditionsField::kUnitWaste, .value = 50}));
+  EXPECT_EQ(document.model().count<Conditions>(), 1U);
+  const auto* conditions = document.model().find<Conditions>(id);
+  ASSERT_NE(conditions, nullptr);
+  EXPECT_EQ(conditions->cement_grade, 500);
+  EXPECT_EQ(conditions->unit_waste, 50);
+  EXPECT_EQ(conditions->mortar_grade, Conditions::kUnset);
+  EXPECT_TRUE(std::holds_alternative<SetConditionsField>(document.log().back().ops.front()));
+
+  const auto too_much =
+      document.execute(SetCondition{.field = ConditionsField::kMortarWaste, .value = 1000});
+  ASSERT_FALSE(too_much.has_value());
+  EXPECT_EQ(too_much.error().code, ErrorCode::kConditionOutOfRange);
+
+  ASSERT_TRUE(document.undo());
+  ASSERT_TRUE(document.undo());
+  EXPECT_EQ(document.model().count<Conditions>(), 0U);
+}
+
+TEST(Document, AJobOpensWithItsConditionsAndRefusesTwoSets) {
+  Document document{test_environment()};
+  Snapshot snapshot;
+  snapshot.conditions.emplace_back(ElementId{Uuid{5, 1}}, Conditions{.mortar_grade = 150});
+  ASSERT_TRUE(document.open(snapshot));
+  EXPECT_EQ(document.model().find<Conditions>(ElementId{Uuid{5, 1}})->mortar_grade, 150);
+
+  snapshot.conditions.emplace_back(ElementId{Uuid{5, 2}}, Conditions{});
+  const auto twice = document.open(snapshot);
+  ASSERT_FALSE(twice.has_value());
+  EXPECT_EQ(twice.error().code, ErrorCode::kCorruptData);
 }
 
 TEST(Document, ReportsDirtyElementsOnce) {

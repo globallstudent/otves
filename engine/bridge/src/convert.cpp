@@ -9,6 +9,7 @@
 #include <flatbuffers/flatbuffers.h>
 
 #include <otves/core/command.h>
+#include <otves/core/conditions.h>
 #include <otves/core/document.h>
 #include <otves/core/error.h>
 #include <otves/core/hlc.h>
@@ -83,6 +84,17 @@ std::expected<Opening, Error> to_opening(const schema::Opening* opening) {
                  .height = Mm{opening->height()},
                  .sill = Mm{opening->sill()},
                  .kind = *kind};
+}
+
+std::expected<Conditions, Error> to_conditions(const schema::Conditions* conditions) {
+  if (conditions == nullptr) {
+    return corrupt("conditions are missing");
+  }
+  return Conditions{.seismic_intensity = conditions->seismic_intensity(),
+                    .cement_grade = conditions->cement_grade(),
+                    .mortar_grade = conditions->mortar_grade(),
+                    .unit_waste = conditions->unit_waste(),
+                    .mortar_waste = conditions->mortar_waste()};
 }
 
 std::expected<Command, Error> decode_level(const schema::CommandEntry& entry) {
@@ -301,6 +313,8 @@ schema::ErrorCode to_schema(ErrorCode code) {
       return schema::ErrorCode::NoWall;
     case ErrorCode::kDoesNotFit:
       return schema::ErrorCode::DoesNotFit;
+    case ErrorCode::kConditionOutOfRange:
+      return schema::ErrorCode::ConditionOutOfRange;
   }
   return schema::ErrorCode::Internal;
 }
@@ -333,6 +347,14 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
     case schema::Command::SetOpeningKind:
     case schema::Command::RemoveOpening:
       return decode_opening(entry);
+    case schema::Command::SetCondition: {
+      const auto* set = entry.command_as_SetCondition();
+      const std::optional<ConditionsField> field = from_schema(set->field());
+      if (!field) {
+        return corrupt("unknown condition");
+      }
+      return SetCondition{.field = *field, .value = set->value()};
+    }
     default:
       return corrupt("not a model command");
   }
@@ -393,6 +415,46 @@ EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Opening& op
                        .Union()};
 }
 
+EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Conditions& conditions) {
+  return {.type = schema::Element::Conditions,
+          .value = schema::CreateConditions(builder, conditions.seismic_intensity,
+                                            conditions.cement_grade, conditions.mortar_grade,
+                                            conditions.unit_waste, conditions.mortar_waste)
+                       .Union()};
+}
+
+schema::ConditionsField to_schema(ConditionsField field) {
+  switch (field) {
+    case ConditionsField::kSeismicIntensity:
+      return schema::ConditionsField::SeismicIntensity;
+    case ConditionsField::kCementGrade:
+      return schema::ConditionsField::CementGrade;
+    case ConditionsField::kMortarGrade:
+      return schema::ConditionsField::MortarGrade;
+    case ConditionsField::kUnitWaste:
+      return schema::ConditionsField::UnitWaste;
+    case ConditionsField::kMortarWaste:
+      return schema::ConditionsField::MortarWaste;
+  }
+  return schema::ConditionsField::SeismicIntensity;
+}
+
+std::optional<ConditionsField> from_schema(schema::ConditionsField field) {
+  switch (field) {
+    case schema::ConditionsField::SeismicIntensity:
+      return ConditionsField::kSeismicIntensity;
+    case schema::ConditionsField::CementGrade:
+      return ConditionsField::kCementGrade;
+    case schema::ConditionsField::MortarGrade:
+      return ConditionsField::kMortarGrade;
+    case schema::ConditionsField::UnitWaste:
+      return ConditionsField::kUnitWaste;
+    case schema::ConditionsField::MortarWaste:
+      return ConditionsField::kMortarWaste;
+  }
+  return std::nullopt;
+}
+
 std::expected<Element, Error> decode(schema::Element type, const void* value) {
   if (value == nullptr) {
     return corrupt("element is missing");
@@ -404,6 +466,8 @@ std::expected<Element, Error> decode(schema::Element type, const void* value) {
       return to_wall(static_cast<const schema::Wall*>(value));
     case schema::Element::Opening:
       return to_opening(static_cast<const schema::Opening*>(value));
+    case schema::Element::Conditions:
+      return to_conditions(static_cast<const schema::Conditions*>(value));
     case schema::Element::NONE:
       break;
   }
@@ -425,12 +489,14 @@ std::expected<Snapshot, Error> decode(const schema::OpenModel* open) {
       return std::unexpected{std::move(element).error()};
     }
     const ElementId id = to_id(saved->id());
-    std::visit(Overloaded{
-                   [&](const Level& level) { snapshot.levels.emplace_back(id, level); },
-                   [&](const Wall& wall) { snapshot.walls.emplace_back(id, wall); },
-                   [&](const Opening& opening) { snapshot.openings.emplace_back(id, opening); },
-               },
-               *element);
+    std::visit(
+        Overloaded{
+            [&](const Level& level) { snapshot.levels.emplace_back(id, level); },
+            [&](const Wall& wall) { snapshot.walls.emplace_back(id, wall); },
+            [&](const Opening& opening) { snapshot.openings.emplace_back(id, opening); },
+            [&](const Conditions& conditions) { snapshot.conditions.emplace_back(id, conditions); },
+        },
+        *element);
   }
   return snapshot;
 }
@@ -445,6 +511,8 @@ flatbuffers::Offset<schema::ElementChange> encode_change(flatbuffers::FlatBuffer
     value = encode(builder, *wall);
   } else if (const auto* opening = model.find<Opening>(id)) {
     value = encode(builder, *opening);
+  } else if (const auto* conditions = model.find<Conditions>(id)) {
+    value = encode(builder, *conditions);
   }
   return schema::CreateElementChange(builder, &key, value.type, value.value);
 }

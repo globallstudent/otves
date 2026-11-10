@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include <otves/core/assert.h>
+#include <otves/core/conditions.h>
 #include <otves/core/level.h>
 #include <otves/core/opening.h>
 #include <otves/core/slot_map.h>
@@ -116,7 +117,9 @@ class Model {
     return std::get<ElementStore<T>>(stores_);
   }
 
-  std::tuple<ElementStore<Level>, ElementStore<Wall>, ElementStore<Opening>> stores_;
+  std::tuple<ElementStore<Level>, ElementStore<Wall>, ElementStore<Opening>,
+             ElementStore<Conditions>>
+      stores_;
 };
 
 }  // namespace otves

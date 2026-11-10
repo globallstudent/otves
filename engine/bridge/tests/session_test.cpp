@@ -69,6 +69,10 @@ class Request {
                schema::CreateSetLevelRingBeam(builder_, &id, height).Union());
   }
 
+  Request& set_condition(schema::ConditionsField field, std::int64_t value) {
+    return add(Command::SetCondition, schema::CreateSetCondition(builder_, field, value).Union());
+  }
+
   Request& set_meshes(ElementId level, bool meshes) {
     const schema::Uuid id = key(level);
     return add(Command::SetLevelJunctionMeshes,
@@ -660,6 +664,58 @@ TEST(Session, NormsReportTheMeshesACornerLacks) {
   const auto& meshed = respond(session, Request{}.set_meshes(level, true).bytes());
   EXPECT_EQ(meshed.issues()->size(), 0U);
   EXPECT_GT(amount(meshed, "mesh.junction"), 0.0);
+}
+
+TEST(Session, ConditionsChangeTheTakeoffAndTheAdvice) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+  const ElementId level = add_level(session);
+  const auto& built = respond(session, Request{}.set_unit(add_wall(session, level)).bytes());
+  // СП 82-101-98: 300 kg of ПЦ400 per m³ of М100 mortar by default.
+  const double mortar = amount(built, "mortar");
+  EXPECT_NEAR(amount(built, "mortar.cement"), mortar * 300, 1e-6);
+  ASSERT_EQ(built.issues()->size(), 1U);  // a ring beam is asked for at 9 points
+
+  using schema::ConditionsField;
+  const auto& set = respond(session, Request{}
+                                         .set_condition(ConditionsField::CementGrade, 500)
+                                         .set_condition(ConditionsField::MortarGrade, 150)
+                                         .set_condition(ConditionsField::MortarWaste, 0)
+                                         .set_condition(ConditionsField::SeismicIntensity, 6)
+                                         .bytes());
+  ASSERT_EQ(set.takeoff_error(), schema::ErrorCode::None);
+  // 330 kg of ПЦ500 per m³ of М150, and no allowance on the mortar: 7 % less of it.
+  EXPECT_NEAR(amount(set, "mortar"), mortar / 1.07, 1e-9);
+  EXPECT_NEAR(amount(set, "mortar.cement"), mortar / 1.07 * 330, 1e-6);
+  EXPECT_EQ(set.issues()->size(), 0U);  // no seismic detailing below 7 points
+
+  // A grade the norms do not list fails the rule, not the engine.
+  const auto& odd =
+      respond(session, Request{}.set_condition(ConditionsField::MortarGrade, 333).bytes());
+  EXPECT_EQ(odd.takeoff_error(), schema::ErrorCode::RuleFailed);
+}
+
+TEST(Session, ConditionsAreReportedAndLoggedAsAnElement) {
+  Session session{kDevice};
+  using schema::ConditionsField;
+  const auto& set = respond(session, Request{}
+                                         .set_condition(ConditionsField::CementGrade, 500)
+                                         .set_condition(ConditionsField::MortarGrade, 150)
+                                         .bytes());
+  bool reported = false;
+  for (const schema::ElementChange* change : *set.changes()) {
+    if (const auto* conditions = change->element_as_Conditions()) {
+      reported = conditions->cement_grade() == 500 && conditions->unit_waste() == -1;
+    }
+  }
+  EXPECT_TRUE(reported);
+  const auto first = group_of(*set.log()->Get(0));
+  ASSERT_TRUE(first.has_value()) << first.error().message;
+  EXPECT_TRUE(std::holds_alternative<CreateConditions>(first->ops.front()));
+  const auto second = group_of(*set.log()->Get(1));
+  ASSERT_TRUE(second.has_value()) << second.error().message;
+  EXPECT_TRUE(std::holds_alternative<SetConditionsField>(second->ops.front()));
 }
 
 TEST(Session, BrokenContentKeepsThePreviousContent) {

@@ -51,6 +51,26 @@ table Opening {
   kind:OpeningKind = Window;
 }
 
+// What the job is estimated under (docs/adr/0009); -1 leaves a value to the norm default.
+table Conditions {
+  seismic_intensity:long = -1;  // points
+  cement_grade:long = -1;       // 400 for ПЦ400
+  mortar_grade:long = -1;       // 100 for М100
+  unit_waste:long = -1;         // per mille
+  mortar_waste:long = -1;       // per mille
+}
+
+enum ConditionsField:ubyte {
+  SeismicIntensity = 0,
+  CementGrade = 1,
+  MortarGrade = 2,
+  UnitWaste = 3,
+  MortarWaste = 4,
+}
+
+// Sets one condition, creating the job's conditions when it has none.
+table SetCondition { field:ConditionsField; value:long = -1; }
+
 table AddLevel { level:Level; }
 table SetLevelElevation { level:Uuid; elevation:long; }
 table SetLevelHeight { level:Uuid; height:long; }
@@ -152,6 +172,7 @@ union Command {
   SetWallUnit,
   SetLevelRingBeam,
   SetLevelJunctionMeshes,
+  SetCondition,
 }
 
 table CommandEntry {
@@ -188,6 +209,7 @@ enum ErrorCode:ubyte {
   Internal = 20,
   NoWall = 21,
   DoesNotFit = 22,
+  ConditionOutOfRange = 23,
 }
 
 table CommandResult {
@@ -197,7 +219,7 @@ table CommandResult {
   picked:Uuid;     // the element a Pick found, if any
 }
 
-union Element { Level, Wall, Opening }
+union Element { Level, Wall, Opening, Conditions }
 
 // What produced an operation-log group (engine/core/op.h).
 enum CommandKind:ubyte {
@@ -222,6 +244,7 @@ enum CommandKind:ubyte {
   SetWallUnit = 18,
   SetLevelRingBeam = 19,
   SetLevelJunctionMeshes = 20,
+  SetCondition = 21,
 }
 
 enum LevelField:ubyte { Elevation = 0, Height = 1, RingBeam = 2, JunctionMeshes = 3 }
@@ -255,7 +278,16 @@ table SetWallFieldOp {
 // Kind uses its code; the other fields millimetres.
 table SetOpeningFieldOp { id:Uuid; field:OpeningField; before:long; after:long; }
 
-union Op { CreateOp, DeleteOp, SetLevelFieldOp, SetWallFieldOp, SetOpeningFieldOp }
+table SetConditionsFieldOp { id:Uuid; field:ConditionsField; before:long; after:long; }
+
+union Op {
+  CreateOp,
+  DeleteOp,
+  SetLevelFieldOp,
+  SetWallFieldOp,
+  SetOpeningFieldOp,
+  SetConditionsFieldOp,
+}
 
 table OpEntry {
   op:Op;

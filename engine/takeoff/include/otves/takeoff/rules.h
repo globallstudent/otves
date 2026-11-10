@@ -91,8 +91,10 @@ struct SeismicAdvice {
   Mm load_bearing;        // walls at least this thick are load-bearing (norms.practice.walls)
 };
 
-// From norms.seismic and norms.practice, at the default design intensity.
-[[nodiscard]] Result<SeismicAdvice> seismic_advice(const RuleSet& rules);
+// From norms.seismic and norms.practice, at the job's design intensity in points, or the default
+// one when the job leaves it unset.
+[[nodiscard]] Result<SeismicAdvice> seismic_advice(const RuleSet& rules,
+                                                   std::optional<std::int64_t> chosen);
 
 // Mortar joints from norms.masonry.joints. The unit is the wall's own (docs/adr/0008).
 [[nodiscard]] Result<Joints> masonry_joints(const RuleSet& rules);

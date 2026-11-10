@@ -1,6 +1,7 @@
 add_library(otves_core
   src/assert.cpp
   src/command.cpp
+  src/conditions.cpp
   src/document.cpp
   src/hlc.cpp
   src/level.cpp

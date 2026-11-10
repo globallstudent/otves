@@ -132,12 +132,13 @@ TEST(Content, JointsComeFromNorms) {
 }
 
 TEST(Content, SeismicAdviceComesFromNorms) {
-  const auto advice = seismic_advice(content());
+  const auto advice = seismic_advice(content(), std::nullopt);
 
   ASSERT_TRUE(advice.has_value()) << advice.error().message;
   // 9 points by default, detailing from 7 (КМК 2.01.03-19); walls from 250 mm bear load.
   EXPECT_TRUE(advice->required);
   EXPECT_EQ(advice->load_bearing, 250_mm);
+  EXPECT_FALSE(seismic_advice(content(), 6)->required);
 }
 
 TEST(Content, OnlyWhatWasChosenIsCounted) {

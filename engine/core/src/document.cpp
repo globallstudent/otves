@@ -13,6 +13,7 @@
 
 #include <otves/core/assert.h>
 #include <otves/core/command.h>
+#include <otves/core/conditions.h>
 #include <otves/core/document.h>
 #include <otves/core/element.h>
 #include <otves/core/error.h>
@@ -178,7 +179,8 @@ std::expected<void, Error> insert_saved(Model& model, std::vector<std::pair<Elem
 
 std::expected<Model, Error> load(const Snapshot& snapshot) {
   std::vector<ElementId> ids;
-  ids.reserve(snapshot.levels.size() + snapshot.walls.size() + snapshot.openings.size());
+  ids.reserve(snapshot.levels.size() + snapshot.walls.size() + snapshot.openings.size() +
+              snapshot.conditions.size());
   for (const auto& [id, level] : snapshot.levels) {
     ids.push_back(id);
   }
@@ -187,6 +189,12 @@ std::expected<Model, Error> load(const Snapshot& snapshot) {
   }
   for (const auto& [id, opening] : snapshot.openings) {
     ids.push_back(id);
+  }
+  for (const auto& [id, conditions] : snapshot.conditions) {
+    ids.push_back(id);
+  }
+  if (snapshot.conditions.size() > 1) {
+    return make_error(ErrorCode::kCorruptData, "a job has one set of conditions at most");
   }
   std::ranges::sort(ids);
   if (std::ranges::adjacent_find(ids) != ids.end() || (!ids.empty() && ids.front().is_nil())) {
@@ -208,9 +216,16 @@ std::expected<Model, Error> load(const Snapshot& snapshot) {
     }
     return {};
   };
-  auto loaded = insert_saved(model, snapshot.levels, no_parent)
-                    .and_then([&] { return insert_saved(model, snapshot.walls, on_level); })
-                    .and_then([&] { return insert_saved(model, snapshot.openings, in_wall); });
+  auto loaded =
+      insert_saved(model, snapshot.levels, no_parent)
+          .and_then([&] { return insert_saved(model, snapshot.walls, on_level); })
+          .and_then([&] { return insert_saved(model, snapshot.openings, in_wall); })
+          .and_then([&] {
+            const auto alone = [](const Model&, const Conditions&) -> std::expected<void, Error> {
+              return {};
+            };
+            return insert_saved(model, snapshot.conditions, alone);
+          });
   if (!loaded) {
     return std::unexpected{std::move(loaded).error()};
   }
@@ -222,6 +237,7 @@ void collect_ids(const Model& model, std::vector<ElementId>& ids) {
   model.for_each<Level>(add);
   model.for_each<Wall>(add);
   model.for_each<Opening>(add);
+  model.for_each<Conditions>(add);
 }
 
 }  // namespace
@@ -410,6 +426,24 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
           },
           [&model](const SetOpeningKind& set) {
             return edit<Opening>(model, set.opening, {{OpeningField::kKind, set.kind}});
+          },
+          [this](const SetCondition& set) -> std::expected<Ops, Error> {
+            std::optional<ElementId> existing;
+            model_.for_each<Conditions>(
+                [&existing](ElementId id, const Conditions&) { existing = id; });
+            if (existing) {
+              return edit<Conditions>(model_, *existing, {{set.field, set.value}});
+            }
+            Conditions conditions;
+            set_field(conditions, set.field, set.value);
+            if (auto valid = validate(conditions); !valid) {
+              return std::unexpected(std::move(valid.error()));
+            }
+            // Setting an unset value on a job without conditions changes nothing.
+            if (conditions == Conditions{}) {
+              return Ops{};
+            }
+            return Ops{CreateConditions{.id = ElementId{next_uuid()}, .element = conditions}};
           },
           [&model](const RemoveOpening& remove) {
             return find_element<Opening>(model, remove.opening)

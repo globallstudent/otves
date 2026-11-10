@@ -70,8 +70,13 @@ struct EncodedElement {
 [[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Wall& wall);
 [[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder,
                                     const Opening& opening);
+[[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder,
+                                    const Conditions& conditions);
 
-using Element = std::variant<Level, Wall, Opening>;
+[[nodiscard]] schema::ConditionsField to_schema(ConditionsField field);
+[[nodiscard]] std::optional<ConditionsField> from_schema(schema::ConditionsField field);
+
+using Element = std::variant<Level, Wall, Opening, Conditions>;
 
 // The element in a schema union, or kCorruptData when it is absent or holds an unknown value.
 [[nodiscard]] std::expected<Element, Error> decode(schema::Element type, const void* value);

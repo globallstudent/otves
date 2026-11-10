@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <variant>
 
+#include <otves/core/conditions.h>
 #include <otves/core/level.h>
 #include <otves/core/op.h>
 #include <otves/core/opening.h>
@@ -113,11 +115,18 @@ struct RemoveOpening {
   ElementId opening;
 };
 
+// Sets one of the job's estimating conditions, creating them when the job has none
+// (docs/adr/0009). Conditions::kUnset returns the value to the norm default.
+struct SetCondition {
+  ConditionsField field = ConditionsField::kSeismicIntensity;
+  std::int64_t value = Conditions::kUnset;
+};
+
 using Command =
     std::variant<AddLevel, SetLevelElevation, SetLevelHeight, RemoveLevel, AddWall, MoveWallEnd,
                  SetWallThickness, SetWallHeight, SetWallLocationLine, RemoveWall, AddOpening,
                  MoveOpening, ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening,
-                 SetWallUnit, SetLevelRingBeam, SetLevelJunctionMeshes>;
+                 SetWallUnit, SetLevelRingBeam, SetLevelJunctionMeshes, SetCondition>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 

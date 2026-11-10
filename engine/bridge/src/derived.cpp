@@ -1,14 +1,17 @@
 #include "derived.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <expected>
 #include <map>
 #include <optional>
 #include <set>
+#include <string>
 #include <vector>
 
 #include <flatbuffers/flatbuffers.h>
 
+#include <otves/core/conditions.h>
 #include <otves/core/error.h>
 #include <otves/core/level.h>
 #include <otves/core/model.h>
@@ -129,6 +132,37 @@ std::vector<std::optional<takeoff::MasonryUnit>> choices(const Model& model,
   return units;
 }
 
+// The job's conditions, or all unset when it has none.
+Conditions conditions_of(const Model& model) {
+  Conditions found;
+  model.for_each<Conditions>(
+      [&found](ElementId, const Conditions& conditions) { found = conditions; });
+  return found;
+}
+
+// The conditions the builder chose, as the settings rules read (docs/adr/0009); unset ones are
+// left out, so the rule takes the norm default.
+takeoff::Settings settings_of(const Conditions& conditions) {
+  constexpr double per_mille = 1000.0;
+  takeoff::Settings settings;
+  if (conditions.seismic_intensity != Conditions::kUnset) {
+    settings.emplace("seismic_intensity", static_cast<double>(conditions.seismic_intensity));
+  }
+  if (conditions.cement_grade != Conditions::kUnset) {
+    settings.emplace("cement", "PC" + std::to_string(conditions.cement_grade));
+  }
+  if (conditions.mortar_grade != Conditions::kUnset) {
+    settings.emplace("mortar_grade", "M" + std::to_string(conditions.mortar_grade));
+  }
+  if (conditions.unit_waste != Conditions::kUnset) {
+    settings.emplace("unit_waste", static_cast<double>(conditions.unit_waste) / per_mille);
+  }
+  if (conditions.mortar_waste != Conditions::kUnset) {
+    settings.emplace("mortar_waste", static_cast<double>(conditions.mortar_waste) / per_mille);
+  }
+  return settings;
+}
+
 // Reports the levels whose load-bearing walls lack the ring beam or the junction meshes the norm
 // asks for. The take-off never adds them (docs/adr/0008); the builder decides.
 void advise(const Model& model, const takeoff::Measurement& measurement,
@@ -245,8 +279,12 @@ TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Mod
   }
   const std::vector<std::optional<takeoff::MasonryUnit>> units =
       choices(model, *measurement, builder, issues);
+  const Conditions conditions = conditions_of(model);
   // Advice is extra: content without these norms still gives a take-off.
-  if (const auto advice = takeoff::seismic_advice(*rules)) {
+  const std::optional<std::int64_t> intensity = conditions.seismic_intensity == Conditions::kUnset
+                                                    ? std::nullopt
+                                                    : std::optional{conditions.seismic_intensity};
+  if (const auto advice = takeoff::seismic_advice(*rules, intensity)) {
     advise(model, *measurement, *advice, builder, issues);
   }
   for (const takeoff::OpeningIssue& issue : measurement->issues) {
@@ -260,7 +298,7 @@ TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Mod
   if (!masonry) {
     return failure(builder, masonry.error());
   }
-  const auto lines = rules->run(*measurement, *masonry, {});
+  const auto lines = rules->run(*measurement, *masonry, settings_of(conditions));
   if (!lines) {
     return failure(builder, lines.error());
   }

@@ -12,6 +12,7 @@
 
 #include <flatbuffers/flatbuffers.h>
 
+#include <otves/core/conditions.h>
 #include <otves/core/error.h>
 #include <otves/core/hlc.h>
 #include <otves/core/level.h>
@@ -64,6 +65,8 @@ schema::CommandKind to_code(CommandKind kind) {
       return schema::CommandKind::SetLevelRingBeam;
     case CommandKind::kSetLevelJunctionMeshes:
       return schema::CommandKind::SetLevelJunctionMeshes;
+    case CommandKind::kSetCondition:
+      return schema::CommandKind::SetCondition;
     case CommandKind::kAddOpening:
       return schema::CommandKind::AddOpening;
     case CommandKind::kMoveOpening:
@@ -128,6 +131,8 @@ std::optional<CommandKind> from_code(schema::CommandKind kind) {
       return CommandKind::kSetLevelRingBeam;
     case schema::CommandKind::SetLevelJunctionMeshes:
       return CommandKind::kSetLevelJunctionMeshes;
+    case schema::CommandKind::SetCondition:
+      return CommandKind::kSetCondition;
   }
   return std::nullopt;
 }
@@ -317,6 +322,13 @@ flatbuffers::Offset<schema::OpEntry> encode_op(flatbuffers::FlatBufferBuilder& b
                 before ? &*before : nullptr, after ? &*after : nullptr);
             return schema::CreateOpEntry(builder, schema::Op::SetWallFieldOp, value.Union());
           },
+          [&builder](const SetConditionsField& set) {
+            const schema::Uuid key = to_schema(set.id);
+            const auto value = schema::CreateSetConditionsFieldOp(
+                builder, &key, to_schema(set.field), std::get<std::int64_t>(set.before),
+                std::get<std::int64_t>(set.after));
+            return schema::CreateOpEntry(builder, schema::Op::SetConditionsFieldOp, value.Union());
+          },
           [&builder](const SetOpeningField& set) {
             const schema::Uuid key = to_schema(set.id);
             const auto value = schema::CreateSetOpeningFieldOp(
@@ -438,6 +450,18 @@ Result<Op> opening_op(const schema::SetOpeningFieldOp* set) {
       .id = to_id(set->id()), .field = *field, .before = *before, .after = *after};
 }
 
+Result<Op> conditions_op(const schema::SetConditionsFieldOp* set) {
+  if (set == nullptr) {
+    return corrupt("op is missing");
+  }
+  const std::optional<ConditionsField> field = from_schema(set->field());
+  if (!field) {
+    return corrupt("unknown condition");
+  }
+  return SetConditionsField{
+      .id = to_id(set->id()), .field = *field, .before = set->before(), .after = set->after()};
+}
+
 Result<Op> decode_op(const schema::OpEntry& entry) {
   switch (entry.op_type()) {
     case schema::Op::CreateOp:
@@ -450,6 +474,8 @@ Result<Op> decode_op(const schema::OpEntry& entry) {
       return wall_op(entry.op_as_SetWallFieldOp());
     case schema::Op::SetOpeningFieldOp:
       return opening_op(entry.op_as_SetOpeningFieldOp());
+    case schema::Op::SetConditionsFieldOp:
+      return conditions_op(entry.op_as_SetConditionsFieldOp());
     case schema::Op::NONE:
       break;
   }
