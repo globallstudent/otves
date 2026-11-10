@@ -90,4 +90,8 @@
     <string name="issue_ring_beam" tools:ignore="TypographyDashes">По КМК 2.01.03-19 на несущих стенах этажа нужен армопояс</string>
     <string name="issue_meshes" tools:ignore="TypographyDashes">По КМК 2.01.03-19 в узлах несущих стен нужны сетки</string>
     <string name="editor_fit">Показать весь план</string>
+    <string name="material_own">Свой размер</string>
+    <string name="size_length">Длина, мм</string>
+    <string name="size_width">Ширина, мм</string>
+    <string name="size_height">Высота, мм</string>
 </resources>

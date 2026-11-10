@@ -135,6 +135,10 @@ fun EditorRoute(
                 onCloseMeasured = viewModel::closeMeasured,
                 onMaterials = viewModel::showMaterials,
                 onMaterial = viewModel::chooseMaterial,
+                onOwnSize = viewModel::startSize,
+                onSizeField = viewModel::selectSizeField,
+                onCancelSize = viewModel::cancelSize,
+                onConfirmSize = viewModel::confirmSize,
                 onRingBeam = viewModel::setRingBeam,
                 onJunctionMeshes = viewModel::setJunctionMeshes,
             ),
@@ -177,6 +181,10 @@ internal data class EditorActions(
     val onCloseMeasured: () -> Unit = {},
     val onMaterials: (open: Boolean) -> Unit = {},
     val onMaterial: (MasonryUnitOption) -> Unit = {},
+    val onOwnSize: () -> Unit = {},
+    val onSizeField: (Int) -> Unit = {},
+    val onCancelSize: () -> Unit = {},
+    val onConfirmSize: () -> Unit = {},
     val onRingBeam: (Mm) -> Unit = {},
     val onJunctionMeshes: (Boolean) -> Unit = {},
 )
@@ -209,7 +217,11 @@ internal fun EditorScreen(
                 drawing = state.tool == Tool.WALL && state.entry == null && state.measure == null && !listOpen,
                 fit = fit,
                 // The measured wall stays in view above the number pad.
-                focus = state.draft?.takeIf { state.measure != null }?.let { it.end ?: it.start },
+                focus =
+                    state.draft
+                        ?.takeIf { state.measure != null }
+                        ?.let { listOfNotNull(it.start, it.end) }
+                        .orEmpty(),
                 onTap = actions.onTap,
                 onAim = actions.onAim,
                 onAimCancel = actions.onAimCancel,
@@ -233,9 +245,11 @@ internal fun EditorScreen(
             val selected = state.selected
             val entry = state.entry
             val measure = state.measure
+            val sizeEntry = state.sizeEntry
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 when {
                     entry != null -> LengthPad(entry, actions)
+                    sizeEntry != null -> SizePad(sizeEntry, actions)
                     measure != null -> MeasurePad(measure, state, actions)
                     state.materialOpen -> MaterialPanel(state, actions)
                     selected != null -> Inspector(selected, state, actions)
@@ -256,13 +270,24 @@ private fun Notice(state: EditorUiState) {
     val text =
         when {
             !state.ready -> stringResource(R.string.editor_loading)
+
             state.refused != null -> refusalText(state.refused)
+
+            // The number pad says what is being entered.
+            state.measure != null -> null
+
             drawing -> stringResource(R.string.editor_hint_next)
+
             joinIssue != null -> issueText(joinIssue.kind)
+
             state.tool == Tool.SELECT && state.selected == null -> stringResource(R.string.editor_hint_select)
+
             state.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
+
             state.tool == Tool.DOOR -> stringResource(R.string.editor_hint_door)
+
             state.outlines.isEmpty() -> stringResource(R.string.editor_hint_start)
+
             else -> null
         } ?: return
     val warns = state.refused != null || (!drawing && joinIssue != null)
@@ -802,7 +827,45 @@ private fun MaterialPanel(
             }
             HorizontalDivider(color = colors.divider)
         }
+        PanelAction(stringResource(R.string.material_own), actions.onOwnSize)
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+// A brick or block the catalog does not list: its three sizes as laid, typed one after another.
+@Composable
+private fun SizePad(
+    entry: SizeEntry,
+    actions: EditorActions,
+) {
+    val colors = OtvesTheme.colors
+    val labels = listOf(R.string.size_length, R.string.size_width, R.string.size_height)
+    Panel {
+        PanelHeader(stringResource(R.string.material_own)) {
+            PanelAction(stringResource(R.string.length_cancel), actions.onCancelSize)
+        }
+        Row(modifier = Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            labels.forEachIndexed { index, label ->
+                val active = index == entry.active
+                Surface(
+                    onClick = { actions.onSizeField(index) },
+                    shape = PanelShape,
+                    // No boxes: the size being typed sits on the field colour, the others on the panel.
+                    color = if (active) colors.field else colors.surface,
+                    modifier = Modifier.weight(1f).semantics { selected = active },
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, color = colors.inkSecondary)
+                        Text(
+                            text = entry.digits[index].ifEmpty { "0" },
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = if (entry.digits[index].isEmpty()) colors.inkTertiary else colors.ink,
+                        )
+                    }
+                }
+            }
+        }
+        NumberKeys(actions, stringResource(R.string.inspector_done), actions.onConfirmSize, enabled = entry.size != null)
     }
 }
 

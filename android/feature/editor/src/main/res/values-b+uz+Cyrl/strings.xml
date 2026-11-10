@@ -85,4 +85,8 @@
     <string name="issue_ring_beam" tools:ignore="TypographyDashes">КМК 2.01.03-19 бўйича қаватнинг юк кўтарувчи деворларига армопояс керак</string>
     <string name="issue_meshes" tools:ignore="TypographyDashes">КМК 2.01.03-19 бўйича юк кўтарувчи деворлар тугунларига тўр керак</string>
     <string name="editor_fit">Бутун режани кўрсатиш</string>
+    <string name="material_own">Ўз ўлчамим</string>
+    <string name="size_length">Узунлик, мм</string>
+    <string name="size_width">Эни, мм</string>
+    <string name="size_height">Баландлик, мм</string>
 </resources>

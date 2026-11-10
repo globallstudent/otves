@@ -840,6 +840,35 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun aUnitSizeOfTheBuildersOwnIsTypedAndChosen() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        viewModel.showMaterials(true)
+        viewModel.startSize()
+
+        // The local 300 × 150 × 200 block.
+        listOf(3, 0, 0).forEach(viewModel::typeDigit)
+        viewModel.selectSizeField(1)
+        listOf(1, 5, 0, 9).forEach(viewModel::typeDigit)
+        viewModel.eraseDigit()
+        assertThat(
+            viewModel.uiState.value.sizeEntry
+                ?.size,
+        ).isNull()
+        viewModel.selectSizeField(2)
+        listOf(2, 0, 0).forEach(viewModel::typeDigit)
+        viewModel.confirmSize()
+
+        val state = viewModel.uiState.value
+        val own = UnitSize(300.mm, 150.mm, 200.mm)
+        assertThat(state.sizeEntry).isNull()
+        assertThat(state.materialOpen).isFalse()
+        assertThat(state.material).isEqualTo(own)
+        // Laid along the wall or across it; 380 mm is nearer the 300.
+        assertThat(state.thicknessesOf(own)).containsExactly(150.mm, 300.mm).inOrder()
+        assertThat(state.thickness).isEqualTo(300.mm)
+    }
+
+    @Test
     fun theSelectedWallTakesTheChosenMaterialAndAThicknessItBuilds() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
         val wall = viewModel.buildWall()

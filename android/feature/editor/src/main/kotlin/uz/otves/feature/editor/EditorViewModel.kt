@@ -23,6 +23,7 @@ import uz.otves.engine.EngineResponse
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
 import uz.otves.engine.Level
+import uz.otves.engine.MasonryUnitKind
 import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
@@ -113,6 +114,22 @@ internal data class Measure(
     val turn: Turn = Turn.STRAIGHT,
 )
 
+/**
+ * A masonry unit the catalog does not list, being typed: its size as laid in millimetres, as
+ * digits so far, and which of the three the keys go to.
+ */
+internal data class SizeEntry(
+    val digits: List<String> = listOf("", "", ""),
+    val active: Int = 0,
+) {
+    /** The size once all three are typed. */
+    val size: UnitSize?
+        get() {
+            val (length, width, height) = digits.map { it.toLongOrNull() ?: 0 }
+            return if (length > 0 && width > 0 && height > 0) UnitSize(Mm(length), Mm(width), Mm(height)) else null
+        }
+}
+
 /** A wall's exact length being typed: the digits so far, in millimetres. */
 internal data class LengthEntry(
     val wall: ElementId,
@@ -145,6 +162,8 @@ internal data class EditorUiState(
     /** The wall drawn last, whose length the user may now type. */
     val drawn: ElementId? = null,
     val entry: LengthEntry? = null,
+    /** A unit size of the builder's own is being typed. */
+    val sizeEntry: SizeEntry? = null,
     /** Walls are being entered by their measured lengths. */
     val measure: Measure? = null,
     /** Whether the measured run can close back onto its first point. */
@@ -173,9 +192,17 @@ internal data class EditorUiState(
     val unchosen: Set<ElementId>
         get() = issues.filter { it.kind == IssueKind.MATERIAL_NOT_CHOSEN }.mapNotNull { it.element }.toSet()
 
-    /** The thicknesses a wall of [unit] is built in; before a material is chosen, the first one's. */
+    /**
+     * The thicknesses a wall of [unit] is built in: the catalog's, or for a size of the builder's
+     * own the unit laid along and across the wall; before a material is chosen, the first one's.
+     */
     fun thicknessesOf(unit: UnitSize?): List<Mm> =
-        (catalog.units.find { it.size == unit } ?: catalog.units.firstOrNull())?.thicknesses.orEmpty()
+        catalog.units.find { it.size == unit }?.thicknesses
+            ?: unit?.let { listOf(it.width, it.length).distinct().sortedBy { side -> side.value } }
+            ?: catalog.units
+                .firstOrNull()
+                ?.thicknesses
+                .orEmpty()
 }
 
 /**
@@ -413,6 +440,23 @@ internal class EditorViewModel(
         )
     }
 
+    /** Opens the keys for a unit size the catalog does not list. */
+    fun startSize() = state.update { it.copy(sizeEntry = SizeEntry()) }
+
+    fun selectSizeField(index: Int) = state.update { current -> current.copy(sizeEntry = current.sizeEntry?.copy(active = index)) }
+
+    fun cancelSize() = state.update { it.copy(sizeEntry = null) }
+
+    /** Chooses the typed size as the material, as [chooseMaterial] does a catalog unit. */
+    fun confirmSize() {
+        val size = state.value.sizeEntry?.size ?: return
+        state.update { it.copy(sizeEntry = null) }
+        val listed =
+            state.value.catalog.units
+                .find { it.size == size }
+        chooseMaterial(listed ?: MasonryUnitOption(OWN_UNIT, MasonryUnitKind.BLOCK, mark = "", size, state.value.thicknessesOf(size)))
+    }
+
     /** The ring beam on the shown storey's load-bearing walls; zero for none. */
     fun setRingBeam(height: Mm) {
         val level = state.value.level ?: return
@@ -427,7 +471,16 @@ internal class EditorViewModel(
     fun selectTool(tool: Tool) {
         chain.clear()
         state.update {
-            it.copy(tool = tool, draft = null, drawn = null, measure = null, selected = null, materialOpen = false, refused = null)
+            it.copy(
+                tool = tool,
+                sizeEntry = null,
+                draft = null,
+                drawn = null,
+                measure = null,
+                selected = null,
+                materialOpen = false,
+                refused = null,
+            )
         }
     }
 
@@ -440,11 +493,34 @@ internal class EditorViewModel(
     /** A key of the number pad: for the length being corrected, else for the measured wall. */
     fun typeDigit(digit: Int) {
         val typed = { digits: String -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_LENGTH_DIGITS } ?: digits }
+        if (state.value.sizeEntry != null) return sized(typed)
         if (state.value.entry == null) return measured { it.copy(digits = typed(it.digits)) }
         state.update { current -> current.copy(entry = current.entry?.let { it.copy(digits = typed(it.digits)) }) }
     }
 
+    // Changes the digits of the unit size being typed.
+    private fun sized(change: (String) -> String) =
+        state.update { current ->
+            val entry = current.sizeEntry ?: return@update current
+            current.copy(
+                sizeEntry =
+                    entry.copy(
+                        digits =
+                            entry.digits.mapIndexed { index, digits ->
+                                if (index ==
+                                    entry.active
+                                ) {
+                                    change(digits)
+                                } else {
+                                    digits
+                                }
+                            },
+                    ),
+            )
+        }
+
     fun eraseDigit() {
+        if (state.value.sizeEntry != null) return sized { it.dropLast(1) }
         if (state.value.entry == null) return measured { it.copy(digits = it.digits.dropLast(1)) }
         state.update { current -> current.copy(entry = current.entry?.let { it.copy(digits = it.digits.dropLast(1)) }) }
     }
@@ -845,6 +921,8 @@ internal class EditorViewModel(
 
         // Up to 99 999 mm, more than any wall of a house.
         const val MAX_LENGTH_DIGITS = 5
+
+        const val OWN_UNIT = "own"
 
         // A common sill height for living rooms; the user changes it per window later.
         val WindowSill = 900.mm
