@@ -1,5 +1,6 @@
 package uz.otves.data.project
 
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Insert
@@ -11,8 +12,10 @@ import androidx.room.Upsert
 /** One job file (docs/adr/0007). */
 @Database(
     entities = [JobRow::class, LevelRow::class, WallRow::class, OpeningRow::class, OpGroupRow::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    // Version 2 adds what the builder chose (docs/adr/0008): new columns, zero in old jobs.
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 internal abstract class ProjectDatabase : RoomDatabase() {
     abstract fun jobs(): JobDao

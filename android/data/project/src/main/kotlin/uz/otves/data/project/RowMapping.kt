@@ -9,6 +9,7 @@ import uz.otves.engine.LogEntry
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointMm
+import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
 import kotlin.uuid.Uuid
 
@@ -26,7 +27,7 @@ internal fun ElementId.key(): String = uuid.toString()
 
 internal fun elementId(key: String): ElementId = ElementId(Uuid.parse(key))
 
-internal fun Level.row(id: ElementId): LevelRow = LevelRow(id.key(), elevation.value, height.value)
+internal fun Level.row(id: ElementId): LevelRow = LevelRow(id.key(), elevation.value, height.value, ringBeam.value, junctionMeshes)
 
 internal fun Wall.row(id: ElementId): WallRow =
     WallRow(
@@ -44,6 +45,9 @@ internal fun Wall.row(id: ElementId): WallRow =
                 LocationLine.LEFT_FACE -> LEFT_FACE
                 LocationLine.RIGHT_FACE -> RIGHT_FACE
             },
+        unitLength = unit?.length?.value ?: 0,
+        unitWidth = unit?.width?.value ?: 0,
+        unitHeight = unit?.height?.value ?: 0,
     )
 
 internal fun Opening.row(id: ElementId): OpeningRow =
@@ -62,7 +66,8 @@ internal fun Opening.row(id: ElementId): OpeningRow =
             },
     )
 
-internal fun LevelRow.element(): Pair<ElementId, EngineElement> = elementId(id) to Level(Mm(elevation), Mm(height))
+internal fun LevelRow.element(): Pair<ElementId, EngineElement> =
+    elementId(id) to Level(Mm(elevation), Mm(height), Mm(ringBeam), junctionMeshes)
 
 internal fun WallRow.element(): Pair<ElementId, EngineElement> =
     elementId(id) to
@@ -79,6 +84,7 @@ internal fun WallRow.element(): Pair<ElementId, EngineElement> =
                     RIGHT_FACE -> LocationLine.RIGHT_FACE
                     else -> throw CorruptJobException("wall $id has location line $locationLine")
                 },
+            unit = if (unitLength > 0) UnitSize(Mm(unitLength), Mm(unitWidth), Mm(unitHeight)) else null,
         )
 
 internal fun OpeningRow.element(): Pair<ElementId, EngineElement> =

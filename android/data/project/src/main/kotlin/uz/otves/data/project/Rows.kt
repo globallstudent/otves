@@ -5,7 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// Tables of a job file, schema version 1 (docs/adr/0007). Ids are canonical UUID text, lengths
+// Tables of a job file, schema version 2 (docs/adr/0007, 0008). Ids are canonical UUID text, lengths
 // whole millimetres, enums the codes of schema/engine.fbs.
 
 @Entity(tableName = "job")
@@ -21,6 +21,8 @@ internal data class LevelRow(
     @PrimaryKey val id: String,
     val elevation: Long,
     val height: Long,
+    @ColumnInfo(name = "ring_beam", defaultValue = "0") val ringBeam: Long,
+    @ColumnInfo(name = "junction_meshes", defaultValue = "0") val junctionMeshes: Boolean,
 )
 
 @Entity(tableName = "wall", indices = [Index("level_id")])
@@ -34,6 +36,10 @@ internal data class WallRow(
     val thickness: Long,
     val height: Long,
     @ColumnInfo(name = "location_line") val locationLine: Int,
+    // The masonry unit as laid; all zero until chosen.
+    @ColumnInfo(name = "unit_length", defaultValue = "0") val unitLength: Long,
+    @ColumnInfo(name = "unit_width", defaultValue = "0") val unitWidth: Long,
+    @ColumnInfo(name = "unit_height", defaultValue = "0") val unitHeight: Long,
 )
 
 @Entity(tableName = "opening", indices = [Index("wall_id")])
