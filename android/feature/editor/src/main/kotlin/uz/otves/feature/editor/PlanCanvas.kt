@@ -1,8 +1,11 @@
 package uz.otves.feature.editor
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,12 +20,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -44,8 +50,10 @@ import kotlin.math.roundToLong
 
 /**
  * The plan as the engine derived it: wall and opening outlines in metres, drawn with y up, over
- * the storey below in outline. Pinch to zoom, drag to pan, tap to build. Taps go out in plan
- * millimetres, with how far around the finger still counts as touched at the current zoom.
+ * the storey below in outline. Two fingers always move and zoom the plan. One finger moves it
+ * too, except while [drawing]: then it aims the wall's next point and lifting it places the point.
+ * Touches go out in plan millimetres, with how far around the finger still counts as touched at
+ * the current zoom.
  */
 @Composable
 internal fun PlanCanvas(
@@ -55,13 +63,24 @@ internal fun PlanCanvas(
     selected: ElementId?,
     issues: List<Issue>,
     dimensions: List<Dimension>,
-    wallStart: PointMm?,
+    unchosen: Set<ElementId>,
+    draft: Draft?,
+    draftThickness: Mm,
+    drawing: Boolean,
     onTap: (at: PointMm, reach: Mm) -> Unit,
+    onAim: (at: PointMm, reach: Mm) -> Unit,
+    onAimCancel: () -> Unit,
+    onCommit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val view = remember { PlanView(pixelsPerMetre = with(density) { START_SCALE.dp.toPx() }) }
     val tap by rememberUpdatedState(onTap)
+    val aim by rememberUpdatedState(onAim)
+    val aimCancel by rememberUpdatedState(onAimCancel)
+    val commit by rememberUpdatedState(onCommit)
+    val draws by rememberUpdatedState(drawing)
+    val slop = LocalViewConfiguration.current.touchSlop
     val colors = OtvesTheme.colors
     val wallStroke = with(density) { 1.dp.toPx() }
     val markRadius = with(density) { 6.dp.toPx() }
@@ -70,6 +89,8 @@ internal fun PlanCanvas(
     val labelGap = with(density) { LABEL_GAP.dp.toPx() }
     val measurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelMedium.copy(color = colors.inkSecondary)
+    val draftStyle = MaterialTheme.typography.titleMedium.copy(color = colors.selection)
+    val dash = with(density) { 6.dp.toPx() }
 
     Canvas(
         modifier =
@@ -77,9 +98,36 @@ internal fun PlanCanvas(
                 .clipToBounds()
                 .onSizeChanged { size -> view.centre(size.width.toFloat(), size.height.toFloat()) }
                 .pointerInput(Unit) {
-                    detectTransformGestures { centroid, pan, zoom, _ -> view.move(centroid, pan, zoom) }
-                }.pointerInput(Unit) {
-                    detectTapGestures { offset -> tap(view.toPlan(offset), view.toPlanLength(touchReach)) }
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val aiming = draws
+                        var moving = false
+                        var travelled = 0f
+                        if (aiming) aim(view.toPlan(down.position), view.toPlanLength(touchReach))
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) break
+                            if (pressed.size > 1 && !moving) {
+                                moving = true
+                                if (aiming) aimCancel()
+                            }
+                            if (aiming && !moving) {
+                                aim(view.toPlan(pressed.first().position), view.toPlanLength(touchReach))
+                            } else {
+                                val pan = event.calculatePan()
+                                travelled += pan.getDistance()
+                                if (travelled > slop) moving = true
+                                if (moving) view.move(event.calculateCentroid(useCurrent = false), pan, event.calculateZoom())
+                            }
+                            event.changes.forEach { it.consume() }
+                        }
+                        when {
+                            moving -> Unit
+                            aiming -> commit()
+                            else -> tap(view.toPlan(down.position), view.toPlanLength(touchReach))
+                        }
+                    }
                 },
     ) {
         grid(view, colors.divider, colors.border)
@@ -88,7 +136,8 @@ internal fun PlanCanvas(
         }
         for (outline in outlines) {
             val path = path(view, outline)
-            drawPath(path, colors.inkTertiary)
+            // A wall with no material yet is an empty outline: it is drawn but not built from anything.
+            drawPath(path, if (outline.wall in unchosen) colors.surface else colors.inkTertiary)
             drawPath(path, colors.ink, style = Stroke(width = wallStroke))
         }
         for (dimension in dimensions) {
@@ -116,9 +165,31 @@ internal fun PlanCanvas(
         openings.find { it.opening == selected }?.let { opening ->
             drawPath(path(view, opening.points), colors.selection, style = Stroke(width = selectionStroke))
         }
-        if (wallStart != null) {
-            val at = view.toScreen(wallStart.x.value / MM_PER_METRE, wallStart.y.value / MM_PER_METRE)
-            drawCircle(colors.selection, radius = markRadius, center = at)
+        if (draft != null) {
+            val start = view.toScreen(draft.start)
+            val end = draft.end?.let(view::toScreen)
+            if (end != null) {
+                for (guide in draft.guides) {
+                    drawLine(
+                        colors.selection,
+                        view.toScreen(guide.from),
+                        view.toScreen(guide.to),
+                        strokeWidth = wallStroke,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash)),
+                    )
+                }
+                val width = (draftThickness.value / MM_PER_METRE * view.scale).toFloat()
+                drawLine(colors.selection.copy(alpha = SELECTION_FILL), start, end, strokeWidth = width, cap = StrokeCap.Butt)
+                drawLine(colors.selection, start, end, strokeWidth = selectionStroke)
+                draft.length?.let { length ->
+                    // Above the finger, where it stays readable.
+                    val label = measurer.measure(length.value.toString(), draftStyle)
+                    val at = end - Offset(label.size.width / 2f, label.size.height + touchReach * LABEL_LIFT)
+                    drawText(label, topLeft = at)
+                }
+                drawCircle(colors.selection, radius = markRadius, center = end)
+            }
+            drawCircle(colors.selection, radius = markRadius, center = start)
         }
     }
 }
@@ -154,6 +225,8 @@ private class PlanView(
         x: Double,
         y: Double,
     ): Offset = Offset(origin.x + (x * scale).toFloat(), origin.y - (y * scale).toFloat())
+
+    fun toScreen(point: PointMm): Offset = toScreen(point.x.value / MM_PER_METRE, point.y.value / MM_PER_METRE)
 
     fun toPlanLength(pixels: Float): Mm = Mm((pixels / scale * MM_PER_METRE).roundToLong())
 
@@ -315,3 +388,4 @@ private const val HALF_TURN = 180f
 private const val LABEL_GAP = 4f
 private const val LABEL_FILL = 0.8f
 private const val FULL_TURN = 360f
+private const val LABEL_LIFT = 3f

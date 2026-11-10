@@ -2,8 +2,12 @@ package uz.otves.feature.editor
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
+import uz.otves.core.model.Mm
+import uz.otves.engine.MasonryUnitKind
+import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.QuantityUnit
+import uz.otves.engine.UnitSize
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -13,13 +17,18 @@ import java.util.Locale
  * parameter: `concrete.b15`, `rebar.a500c.d12`, `lintel.bar.l22`.
  */
 @Composable
-internal fun itemName(item: String): String {
+internal fun itemName(
+    item: String,
+    units: List<MasonryUnitOption>,
+): String {
+    val masonry = Regex("""masonry_unit\.(\d+)x(\d+)x(\d+)""").matchEntire(item)
     val concrete = Regex("""concrete\.b(\d+)(?:_(\d+))?""").matchEntire(item)
     val rebar = Regex("""rebar\.a(\d+)c\.d(\d+)""").matchEntire(item)
     val lintel = Regex("""lintel\.bar\.l(\d+)""").matchEntire(item)
     return when {
-        item == "masonry_unit" -> {
-            stringResource(R.string.item_masonry_unit)
+        masonry != null -> {
+            val (length, width, height) = masonry.destructured
+            unitTitle(UnitSize(Mm(length.toLong()), Mm(width.toLong()), Mm(height.toLong())), units)
         }
 
         item == "mortar" -> {
@@ -52,6 +61,28 @@ internal fun itemName(item: String): String {
         }
     }
 }
+
+/** A masonry unit as builders call it: «Кирпич 1НФ», or with its size when it has no mark. */
+@Composable
+internal fun unitTitle(
+    size: UnitSize,
+    units: List<MasonryUnitOption>,
+): String {
+    val option = units.find { it.size == size }
+    val kind =
+        stringResource(
+            when (option?.kind) {
+                MasonryUnitKind.BRICK -> R.string.unit_brick
+                MasonryUnitKind.STONE -> R.string.unit_stone
+                MasonryUnitKind.BLOCK, null -> R.string.unit_block
+            },
+        )
+    return if (option == null || option.mark.isEmpty()) "$kind ${unitSize(size)}" else "$kind ${option.mark}"
+}
+
+/** Millimetres as laid: «250 × 120 × 65». */
+@Composable
+internal fun unitSize(size: UnitSize): String = stringResource(R.string.unit_size, size.length.value, size.width.value, size.height.value)
 
 @Composable
 internal fun unitName(unit: QuantityUnit): String =

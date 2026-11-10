@@ -2,6 +2,8 @@ package uz.otves.feature.editor
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,68 +21,91 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import uz.otves.core.designsystem.OtvesDimens
+import uz.otves.core.designsystem.OtvesIcons
 import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.designsystem.SegmentedControl
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
 import uz.otves.data.project.JobStore
+import uz.otves.engine.Catalog
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
-import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
+import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
-import uz.otves.engine.QuantityUnit
+import uz.otves.engine.Wall
 import uz.otves.engine.WallOutline
+import java.util.Locale
 import kotlin.uuid.Uuid
 
 /**
- * The editor of one job, wired to the engine; [loadContent] reads the norms and rules and
- * [openJob] opens the job file, which the editor closes when it leaves.
+ * The editor of one job, wired to the engine; [loadContent] reads the norms and rules,
+ * [loadCatalog] what the builder chooses from, and [openJob] opens the job file, which the editor
+ * closes when it leaves.
  */
 @Composable
 fun EditorRoute(
     engine: Engine,
     loadContent: suspend () -> EngineCommand.LoadContent,
+    loadCatalog: suspend () -> Catalog,
     openJob: () -> JobStore,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val viewModel = viewModel { EditorViewModel(engine, loadContent, openJob()) }
+    val viewModel = viewModel { EditorViewModel(engine, loadContent, loadCatalog, openJob()) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     EditorScreen(
         state = state,
         actions =
             EditorActions(
+                onBack = onBack,
                 onTap = viewModel::tap,
-                onCancelWall = viewModel::cancelWall,
+                onAim = viewModel::aim,
+                onAimCancel = viewModel::cancelAim,
+                onCommit = viewModel::commit,
+                onFinishWall = viewModel::finishWall,
+                onOrtho = viewModel::toggleOrtho,
                 onTool = viewModel::selectTool,
                 onThickness = viewModel::selectThickness,
                 onWindowSize = viewModel::selectWindowSize,
@@ -94,6 +119,16 @@ fun EditorRoute(
                 onOpeningKind = viewModel::setOpeningKind,
                 onOpeningSize = viewModel::setOpeningSize,
                 onDelete = viewModel::removeSelected,
+                onTakeoff = viewModel::showTakeoff,
+                onEditLength = viewModel::editLength,
+                onDigit = viewModel::typeDigit,
+                onErase = viewModel::eraseDigit,
+                onCancelLength = viewModel::cancelLength,
+                onConfirmLength = viewModel::confirmLength,
+                onMaterials = viewModel::showMaterials,
+                onMaterial = viewModel::chooseMaterial,
+                onRingBeam = viewModel::setRingBeam,
+                onJunctionMeshes = viewModel::setJunctionMeshes,
             ),
         modifier = modifier,
     )
@@ -101,8 +136,13 @@ fun EditorRoute(
 
 /** What the editor's controls do; the route wires them to the ViewModel. */
 internal data class EditorActions(
+    val onBack: () -> Unit = {},
     val onTap: (at: PointMm, reach: Mm) -> Unit = { _, _ -> },
-    val onCancelWall: () -> Unit = {},
+    val onAim: (at: PointMm, reach: Mm) -> Unit = { _, _ -> },
+    val onAimCancel: () -> Unit = {},
+    val onCommit: () -> Unit = {},
+    val onFinishWall: () -> Unit = {},
+    val onOrtho: () -> Unit = {},
     val onTool: (Tool) -> Unit = {},
     val onThickness: (Mm) -> Unit = {},
     val onWindowSize: (OpeningSize) -> Unit = {},
@@ -116,8 +156,20 @@ internal data class EditorActions(
     val onOpeningKind: (OpeningKind) -> Unit = {},
     val onOpeningSize: (OpeningSize) -> Unit = {},
     val onDelete: () -> Unit = {},
+    val onTakeoff: (open: Boolean) -> Unit = {},
+    val onEditLength: (ElementId) -> Unit = {},
+    val onDigit: (Int) -> Unit = {},
+    val onErase: () -> Unit = {},
+    val onCancelLength: () -> Unit = {},
+    val onConfirmLength: () -> Unit = {},
+    val onMaterials: (open: Boolean) -> Unit = {},
+    val onMaterial: (MasonryUnitOption) -> Unit = {},
+    val onRingBeam: (Mm) -> Unit = {},
+    val onJunctionMeshes: (Boolean) -> Unit = {},
 )
 
+// The plan fills the screen; controls float over it: where you are along the top, tools along the
+// bottom. A panel (number pad, inspector, take-off) takes the tools' place, one at a time.
 @Composable
 internal fun EditorScreen(
     state: EditorUiState,
@@ -125,129 +177,277 @@ internal fun EditorScreen(
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
-        Column(modifier = Modifier.safeDrawingPadding()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = OtvesDimens.gutter),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // One line and the same buttons always: a taller bar would shift the plan under
-                // the user's finger between the two taps of a wall.
-                val storey = state.levels.indexOf(state.level) + 1
-                Text(
-                    text = if (storey > 0) stringResource(R.string.level_name, storey) else stringResource(R.string.editor_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = actions.onUndo, enabled = state.canUndo, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
-                    Text(stringResource(R.string.editor_undo))
-                }
-                TextButton(onClick = actions.onRedo, enabled = state.canRedo, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
-                    Text(stringResource(R.string.editor_redo))
-                }
-            }
-            SegmentedControl(
-                options = Tool.entries.map { toolName(it) },
-                selected = state.tool.ordinal,
-                onSelect = { actions.onTool(Tool.entries[it]) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = OtvesDimens.gutter),
+        Box(modifier = Modifier.safeDrawingPadding()) {
+            PlanCanvas(
+                outlines = state.outlines,
+                openings = state.openings,
+                below = state.below,
+                selected = state.selected?.id,
+                issues = state.issues,
+                dimensions = state.dimensions,
+                unchosen = state.unchosen,
+                draft = state.draft,
+                draftThickness = state.thickness,
+                drawing = state.tool == Tool.WALL && state.entry == null,
+                onTap = actions.onTap,
+                onAim = actions.onAim,
+                onAimCancel = actions.onAimCancel,
+                onCommit = actions.onCommit,
+                modifier = Modifier.fillMaxSize(),
             )
-            ToolOptions(state, actions)
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                PlanCanvas(
-                    outlines = state.outlines,
-                    openings = state.openings,
-                    below = state.below,
-                    selected = state.selected?.id,
-                    issues = state.issues,
-                    dimensions = state.dimensions,
-                    wallStart = state.wallStart,
-                    onTap = actions.onTap,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                val joinIssue = state.issues.firstOrNull { it.element == null }
-                val notice =
-                    when {
-                        !state.ready -> stringResource(R.string.editor_loading)
-                        state.refused != null -> refusalText(state.refused)
-                        state.wallStart != null -> stringResource(R.string.editor_hint_end)
-                        joinIssue != null -> issueText(joinIssue.kind)
-                        state.tool == Tool.SELECT && state.selected == null -> stringResource(R.string.editor_hint_select)
-                        state.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
-                        state.tool == Tool.DOOR -> stringResource(R.string.editor_hint_door)
-                        state.outlines.isEmpty() -> stringResource(R.string.editor_hint_start)
-                        else -> null
-                    }
-                Column(
-                    modifier = Modifier.align(Alignment.TopCenter).padding(OtvesDimens.gutter),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    if (notice != null) {
-                        Text(
-                            text = notice,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color =
-                                if (state.refused != null || (state.wallStart == null && joinIssue != null)) {
-                                    OtvesTheme.colors.warning
-                                } else {
-                                    OtvesTheme.colors.inkSecondary
-                                },
-                        )
-                    }
-                    if (state.wallStart != null) {
-                        TextButton(onClick = actions.onCancelWall, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
-                            Text(stringResource(R.string.editor_cancel_wall))
-                        }
-                    }
+            Column(
+                modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(OtvesDimens.gutter),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RoundButton(OtvesIcons.Back, stringResource(R.string.editor_back), actions.onBack)
+                    if (state.ready) LevelPill(state.levels, state.level, actions.onLevel, actions.onAddLevel)
+                    Spacer(Modifier.weight(1f))
+                    RoundButton(OtvesIcons.List, stringResource(R.string.takeoff_title), { actions.onTakeoff(true) })
                 }
-                if (state.ready) {
-                    LevelPicker(
-                        levels = state.levels,
-                        current = state.level,
-                        onLevel = actions.onLevel,
-                        onAdd = actions.onAddLevel,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(OtvesDimens.gutter),
-                    )
-                }
+                Notice(state)
             }
             val selected = state.selected
-            if (selected != null) Inspector(selected, state.issues, actions) else TakeoffPanel(state)
+            val entry = state.entry
+            Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+                when {
+                    entry != null -> LengthPad(entry, actions)
+                    state.materialOpen -> MaterialPanel(state, actions)
+                    selected != null -> Inspector(selected, state, actions)
+                    state.takeoffOpen -> TakeoffPanel(state, actions)
+                    else -> Tools(state, actions)
+                }
+            }
         }
     }
 }
 
-// Storeys as round buttons, the top one first, under a button for a new storey. They sit on the
-// right, away from where the plan starts.
+// One line that says what the next touch does, or what is wrong.
 @Composable
-private fun LevelPicker(
+private fun Notice(state: EditorUiState) {
+    val joinIssue = state.issues.firstOrNull { it.element == null }
+    val drawing = state.tool == Tool.WALL && state.draft != null
+    val text =
+        when {
+            !state.ready -> stringResource(R.string.editor_loading)
+            state.refused != null -> refusalText(state.refused)
+            drawing -> stringResource(R.string.editor_hint_next)
+            joinIssue != null -> issueText(joinIssue.kind)
+            state.tool == Tool.SELECT && state.selected == null -> stringResource(R.string.editor_hint_select)
+            state.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
+            state.tool == Tool.DOOR -> stringResource(R.string.editor_hint_door)
+            state.outlines.isEmpty() -> stringResource(R.string.editor_hint_start)
+            else -> null
+        } ?: return
+    val warns = state.refused != null || (!drawing && joinIssue != null)
+    val colors = OtvesTheme.colors
+    Surface(shape = PanelShape, color = colors.surface, border = BorderStroke(1.dp, colors.border)) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (warns) colors.warning else colors.inkSecondary,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
+}
+
+// The storey the user works on; the list offers the others, the top one first, and a new one.
+@Composable
+private fun LevelPill(
     levels: List<ElementId>,
     current: ElementId?,
     onLevel: (ElementId) -> Unit,
     onAdd: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val addLabel = stringResource(R.string.level_add)
-        RoundButton(text = "+", selected = false, onClick = onAdd, description = addLabel)
-        levels.asReversed().forEach { level ->
-            val number = levels.indexOf(level) + 1
-            RoundButton(
-                text = number.toString(),
-                selected = level == current,
-                onClick = { onLevel(level) },
-                description = stringResource(R.string.level_name, number),
+    var open by remember { mutableStateOf(false) }
+    val colors = OtvesTheme.colors
+    val choose = stringResource(R.string.level_choose)
+    Box {
+        Surface(
+            onClick = { open = true },
+            shape = CircleShape,
+            color = colors.surface,
+            border = BorderStroke(1.dp, colors.border),
+            shadowElevation = FloatElevation,
+            modifier = Modifier.height(OtvesDimens.minTarget).semantics { stateDescription = choose },
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 16.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(stringResource(R.string.level_name, levels.indexOf(current) + 1), style = MaterialTheme.typography.titleMedium)
+                Icon(OtvesIcons.ChevronDown, contentDescription = null, tint = colors.inkSecondary, modifier = Modifier.size(18.dp))
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = colors.surface) {
+            levels.asReversed().forEach { level ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(R.string.level_name, levels.indexOf(level) + 1),
+                            color = if (level == current) colors.ink else colors.inkSecondary,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    },
+                    onClick = {
+                        open = false
+                        onLevel(level)
+                    },
+                )
+            }
+            HorizontalDivider(color = colors.divider)
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.level_add)) },
+                leadingIcon = { Icon(OtvesIcons.Plus, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onAdd()
+                },
             )
         }
     }
 }
 
+// The chosen tool's options over undo, redo and the tools themselves.
 @Composable
-private fun RoundButton(
-    text: String,
+private fun Tools(
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    Column(modifier = Modifier.padding(bottom = OtvesDimens.gutter), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ToolOptions(state, actions)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = OtvesDimens.gutter),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            RoundButton(OtvesIcons.Undo, stringResource(R.string.editor_undo), actions.onUndo, enabled = state.canUndo)
+            RoundButton(OtvesIcons.Redo, stringResource(R.string.editor_redo), actions.onRedo, enabled = state.canRedo)
+            Spacer(Modifier.weight(1f))
+            ToolPill(state.tool, actions.onTool)
+        }
+    }
+}
+
+// Every tool stays visible; the chosen one is named.
+@Composable
+private fun ToolPill(
+    current: Tool,
+    onTool: (Tool) -> Unit,
+) {
+    val colors = OtvesTheme.colors
+    Surface(shape = CircleShape, color = colors.ink, contentColor = colors.surface, shadowElevation = 8.dp) {
+        Row(
+            modifier = Modifier.height(OtvesDimens.primaryTarget).padding(horizontal = 6.dp).selectableGroup(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Tool.entries.forEach { tool ->
+                val chosen = tool == current
+                val name = toolName(tool)
+                Surface(
+                    onClick = { onTool(tool) },
+                    shape = CircleShape,
+                    color = if (chosen) colors.surface else colors.ink,
+                    contentColor = if (chosen) colors.ink else colors.surface,
+                    modifier =
+                        Modifier.height(44.dp).semantics {
+                            role = Role.Tab
+                            selected = chosen
+                            contentDescription = name
+                        },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(toolIcon(tool), contentDescription = null, modifier = Modifier.size(22.dp))
+                        if (chosen) Text(name, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolOptions(
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = OtvesDimens.gutter),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when (state.tool) {
+            Tool.SELECT -> {
+                // Nothing to choose before something is picked.
+            }
+
+            Tool.WALL -> {
+                val material = state.material
+                Pill(
+                    label = if (material == null) stringResource(R.string.material_choose) else unitTitle(material, state.catalog.units),
+                    selected = false,
+                    onClick = { actions.onMaterials(true) },
+                    trailing = OtvesIcons.ChevronDown,
+                )
+                ThicknessPill(state.thickness, state.thicknessesOf(material), actions.onThickness)
+                val lock = stringResource(if (state.ortho) R.string.draw_ortho_on else R.string.draw_ortho_off)
+                Pill(stringResource(R.string.draw_ortho), state.ortho, actions.onOrtho, description = lock)
+                // The wall just drawn: its length is typed here, as read off the tape.
+                state.dimensions.find { it.id == state.drawn }?.let { drawn ->
+                    Pill(stringResource(R.string.length_value, grouped(drawn.length)), false, { actions.onEditLength(drawn.id) })
+                }
+                if (state.draft != null) Pill(stringResource(R.string.inspector_done), false, actions.onFinishWall)
+            }
+
+            Tool.WINDOW -> {
+                WindowSizes.forEach { size -> Pill(sizeName(size), size == state.windowSize, { actions.onWindowSize(size) }) }
+            }
+
+            Tool.DOOR -> {
+                DoorSizes.forEach { size -> Pill(sizeName(size), size == state.doorSize, { actions.onDoorSize(size) }) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThicknessPill(
+    current: Mm,
+    thicknesses: List<Mm>,
+    onThickness: (Mm) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Pill(stringResource(R.string.length_value, grouped(current)), false, { open = true }, trailing = OtvesIcons.ChevronDown)
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = OtvesTheme.colors.surface) {
+            thicknesses.forEach { thickness ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.length_value, grouped(thickness))) },
+                    onClick = {
+                        open = false
+                        onThickness(thickness)
+                    },
+                )
+            }
+        }
+    }
+}
+
+// A floating command or choice; the chosen one is inked.
+@Composable
+private fun Pill(
+    label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    description: String,
+    modifier: Modifier = Modifier,
+    description: String? = null,
+    trailing: ImageVector? = null,
 ) {
     val colors = OtvesTheme.colors
     Surface(
@@ -255,58 +455,121 @@ private fun RoundButton(
         shape = CircleShape,
         color = if (selected) colors.ink else colors.surface,
         contentColor = if (selected) colors.surface else colors.ink,
-        shadowElevation = 2.dp,
+        border = if (selected) null else BorderStroke(1.dp, colors.border),
+        shadowElevation = FloatElevation,
         modifier =
-            Modifier
-                .size(OtvesDimens.minTarget)
-                .semantics {
-                    contentDescription = description
-                    this.selected = selected
-                },
+            modifier.height(OtvesDimens.minTarget).semantics {
+                this.selected = selected
+                if (description != null) contentDescription = description
+            },
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            if (trailing != null) Icon(trailing, contentDescription = null, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun RoundButton(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    val colors = OtvesTheme.colors
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        color = colors.surface,
+        contentColor = if (enabled) colors.ink else colors.inkTertiary,
+        border = BorderStroke(1.dp, colors.border),
+        shadowElevation = FloatElevation,
+        modifier = Modifier.size(OtvesDimens.minTarget).semantics { contentDescription = description },
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(text, style = MaterialTheme.typography.titleMedium)
+            Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
         }
     }
 }
 
-// Options of the chosen tool, in one row of the same height for every tool, so the plan below
-// never moves.
 @Composable
-private fun ToolOptions(
-    state: EditorUiState,
+private fun Panel(content: @Composable () -> Unit) {
+    val colors = OtvesTheme.colors
+    Surface(
+        color = colors.surface,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        border = BorderStroke(1.dp, colors.border),
+        shadowElevation = 12.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = OtvesDimens.gutter, vertical = 8.dp)) { content() }
+    }
+}
+
+@Composable
+private fun PanelHeader(
+    title: String,
+    actions: @Composable () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        actions()
+    }
+}
+
+@Composable
+private fun PanelAction(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) { Text(label) }
+}
+
+// A wall's exact length in millimetres, typed on large keys as it is read off the tape.
+@Composable
+private fun LengthPad(
+    entry: LengthEntry,
     actions: EditorActions,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp)
-                .height(OtvesDimens.minTarget)
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = OtvesDimens.gutter),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        when (state.tool) {
-            Tool.SELECT -> {
-                // Nothing to choose before something is picked; the row keeps its height.
-            }
-
-            Tool.WALL -> {
-                WallThicknesses.forEach { thickness ->
-                    OptionChip(thicknessName(thickness), thickness == state.thickness) { actions.onThickness(thickness) }
+    val colors = OtvesTheme.colors
+    Panel {
+        PanelHeader(stringResource(R.string.length_title)) {
+            PanelAction(stringResource(R.string.length_cancel), actions.onCancelLength)
+        }
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = stringResource(R.string.length_value, entry.digits.toLongOrNull()?.let(::grouped) ?: "0"),
+                style = MaterialTheme.typography.displaySmall,
+                color = if (entry.digits.isEmpty()) colors.inkTertiary else colors.ink,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(R.string.length_was, grouped(entry.was)),
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.inkSecondary,
+            )
+        }
+        Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (row in PadRows) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { digit -> PadKey(Modifier.weight(1f), onClick = { actions.onDigit(digit) }) { Text(digit.toString()) } }
                 }
             }
-
-            Tool.WINDOW -> {
-                WindowSizes.forEach { size ->
-                    OptionChip(sizeName(size), size == state.windowSize) { actions.onWindowSize(size) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val erase = stringResource(R.string.length_erase)
+                PadKey(Modifier.weight(1f).semantics { contentDescription = erase }, onClick = actions.onErase) {
+                    Icon(OtvesIcons.Backspace, contentDescription = null)
                 }
-            }
-
-            Tool.DOOR -> {
-                DoorSizes.forEach { size ->
-                    OptionChip(sizeName(size), size == state.doorSize) { actions.onDoorSize(size) }
+                PadKey(Modifier.weight(1f), onClick = { actions.onDigit(0) }) { Text("0") }
+                PadKey(Modifier.weight(1f), onClick = actions.onConfirmLength, primary = true, enabled = entry.digits.isNotEmpty()) {
+                    Text(stringResource(R.string.inspector_done), style = MaterialTheme.typography.titleMedium)
                 }
             }
         }
@@ -314,83 +577,98 @@ private fun ToolOptions(
 }
 
 @Composable
-private fun OptionChip(
-    label: String,
-    selected: Boolean,
+private fun PadKey(
+    modifier: Modifier,
     onClick: () -> Unit,
+    primary: Boolean = false,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
 ) {
-    FilterChip(
-        selected = selected,
+    val colors = OtvesTheme.colors
+    Surface(
         onClick = onClick,
-        label = { Text(label, maxLines = 1) },
-        colors =
-            FilterChipDefaults.filterChipColors(
-                selectedContainerColor = OtvesTheme.colors.ink,
-                selectedLabelColor = OtvesTheme.colors.surface,
-            ),
-        modifier = Modifier.heightIn(min = OtvesDimens.minTarget),
-    )
+        enabled = enabled,
+        shape = RoundedCornerShape(10.dp),
+        color = if (primary && enabled) colors.ink else colors.field,
+        contentColor =
+            when {
+                !enabled -> colors.inkTertiary
+                primary -> colors.surface
+                else -> colors.ink
+            },
+        modifier = modifier.height(OtvesDimens.primaryTarget),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            ProvideTextStyle(MaterialTheme.typography.headlineSmall, content)
+        }
+    }
 }
 
-// What the select tool picked, with its settings, in place of the take-off and of the same
-// height, so the plan does not move.
+// What the select tool picked, with its settings.
 @Composable
 private fun Inspector(
     selected: Selected,
-    issues: List<Issue>,
+    state: EditorUiState,
     actions: EditorActions,
 ) {
-    Surface(color = OtvesTheme.colors.surface, modifier = Modifier.fillMaxWidth().height(TakeoffHeight)) {
-        Column(modifier = Modifier.padding(horizontal = OtvesDimens.gutter, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val title =
-                    when (selected) {
-                        is Selected.WallPart -> stringResource(R.string.tool_wall)
-                        is Selected.OpeningPart -> kindName(selected.opening.kind)
-                    }
-                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                TextButton(onClick = actions.onDelete, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
-                    Text(stringResource(R.string.inspector_delete))
+    val issues = state.issues
+    Panel {
+        val title =
+            when (selected) {
+                is Selected.WallPart -> stringResource(R.string.tool_wall)
+                is Selected.OpeningPart -> kindName(selected.opening.kind)
+            }
+        PanelHeader(title) {
+            PanelAction(stringResource(R.string.inspector_delete), actions.onDelete)
+            PanelAction(stringResource(R.string.inspector_done), actions.onDeselect)
+        }
+        when (selected) {
+            is Selected.WallPart -> {
+                val unit = selected.wall.unit
+                InspectorRow(stringResource(R.string.inspector_material)) {
+                    Pill(
+                        label = if (unit == null) stringResource(R.string.material_choose) else unitTitle(unit, state.catalog.units),
+                        selected = false,
+                        onClick = { actions.onMaterials(true) },
+                        trailing = OtvesIcons.ChevronDown,
+                    )
                 }
-                TextButton(onClick = actions.onDeselect, modifier = Modifier.heightIn(min = OtvesDimens.minTarget)) {
-                    Text(stringResource(R.string.inspector_done))
+                state.dimensions.find { it.id == selected.id }?.let { dimension ->
+                    InspectorRow(stringResource(R.string.length_title)) {
+                        Pill(stringResource(R.string.length_value, grouped(dimension.length)), false, { actions.onEditLength(selected.id) })
+                    }
+                }
+                InspectorRow(stringResource(R.string.inspector_thickness)) {
+                    state.thicknessesOf(unit).forEach { thickness ->
+                        Pill(grouped(thickness), thickness == selected.wall.thickness, { actions.onWallThickness(thickness) })
+                    }
                 }
             }
-            when (selected) {
-                is Selected.WallPart -> {
-                    InspectorRow(stringResource(R.string.inspector_thickness)) {
-                        WallThicknesses.forEach { thickness ->
-                            OptionChip(thicknessName(thickness), thickness == selected.wall.thickness) {
-                                actions.onWallThickness(thickness)
-                            }
-                        }
-                    }
-                }
 
-                is Selected.OpeningPart -> {
-                    val opening = selected.opening
-                    issues
-                        .filter { it.element == selected.id }
-                        .map { it.kind }
-                        .distinct()
-                        .forEach { kind ->
-                            Text(issueText(kind), style = MaterialTheme.typography.bodyMedium, color = OtvesTheme.colors.warning)
-                        }
-                    SegmentedControl(
-                        options = OpeningKind.entries.map { kindName(it) },
-                        selected = opening.kind.ordinal,
-                        onSelect = { actions.onOpeningKind(OpeningKind.entries[it]) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    InspectorRow(stringResource(R.string.inspector_size)) {
-                        val current = OpeningSize(opening.width, opening.height)
-                        sizesFor(opening.kind).forEach { size ->
-                            OptionChip(sizeName(size), size == current) { actions.onOpeningSize(size) }
-                        }
+            is Selected.OpeningPart -> {
+                val opening = selected.opening
+                issues
+                    .filter { it.element == selected.id }
+                    .map { it.kind }
+                    .distinct()
+                    .forEach { kind ->
+                        Text(issueText(kind), style = MaterialTheme.typography.bodyMedium, color = OtvesTheme.colors.warning)
+                    }
+                SegmentedControl(
+                    options = OpeningKind.entries.map { kindName(it) },
+                    selected = opening.kind.ordinal,
+                    onSelect = { actions.onOpeningKind(OpeningKind.entries[it]) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                InspectorRow(stringResource(R.string.inspector_size)) {
+                    val current = OpeningSize(opening.width, opening.height)
+                    sizesFor(opening.kind).forEach { size ->
+                        Pill(sizeName(size), size == current, { actions.onOpeningSize(size) })
                     }
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -407,7 +685,7 @@ private fun InspectorRow(
             modifier = Modifier.width(InspectorLabelWidth),
         )
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             content()
@@ -415,57 +693,121 @@ private fun InspectorRow(
     }
 }
 
+// What walls are laid from: the catalog's units by name and size as laid. The choice goes to the
+// selected wall, or else to the walls drawn next.
 @Composable
-private fun TakeoffPanel(state: EditorUiState) {
-    // A fixed height keeps the plan still when lines arrive, so taps land where the user aims.
-    Surface(color = OtvesTheme.colors.surface, modifier = Modifier.fillMaxWidth().height(TakeoffHeight)) {
-        Column(modifier = Modifier.padding(horizontal = OtvesDimens.gutter, vertical = 8.dp)) {
-            val lines = state.takeoff.filter { it.amount != 0.0 }
-            val context = LocalContext.current
-            val shared = takeoffText(state.name, lines)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.takeoff_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                TextButton(
-                    onClick = { context.share(shared) },
-                    enabled = lines.isNotEmpty() && !state.takeoffFailed,
-                    modifier = Modifier.heightIn(min = OtvesDimens.minTarget),
+private fun MaterialPanel(
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    val colors = OtvesTheme.colors
+    val current = (state.selected as? Selected.WallPart)?.let { it.wall.unit } ?: state.material.takeIf { state.selected == null }
+    Panel {
+        PanelHeader(stringResource(R.string.material_title)) {
+            PanelAction(stringResource(R.string.takeoff_close), { actions.onMaterials(false) })
+        }
+        state.catalog.units.forEach { option ->
+            val chosen = option.size == current
+            Surface(
+                onClick = { actions.onMaterial(option) },
+                color = colors.surface,
+                modifier = Modifier.fillMaxWidth().semantics { selected = chosen },
+            ) {
+                Row(
+                    modifier = Modifier.heightIn(min = OtvesDimens.primaryTarget).padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(stringResource(R.string.takeoff_share))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(unitTitle(option.size, state.catalog.units), style = MaterialTheme.typography.titleMedium)
+                        Text(unitSize(option.size), style = MaterialTheme.typography.bodyMedium, color = colors.inkSecondary)
+                    }
+                    if (chosen) Box(Modifier.size(10.dp).background(colors.ink, CircleShape))
                 }
             }
-            when {
-                state.takeoffFailed -> {
-                    Text(stringResource(R.string.takeoff_failed), color = OtvesTheme.colors.warning)
-                }
+            HorizontalDivider(color = colors.divider)
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
 
-                state.takeoff.all { it.amount == 0.0 } -> {
-                    Text(stringResource(R.string.takeoff_empty), color = OtvesTheme.colors.inkSecondary)
-                }
+// The materials the model asks for, and what the storey's walls are reinforced with: the lines
+// follow these choices at once.
+@Composable
+private fun TakeoffPanel(
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    val onClose = { actions.onTakeoff(false) }
+    Panel {
+        val lines = state.takeoff.filter { it.amount != 0.0 }
+        val context = LocalContext.current
+        val shared = takeoffText(state.name, lines, state.catalog.units)
+        PanelHeader(stringResource(R.string.takeoff_title)) {
+            PanelAction(
+                stringResource(R.string.takeoff_share),
+                { context.share(shared) },
+                enabled =
+                    lines.isNotEmpty() && !state.takeoffFailed,
+            )
+            PanelAction(stringResource(R.string.takeoff_close), onClose)
+        }
+        when {
+            state.takeoffFailed -> {
+                Text(stringResource(R.string.takeoff_failed), color = OtvesTheme.colors.warning)
+            }
 
-                else -> {
-                    LazyColumn {
-                        items(state.takeoff) { line ->
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                                Text(itemName(line.item), modifier = Modifier.weight(1f))
-                                Text("${amountText(line)} ${unitName(line.unit)}")
-                            }
-                            HorizontalDivider(color = OtvesTheme.colors.divider)
+            state.outlines.isEmpty() -> {
+                Text(stringResource(R.string.takeoff_empty), color = OtvesTheme.colors.inkSecondary)
+            }
+
+            else -> {
+                val unchosen = state.unchosen.size
+                if (unchosen > 0) {
+                    Text(
+                        pluralStringResource(R.plurals.takeoff_unchosen, unchosen, unchosen),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = OtvesTheme.colors.warning,
+                    )
+                }
+                InspectorRow(stringResource(R.string.level_ring_beam)) {
+                    Pill(stringResource(R.string.option_none), state.ringBeam.value == 0L, { actions.onRingBeam(0.mm) })
+                    state.catalog.ringBeamHeights.forEach { height ->
+                        Pill(grouped(height), state.ringBeam == height, { actions.onRingBeam(height) })
+                    }
+                }
+                InspectorRow(stringResource(R.string.level_meshes)) {
+                    Pill(stringResource(R.string.option_none), !state.junctionMeshes, { actions.onJunctionMeshes(false) })
+                    Pill(stringResource(R.string.option_yes), state.junctionMeshes, { actions.onJunctionMeshes(true) })
+                }
+                LazyColumn(modifier = Modifier.padding(top = 8.dp).heightIn(max = TakeoffHeight)) {
+                    items(lines) { line ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                            Text(itemName(line.item, state.catalog.units), modifier = Modifier.weight(1f))
+                            Text("${amountText(line)} ${unitName(line.unit)}")
                         }
+                        HorizontalDivider(color = OtvesTheme.colors.divider)
                     }
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
     }
 }
+
+// Whole millimetres with a no-break space between thousands, as on drawings: «6 400».
+private fun grouped(value: Mm): String = grouped(value.value)
+
+private fun grouped(value: Long): String = String.format(Locale.ROOT, "%,d", value).replace(',', '\u00A0')
 
 // The take-off as plain text for a messenger: the job's name, then one material a line.
 @Composable
 private fun takeoffText(
     name: String,
     lines: List<QuantityLine>,
+    units: List<MasonryUnitOption>,
 ): String {
     val title = stringResource(R.string.takeoff_share_title, name.ifBlank { stringResource(R.string.editor_title) })
-    val rows = lines.map { stringResource(R.string.takeoff_share_line, itemName(it.item), amountText(it), unitName(it.unit)) }
+    val rows = lines.map { stringResource(R.string.takeoff_share_line, itemName(it.item, units), amountText(it), unitName(it.unit)) }
     return (listOf(title, "") + rows).joinToString("\n")
 }
 
@@ -478,15 +820,6 @@ private fun Context.share(text: String) {
 }
 
 @Composable
-private fun thicknessName(thickness: Mm): String =
-    when (thickness) {
-        120.mm -> stringResource(R.string.thickness_half_brick)
-        250.mm -> stringResource(R.string.thickness_one_brick)
-        380.mm -> stringResource(R.string.thickness_one_and_half_bricks)
-        else -> stringResource(R.string.thickness_two_bricks)
-    }
-
-@Composable
 private fun issueText(kind: IssueKind): String =
     stringResource(
         when (kind) {
@@ -497,6 +830,7 @@ private fun issueText(kind: IssueKind): String =
             IssueKind.NO_ROOM_FOR_LINTEL -> R.string.issue_no_room_for_lintel
             IssueKind.WALL_OVERLAP -> R.string.issue_wall_overlap
             IssueKind.SHARP_ANGLE -> R.string.issue_sharp_angle
+            IssueKind.MATERIAL_NOT_CHOSEN -> R.string.issue_material
             IssueKind.UNKNOWN -> R.string.issue_unknown
         },
     )
@@ -507,6 +841,14 @@ private fun kindName(kind: OpeningKind): String =
         OpeningKind.WINDOW -> stringResource(R.string.tool_window)
         OpeningKind.DOOR -> stringResource(R.string.tool_door)
         OpeningKind.EMPTY -> stringResource(R.string.kind_empty)
+    }
+
+private fun toolIcon(tool: Tool): ImageVector =
+    when (tool) {
+        Tool.SELECT -> OtvesIcons.Select
+        Tool.WALL -> OtvesIcons.Wall
+        Tool.WINDOW -> OtvesIcons.Window
+        Tool.DOOR -> OtvesIcons.Door
     }
 
 @Composable
@@ -538,6 +880,7 @@ private fun EditorScreenPreview() {
     val level = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000001"))
     val wall = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000002"))
     val window = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000003"))
+    val drawn = Wall(level, PointMm(0.mm, 0.mm), PointMm(6_400.mm, 0.mm), 380.mm, 2_800.mm)
     OtvesTheme {
         EditorScreen(
             state =
@@ -551,16 +894,10 @@ private fun EditorScreenPreview() {
                                 wall,
                                 level,
                                 listOf(PointM(-0.19, -0.19), PointM(6.59, -0.19), PointM(6.21, 0.19), PointM(0.19, 0.19)),
+                                length = 6_400.mm,
                             ),
                         ),
-                    takeoff =
-                        listOf(
-                            QuantityLine("masonry", "masonry_unit", QuantityUnit.PIECE, 2_767.0),
-                            QuantityLine("masonry", "mortar", QuantityUnit.CUBIC_METRE, 1.62),
-                            QuantityLine("masonry", "mortar.cement", QuantityUnit.KILOGRAM, 485.4),
-                            QuantityLine("lintels", "lintel.bar.l20", QuantityUnit.PIECE, 3.0),
-                            QuantityLine("ring_beam", "concrete.b15", QuantityUnit.CUBIC_METRE, 0.37),
-                        ),
+                    dimensions = listOf(Dimension(wall, drawn, 6_400.mm)),
                     openings =
                         listOf(
                             OpeningOutline(
@@ -570,7 +907,8 @@ private fun EditorScreenPreview() {
                                 listOf(PointM(2.25, -0.19), PointM(3.75, -0.19), PointM(3.75, 0.19), PointM(2.25, 0.19)),
                             ),
                         ),
-                    tool = Tool.WINDOW,
+                    draft = Draft(PointMm(6_400.mm, 0.mm), PointMm(6_400.mm, 4_200.mm)),
+                    drawn = wall,
                     canUndo = true,
                 ),
             actions = EditorActions(),
@@ -578,5 +916,20 @@ private fun EditorScreenPreview() {
     }
 }
 
-private val TakeoffHeight = 240.dp
+@Preview(widthDp = 400, heightDp = 760)
+@Composable
+private fun LengthPadPreview() {
+    val wall = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000002"))
+    OtvesTheme {
+        EditorScreen(
+            state = EditorUiState(ready = true, entry = LengthEntry(wall, was = 6_437.mm, digits = "6400")),
+            actions = EditorActions(),
+        )
+    }
+}
+
+private val TakeoffHeight = 280.dp
 private val InspectorLabelWidth = 96.dp
+private val FloatElevation = 2.dp
+private val PanelShape = RoundedCornerShape(10.dp)
+private val PadRows = listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3))

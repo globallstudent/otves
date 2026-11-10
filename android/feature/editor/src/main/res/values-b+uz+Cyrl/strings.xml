@@ -1,23 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="editor_title">Қават режаси</string>
-    <string name="editor_cancel_wall">Тозалаш</string>
     <string name="editor_undo">Бекор қилиш</string>
     <string name="editor_redo">Қайтариш</string>
     <string name="editor_loading">Юкланмоқда…</string>
     <string name="editor_hint_start">Деворни бошлаш учун режага босинг</string>
-    <string name="editor_hint_end">Девор тугайдиган жойни босинг</string>
     <string name="takeoff_title">Материал сарфи</string>
     <string name="takeoff_failed">Ҳисоб бажарилмади: меъёрларни текширинг</string>
     <string name="takeoff_empty">Сарфни кўриш учун девор қуринг</string>
-    <string name="thickness_half_brick">½ ғишт</string>
-    <string name="thickness_one_brick">1 ғишт</string>
-    <string name="thickness_one_and_half_bricks">1½ ғишт</string>
-    <string name="thickness_two_bricks">2 ғишт</string>
     <string name="refused_zero_length">Девор охири боши билан бир жойда</string>
     <string name="refused_off_plan">Нуқта координата бошидан 100 км дан узоқда</string>
     <string name="refused_other">Буйруқ бажарилмади</string>
-    <string name="item_masonry_unit">Ғишт</string>
     <string name="item_mortar">Қоришма</string>
     <string name="item_cement">Қоришма учун цемент</string>
     <string name="item_junction_mesh">Девор туташмаларидаги тўр</string>
@@ -56,4 +49,30 @@
     <string name="takeoff_share">Улашиш</string>
     <string name="takeoff_share_title">%1$s — материал сарфи</string>
     <string name="takeoff_share_line">%1$s — %2$s %3$s</string>
+    <string name="editor_back">Орқага</string>
+    <string name="editor_hint_next">Нуқтани кўрсатинг ёки узунликни киритинг</string>
+    <string name="draw_ortho_on">90° қулфи ёқилган</string>
+    <string name="draw_ortho_off">90° қулфи ўчирилган</string>
+    <string name="length_title">Узунлик</string>
+    <string name="length_value">%1$s мм</string>
+    <string name="length_was">аввал %1$s</string>
+    <string name="length_cancel">Бекор қилиш</string>
+    <string name="length_erase">Ўчириш</string>
+    <string name="takeoff_close">Ёпиш</string>
+    <string name="level_choose">Қаватни танлаш</string>
+    <string name="unit_brick">Ғишт</string>
+    <string name="unit_stone">Тош</string>
+    <string name="unit_block">Блок</string>
+    <string name="material_title">Девор материали</string>
+    <string name="material_choose">Материал танлаш</string>
+    <string name="inspector_material">Материал</string>
+    <string name="level_ring_beam">Армопояс</string>
+    <string name="level_meshes">Тугунлардаги тўр</string>
+    <string name="option_none">Йўқ</string>
+    <string name="option_yes">Ҳа</string>
+    <string name="issue_material">Девор материали танланмаган</string>
+    <plurals name="takeoff_unchosen">
+        <item quantity="one">%d та девор материали танланмаган</item>
+        <item quantity="other">%d та девор материали танланмаган</item>
+    </plurals>
 </resources>

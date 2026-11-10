@@ -1,23 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="editor_title">План этажа</string>
-    <string name="editor_cancel_wall">Сбросить</string>
     <string name="editor_undo">Отменить</string>
     <string name="editor_redo">Повторить</string>
     <string name="editor_loading">Загрузка…</string>
     <string name="editor_hint_start">Нажмите на план, чтобы начать стену</string>
-    <string name="editor_hint_end">Нажмите, где стена кончается</string>
     <string name="takeoff_title">Расход материалов</string>
     <string name="takeoff_failed">Расчёт не выполнен: проверьте нормы</string>
     <string name="takeoff_empty">Постройте стену, чтобы увидеть расход</string>
-    <string name="thickness_half_brick">½ кирпича</string>
-    <string name="thickness_one_brick">1 кирпич</string>
-    <string name="thickness_one_and_half_bricks">1½ кирпича</string>
-    <string name="thickness_two_bricks">2 кирпича</string>
     <string name="refused_zero_length">Конец стены совпадает с началом</string>
     <string name="refused_off_plan">Точка дальше 100 км от начала координат</string>
     <string name="refused_other">Команда не выполнена</string>
-    <string name="item_masonry_unit">Кирпич</string>
     <string name="item_mortar">Раствор</string>
     <string name="item_cement">Цемент для раствора</string>
     <string name="item_junction_mesh">Сетка в узлах стен</string>
@@ -57,4 +50,34 @@
     <string name="takeoff_share">Поделиться</string>
     <string name="takeoff_share_title">%1$s — расход материалов</string>
     <string name="takeoff_share_line">%1$s — %2$s %3$s</string>
+    <string name="editor_back">Назад</string>
+    <string name="editor_hint_next">Укажите точку или введите длину</string>
+    <string name="draw_ortho_on">Фиксация 90° включена</string>
+    <string name="draw_ortho_off">Фиксация 90° выключена</string>
+    <string name="length_title">Длина</string>
+    <string name="length_value">%1$s мм</string>
+    <string name="length_was">было %1$s</string>
+    <string name="length_cancel">Отмена</string>
+    <string name="length_erase">Стереть</string>
+    <string name="takeoff_close">Закрыть</string>
+    <string name="level_choose">Выбрать этаж</string>
+    <string name="draw_ortho" translatable="false">90°</string>
+    <string name="unit_brick">Кирпич</string>
+    <string name="unit_stone">Камень</string>
+    <string name="unit_block">Блок</string>
+    <string name="material_title">Материал стены</string>
+    <string name="material_choose">Выбрать материал</string>
+    <string name="inspector_material">Материал</string>
+    <string name="level_ring_beam">Армопояс</string>
+    <string name="level_meshes">Сетки в узлах</string>
+    <string name="option_none">Нет</string>
+    <string name="option_yes">Да</string>
+    <string name="issue_material">Материал стены не выбран</string>
+    <string name="unit_size" translatable="false">%1$d × %2$d × %3$d</string>
+    <plurals name="takeoff_unchosen">
+        <item quantity="one">У %d стены не выбран материал</item>
+        <item quantity="few">У %d стен не выбран материал</item>
+        <item quantity="many">У %d стен не выбран материал</item>
+        <item quantity="other">У %d стены не выбран материал</item>
+    </plurals>
 </resources>

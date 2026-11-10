@@ -14,26 +14,29 @@ import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
 import uz.otves.data.project.JobStore
+import uz.otves.engine.Catalog
 import uz.otves.engine.CommandResult
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
 import uz.otves.engine.Issue
+import uz.otves.engine.IssueKind
 import uz.otves.engine.Level
+import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.Takeoff
+import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
+import uz.otves.engine.WallEnd
 import uz.otves.engine.WallOutline
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToLong
-
-/** Wall thicknesses a builder picks from: half a brick to two bricks with 10 mm joints. */
-internal val WallThicknesses: List<Mm> = listOf(120.mm, 250.mm, 380.mm, 510.mm)
 
 /** What a tap on the plan does. */
 internal enum class Tool { SELECT, WALL, WINDOW, DOOR }
@@ -70,8 +73,36 @@ internal sealed interface Selected {
 
 /** A wall's length, written along it on the plan. */
 internal data class Dimension(
+    val id: ElementId,
     val wall: Wall,
     val length: Mm,
+)
+
+/** A line through an existing wall end that the aimed point lined up with. */
+internal data class Guide(
+    val from: PointMm,
+    val to: PointMm,
+)
+
+/**
+ * A wall being drawn: it starts at [start] and, while the finger is down, would end at [end].
+ * After each wall the next one starts where it ended.
+ */
+internal data class Draft(
+    val start: PointMm,
+    val end: PointMm? = null,
+    val guides: List<Guide> = emptyList(),
+) {
+    /** Along the wall's axis, as the engine will report it. */
+    val length: Mm?
+        get() = end?.let { Mm(hypot((it.x.value - start.x.value).toDouble(), (it.y.value - start.y.value).toDouble()).roundToLong()) }
+}
+
+/** A wall's exact length being typed: the digits so far, in millimetres. */
+internal data class LengthEntry(
+    val wall: ElementId,
+    val was: Mm,
+    val digits: String = "",
 )
 
 @Immutable
@@ -92,18 +123,41 @@ internal data class EditorUiState(
     val dimensions: List<Dimension> = emptyList(),
     val takeoff: List<QuantityLine> = emptyList(),
     val takeoffFailed: Boolean = false,
-    /** The first tap of a wall still waiting for its second. */
-    val wallStart: PointMm? = null,
+    /** The wall being drawn, from its first point on. */
+    val draft: Draft? = null,
+    /** Keeps new walls along the plan's axes. */
+    val ortho: Boolean = true,
+    /** The wall drawn last, whose length the user may now type. */
+    val drawn: ElementId? = null,
+    val entry: LengthEntry? = null,
+    val takeoffOpen: Boolean = false,
+    /** What the builder chooses from. */
+    val catalog: Catalog = Catalog(),
+    /** What new walls are laid from; null until the builder chooses. */
+    val material: UnitSize? = null,
+    /** The material list is open, for the selected wall or else for new walls. */
+    val materialOpen: Boolean = false,
+    /** What the shown storey asks for: its ring beam's height, zero for none, and junction meshes. */
+    val ringBeam: Mm = 0.mm,
+    val junctionMeshes: Boolean = false,
     val tool: Tool = Tool.WALL,
     val selected: Selected? = null,
-    val thickness: Mm = 380.mm,
+    val thickness: Mm = 0.mm,
     val windowSize: OpeningSize = WindowSizes[1],
     val doorSize: OpeningSize = DoorSizes[1],
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
     /** Why the engine refused the last command, until the next one. */
     val refused: EngineError? = null,
-)
+) {
+    /** Walls of the shown storey that have no material yet. */
+    val unchosen: Set<ElementId>
+        get() = issues.filter { it.kind == IssueKind.MATERIAL_NOT_CHOSEN }.mapNotNull { it.element }.toSet()
+
+    /** The thicknesses a wall of [unit] is built in; before a material is chosen, the first one's. */
+    fun thicknessesOf(unit: UnitSize?): List<Mm> =
+        (catalog.units.find { it.size == unit } ?: catalog.units.firstOrNull())?.thicknesses.orEmpty()
+}
 
 /**
  * The plan of one job, one storey at a time. The engine owns the model; this keeps only what the
@@ -114,6 +168,7 @@ internal data class EditorUiState(
 internal class EditorViewModel(
     private val engine: Engine,
     loadContent: suspend () -> EngineCommand.LoadContent,
+    loadCatalog: suspend () -> Catalog,
     private val job: JobStore,
 ) : ViewModel() {
     private val state = MutableStateFlow(EditorUiState())
@@ -127,6 +182,12 @@ internal class EditorViewModel(
     private var wallOutlines: List<WallOutline> = emptyList()
     private var openingOutlines: List<OpeningOutline> = emptyList()
     private var allIssues: List<Issue> = emptyList()
+
+    // The points of the walls drawn in a row, so undo steps back along them.
+    private val chain = mutableListOf<PointMm>()
+
+    // Whether the finger now on the plan put down the draft's first point.
+    private var aimStartedDraft = false
 
     // One request at a time from send to file, so the log keeps the engine's order.
     private val turn = Mutex()
@@ -146,7 +207,23 @@ internal class EditorViewModel(
                 job.record(response)
                 apply(response)
                 show(orderedLevels().firstOrNull())
-                state.update { it.copy(ready = levels.isNotEmpty(), name = saved.name) }
+                val catalog = loadCatalog()
+                state.update { current ->
+                    // New walls go on as the job's walls are: the material and thickness of one of them.
+                    val like = walls.values.lastOrNull { it.unit != null } ?: walls.values.lastOrNull()
+                    val thickness =
+                        like?.thickness ?: catalog.units
+                            .firstOrNull()
+                            ?.thicknesses
+                            ?.let(::usual) ?: current.thickness
+                    current.copy(
+                        ready = levels.isNotEmpty(),
+                        name = saved.name,
+                        catalog = catalog,
+                        material = like?.unit,
+                        thickness = thickness,
+                    )
+                }
             }
         }
     }
@@ -154,8 +231,8 @@ internal class EditorViewModel(
     override fun onCleared() = job.close()
 
     /**
-     * A tap on the plan. The select tool picks what is under it; with the wall tool the first tap
-     * starts a wall and the second builds it; a window or door goes into the wall the user tapped.
+     * A tap on the plan. The select tool picks what is under it; with the wall tool it is a point
+     * of the wall, as [aim] and [commit]; a window or door goes into the wall the user tapped.
      * [reach] is how far from the finger, in plan millimetres, something still counts as touched.
      */
     fun tap(
@@ -165,16 +242,174 @@ internal class EditorViewModel(
         val current = state.value
         val onLevel = current.level ?: return
         when (current.tool) {
-            Tool.SELECT -> pick(onLevel, at, reach)
-            Tool.WALL -> tapWall(onLevel, at, reach)
-            Tool.WINDOW -> place(onLevel, at, reach, OpeningKind.WINDOW, current.windowSize, WindowSill)
-            Tool.DOOR -> place(onLevel, at, reach, OpeningKind.DOOR, current.doorSize, 0.mm)
+            Tool.SELECT -> {
+                pick(onLevel, at, reach)
+            }
+
+            Tool.WALL -> {
+                aim(at, reach)
+                commit()
+            }
+
+            Tool.WINDOW -> {
+                place(onLevel, at, reach, OpeningKind.WINDOW, current.windowSize, WindowSill)
+            }
+
+            Tool.DOOR -> {
+                place(onLevel, at, reach, OpeningKind.DOOR, current.doorSize, 0.mm)
+            }
         }
     }
 
-    fun cancelWall() = state.update { it.copy(wallStart = null) }
+    /**
+     * The finger is on the plan with the wall tool. The first point starts a wall; from then on
+     * the wall's end follows the finger, caught by wall ends, the axes and lines through other ends.
+     */
+    fun aim(
+        at: PointMm,
+        reach: Mm,
+    ) {
+        val current = state.value
+        if (current.tool != Tool.WALL || current.level == null || current.entry != null) return
+        val draft = current.draft
+        if (draft == null) {
+            aimStartedDraft = true
+            state.update { it.copy(draft = Draft(snap(at, reach, from = null).point), refused = null) }
+            return
+        }
+        val snapped = snap(at, reach, from = draft.start)
+        state.update { it.copy(draft = draft.copy(end = snapped.point, guides = snapped.guides)) }
+    }
 
-    fun selectTool(tool: Tool) = state.update { it.copy(tool = tool, wallStart = null, selected = null, refused = null) }
+    /** A second finger came down: the plan moves instead, and the point is not placed. */
+    fun cancelAim() {
+        val started = aimStartedDraft
+        aimStartedDraft = false
+        state.update { current ->
+            current.copy(draft = if (started) null else current.draft?.copy(end = null, guides = emptyList()))
+        }
+    }
+
+    /** The finger left the plan: builds the aimed wall and starts the next one at its end. */
+    fun commit() {
+        aimStartedDraft = false
+        val current = state.value
+        val draft = current.draft ?: return
+        val onLevel = current.level ?: return
+        val end = draft.end
+        if (end == null || end == draft.start) {
+            state.update { it.copy(draft = draft.copy(end = null, guides = emptyList())) }
+            return
+        }
+        // A wall that ends on another wall's end closes the run.
+        val closes = end in chain || walls.values.any { it.level == onLevel && (it.start == end || it.end == end) }
+        if (chain.isEmpty()) chain += draft.start
+        chain += end
+        if (closes) chain.clear()
+        state.update { it.copy(draft = if (closes) null else Draft(end)) }
+        val wall = Wall(onLevel, draft.start, end, thickness = current.thickness, height = WallHeight, unit = current.material)
+        send(listOf(EngineCommand.AddWall(wall)), drawing = true)
+    }
+
+    /** Ends the run of walls being drawn. */
+    fun finishWall() {
+        chain.clear()
+        state.update { it.copy(draft = null) }
+    }
+
+    fun toggleOrtho() = state.update { it.copy(ortho = !it.ortho) }
+
+    fun showTakeoff(open: Boolean) = state.update { it.copy(takeoffOpen = open) }
+
+    fun showMaterials(open: Boolean) = state.update { it.copy(materialOpen = open) }
+
+    /**
+     * Lays the selected wall, or else the walls drawn from now on, from [option]. A thickness the
+     * unit cannot build becomes the nearest one it can, in the same undo step.
+     */
+    fun chooseMaterial(option: MasonryUnitOption) {
+        val current = state.value
+        val wall = current.selected as? Selected.WallPart
+        val fits = { thickness: Mm -> option.thicknesses.minByOrNull { abs(it.value - thickness.value) } ?: thickness }
+        state.update { it.copy(materialOpen = false, material = option.size, thickness = fits(wall?.wall?.thickness ?: it.thickness)) }
+        if (wall == null) return
+        val thickness = fits(wall.wall.thickness)
+        send(
+            gesture(
+                listOfNotNull(
+                    EngineCommand.SetWallUnit(wall.id, option.size),
+                    EngineCommand.SetWallThickness(wall.id, thickness).takeIf { thickness != wall.wall.thickness },
+                ),
+            ),
+        )
+    }
+
+    /** The ring beam on the shown storey's load-bearing walls; zero for none. */
+    fun setRingBeam(height: Mm) {
+        val level = state.value.level ?: return
+        send(listOf(EngineCommand.SetLevelRingBeam(level, height)))
+    }
+
+    fun setJunctionMeshes(meshes: Boolean) {
+        val level = state.value.level ?: return
+        send(listOf(EngineCommand.SetLevelJunctionMeshes(level, meshes)))
+    }
+
+    fun selectTool(tool: Tool) {
+        chain.clear()
+        state.update { it.copy(tool = tool, draft = null, drawn = null, selected = null, materialOpen = false, refused = null) }
+    }
+
+    /** Opens the number pad for a wall's exact length. */
+    fun editLength(wall: ElementId) {
+        val dimension = state.value.dimensions.find { it.id == wall } ?: return
+        state.update { it.copy(entry = LengthEntry(wall, was = dimension.length)) }
+    }
+
+    fun typeDigit(digit: Int) =
+        state.update { current ->
+            val entry = current.entry ?: return@update current
+            val digits = (entry.digits + digit).trimStart('0')
+            if (digits.length > MAX_LENGTH_DIGITS) current else current.copy(entry = entry.copy(digits = digits))
+        }
+
+    fun eraseDigit() = state.update { current -> current.copy(entry = current.entry?.let { it.copy(digits = it.digits.dropLast(1)) }) }
+
+    fun cancelLength() = state.update { it.copy(entry = null) }
+
+    /**
+     * Gives the wall the typed length: its start stays, its end moves along the wall, and the ends
+     * of other walls that met it there move with it. One undo step.
+     */
+    fun confirmLength() {
+        val entry = state.value.entry ?: return
+        state.update { it.copy(entry = null) }
+        val wall = walls[entry.wall] ?: return
+        val length = entry.digits.toLongOrNull() ?: return
+        val dx = (wall.end.x.value - wall.start.x.value).toDouble()
+        val dy = (wall.end.y.value - wall.start.y.value).toDouble()
+        val current = hypot(dx, dy)
+        if (current == 0.0) return
+        val to =
+            PointMm(
+                Mm(wall.start.x.value + (dx * length / current).roundToLong()),
+                Mm(wall.start.y.value + (dy * length / current).roundToLong()),
+            )
+        if (to == wall.end) return
+        val followers =
+            walls
+                .filter { (id, other) -> id != entry.wall && other.level == wall.level }
+                .flatMap { (id, other) ->
+                    listOfNotNull(
+                        EngineCommand.MoveWallEnd(id, WallEnd.START, to).takeIf { other.start == wall.end },
+                        EngineCommand.MoveWallEnd(id, WallEnd.END, to).takeIf { other.end == wall.end },
+                    )
+                }
+        // The next wall of the run starts at the moved end.
+        if (chain.lastOrNull() == wall.end) chain[chain.lastIndex] = to
+        state.update { current -> if (current.draft?.start == wall.end) current.copy(draft = Draft(to)) else current }
+        send(gesture(listOf(EngineCommand.MoveWallEnd(entry.wall, WallEnd.END, to)) + followers))
+    }
 
     fun selectThickness(thickness: Mm) = state.update { it.copy(thickness = thickness) }
 
@@ -184,7 +419,8 @@ internal class EditorViewModel(
 
     fun selectLevel(level: ElementId) {
         if (level in levels) {
-            state.update { it.copy(refused = null, selected = null) }
+            chain.clear()
+            state.update { it.copy(refused = null, selected = null, draft = null, drawn = null) }
             show(level)
         }
     }
@@ -195,11 +431,22 @@ internal class EditorViewModel(
         send(listOf(EngineCommand.AddLevel(Level(elevation = top, height = StoreyHeight))), showCreated = true)
     }
 
-    fun undo() = send(listOf(EngineCommand.Undo))
+    /** Takes one step back; while walls are drawn in a row, the next wall starts one point back. */
+    fun undo() {
+        if (chain.size >= 2 && state.value.draft?.start == chain.last()) {
+            chain.removeAt(chain.lastIndex)
+            val back = chain.last()
+            if (chain.size == 1) chain.clear()
+            state.update { it.copy(draft = Draft(back), drawn = null) }
+        } else {
+            state.update { it.copy(drawn = null) }
+        }
+        send(listOf(EngineCommand.Undo))
+    }
 
     fun redo() = send(listOf(EngineCommand.Redo))
 
-    fun deselect() = state.update { it.copy(selected = null) }
+    fun deselect() = state.update { it.copy(selected = null, materialOpen = false) }
 
     fun setWallThickness(thickness: Mm) {
         val wall = state.value.selected as? Selected.WallPart ?: return
@@ -273,22 +520,6 @@ internal class EditorViewModel(
     private fun gesture(commands: List<EngineCommand>): List<EngineCommand> =
         listOf(EngineCommand.BeginGesture) + commands + EngineCommand.EndGesture
 
-    private fun tapWall(
-        onLevel: ElementId,
-        at: PointMm,
-        reach: Mm,
-    ) {
-        val point = snap(at, reach)
-        val start = state.value.wallStart
-        if (start == null) {
-            state.update { it.copy(wallStart = point, refused = null) }
-            return
-        }
-        state.update { it.copy(wallStart = null) }
-        val wall = Wall(onLevel, start, point, thickness = state.value.thickness, height = WallHeight)
-        send(listOf(EngineCommand.AddWall(wall)))
-    }
-
     private fun place(
         onLevel: ElementId,
         at: PointMm,
@@ -301,15 +532,17 @@ internal class EditorViewModel(
     private fun send(
         commands: List<EngineCommand>,
         showCreated: Boolean = false,
+        drawing: Boolean = false,
     ) {
         viewModelScope.launch {
-            turn.withLock { execute(commands, showCreated) }
+            turn.withLock { execute(commands, showCreated, drawing) }
         }
     }
 
     private suspend fun execute(
         commands: List<EngineCommand>,
         showCreated: Boolean,
+        drawing: Boolean,
     ) {
         val response = engine.send(commands)
         job.record(response)
@@ -317,6 +550,7 @@ internal class EditorViewModel(
         userSteps += response.log.sumOf { if (it.isUndo) -1 else 1 }
         val created = (response.results.firstOrNull() as? CommandResult.Done)?.created
         apply(response, show = if (showCreated) created else null)
+        if (drawing && created != null) state.update { it.copy(drawn = created) }
     }
 
     // Mirrors the engine's changes, then shows [show], or else stays on the current storey while
@@ -354,6 +588,7 @@ internal class EditorViewModel(
                         ?.error,
                 // The selection follows its element's new value and goes when the element does.
                 selected = current.selected?.let { selection(it.id) },
+                drawn = current.drawn?.takeIf { it in walls },
             )
         }
         show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels })
@@ -366,6 +601,7 @@ internal class EditorViewModel(
         val ordered = orderedLevels()
         val shown = level ?: ordered.lastOrNull()
         val below = ordered.getOrNull(ordered.indexOf(shown) - 1)
+        if (shown != state.value.level) chain.clear()
         state.update { current ->
             val sameLevel = shown == current.level
             current.copy(
@@ -375,11 +611,13 @@ internal class EditorViewModel(
                 dimensions =
                     wallOutlines
                         .filter { it.level == shown }
-                        .mapNotNull { outline -> walls[outline.wall]?.let { Dimension(it, outline.length) } },
+                        .mapNotNull { outline -> walls[outline.wall]?.let { Dimension(outline.wall, it, outline.length) } },
                 openings = openingOutlines.filter { it.level == shown },
                 below = if (below == null) emptyList() else wallOutlines.filter { it.level == below },
                 issues = allIssues.filter { it.level == shown },
-                wallStart = if (sameLevel) current.wallStart else null,
+                ringBeam = levels[shown]?.ringBeam ?: 0.mm,
+                junctionMeshes = levels[shown]?.junctionMeshes ?: false,
+                draft = if (sameLevel) current.draft else null,
                 selected = if (sameLevel) current.selected else null,
             )
         }
@@ -391,30 +629,64 @@ internal class EditorViewModel(
             .sortedWith(compareBy<Map.Entry<ElementId, Level>> { it.value.elevation }.thenBy { it.key.uuid.toString() })
             .map { it.key }
 
-    // Ends join only where points are equal to the millimetre, so a tap within reach of a wall
-    // end lands on it; elsewhere it lands on the 100 mm grid. Ends on the storey below count too,
-    // so walls stand on walls.
+    private data class Snapped(
+        val point: PointMm,
+        val guides: List<Guide> = emptyList(),
+    )
+
+    // Where a touch lands. Ends join only where points are equal to the millimetre, so a touch
+    // within reach of a wall end lands on it; ends on the storey below count too, so walls stand
+    // on walls. Otherwise a wall from [from] turns onto the nearer axis (always with the 90° lock,
+    // else within a few degrees of it), and each free coordinate lines up with a wall end within
+    // reach or falls on the grid.
     private fun snap(
         at: PointMm,
         reach: Mm,
-    ): PointMm {
+        from: PointMm?,
+    ): Snapped {
         val current = state.value
         val below = current.levels.getOrNull(current.levels.indexOf(current.level) - 1)
-        val end =
-            walls.values
-                .filter { it.level == current.level || it.level == below }
-                .flatMap { listOf(it.start, it.end) }
-                .minByOrNull { distance(it, at) }
+        val ends =
+            (
+                walls.values
+                    .filter { it.level == current.level || it.level == below }
+                    .flatMap { listOf(it.start, it.end) } + chain
+            ).filter { it != from }
+        val end = ends.minByOrNull { distance(it, at) }
         if (end != null && distance(end, at) <= reach.value) {
-            return end
+            return Snapped(end)
         }
-        return PointMm(onGrid(at.x), onGrid(at.y))
+        val dx = abs(at.x.value - (from?.x?.value ?: 0))
+        val dy = abs(at.y.value - (from?.y?.value ?: 0))
+        val alongX = (current.ortho || dy * AXIS_CATCH <= dx) && dx >= dy
+        val alongY = (current.ortho || dx * AXIS_CATCH <= dy) && dy > dx
+        val guides = mutableListOf<Guide>()
+
+        fun line(
+            value: Mm,
+            of: (PointMm) -> Mm,
+        ): Mm {
+            val near = ends.minByOrNull { abs(of(it).value - value.value) }
+            if (near == null || abs(of(near).value - value.value) > reach.value) return onGrid(value)
+            guides += Guide(near, near)
+            return of(near)
+        }
+        val point =
+            when {
+                from != null && alongX -> PointMm(line(at.x) { it.x }, from.y)
+                from != null && alongY -> PointMm(from.x, line(at.y) { it.y })
+                else -> PointMm(line(at.x) { it.x }, line(at.y) { it.y })
+            }
+        return Snapped(point, guides.map { it.copy(to = point) })
     }
 
     private fun distance(
         a: PointMm,
         b: PointMm,
     ): Long = maxOf(abs(a.x.value - b.x.value), abs(a.y.value - b.y.value))
+
+    // The thickness walls start in: the one nearest the middle of what the unit builds.
+    private fun usual(thicknesses: List<Mm>): Mm? = thicknesses.getOrNull(thicknesses.size / 2)
 
     private fun onGrid(value: Mm): Mm = Mm((value.value.toDouble() / Grid.value).roundToLong() * Grid.value)
 
@@ -423,6 +695,12 @@ internal class EditorViewModel(
         val Ground = Level(elevation = 0.mm, height = StoreyHeight)
         val WallHeight = 2800.mm
         val Grid = 100.mm
+
+        // A free wall within about 6° of an axis turns onto it.
+        const val AXIS_CATCH = 10
+
+        // Up to 99 999 mm, more than any wall of a house.
+        const val MAX_LENGTH_DIGITS = 5
 
         // A common sill height for living rooms; the user changes it per window later.
         val WindowSill = 900.mm

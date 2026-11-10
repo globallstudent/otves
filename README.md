@@ -27,7 +27,7 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 | `android/` | Kotlin app: `app`, `feature/editor`, `core/model`, `core/designsystem`, `engine-bridge` (JNI, `libdesign.so`, content), convention plugins in `build-logic` |
 | `engine/` | C++23 design engine: `core` (levels, walls and openings, commands, operation log, undo), `geom` (wall joins, plan outlines), `takeoff` (wall quantities, masonry units and mortar, Luau rules sandbox), `bridge` (FlatBuffers session, JNI) |
 | `schema/` | `engine.fbs`, the FlatBuffers contract between the app and the engine |
-| `content/` | Norm tables and take-off rules in Luau, shipped as a content bundle |
+| `content/` | Norm tables and take-off rules in Luau and the catalog of materials to choose from, shipped as a content bundle |
 | `docs/brand/` | Logo, mark and launcher icon sources |
 | `docs/` | Architecture, decisions (ADRs), glossary, brand, research |
 

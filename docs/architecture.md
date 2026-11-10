@@ -25,10 +25,10 @@ flowchart TB
 
 | Module | Role | Status |
 |---|---|---|
-| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels, walls and openings, commands, document with op log, undo, gestures and opening a saved job | exists |
+| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels with their ring beam and junction meshes, walls with their masonry unit, openings, commands, document with op log, undo, gestures and opening a saved job | exists |
 | `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`); the wall under a point and opening outlines | exists |
-| `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar, Luau rules sandbox (`RuleSet`) | exists |
-| `content/` | Norm tables and rules in Luau: masonry units, mortar, cement, lintels, ring beams, junction meshes | exists |
+| `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar per chosen unit, Luau rules sandbox (`RuleSet`) | exists |
+| `content/` | Norm tables and rules in Luau: mortar, cement, lintels, ring beams, junction meshes; the catalog of masonry units and ring beam heights to choose from | exists |
 | `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement and picking at a tap, outlines with lengths, issues, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
 | `engine/render`, `export` | Drawing, PDF/DXF/IFC | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money`, `ElementId` | exists |
@@ -37,7 +37,7 @@ flowchart TB
 | `android/data/project` | One Room file per job (`<job id>.job`): element rows and the op log, written after every engine response (ADR 0007) | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
 | `android/feature/projects` | The jobs on this phone, newest first; create, rename, delete | exists |
-| `android/feature/editor` | Plan of a job storey by storey: walls by two taps, windows and doors by a tap on a wall, a select tool with an inspector (thickness, kind, size, delete), wall lengths and issues on the plan, undo/redo, the take-off below, shared as text; drawn from engine outlines | exists |
+| `android/feature/editor` | Plan of a job storey by storey: walls drawn in a run by touch or drag with a 90° lock and snapping to wall ends, exact lengths typed on a number pad, windows and doors by a tap on a wall, the wall material chosen from the catalog, a select tool with an inspector (material, length, thickness, kind, size, delete), a ring beam and junction meshes chosen per storey, wall lengths and issues on the plan, undo/redo, the take-off in a panel, shared as text; drawn from engine outlines | exists |
 | `android/feature/*` (estimate, ledger, …), `data/catalog`, `device/*` | Screens, prices, hardware | planned |
 
 ## Rules that hold everywhere
@@ -47,8 +47,9 @@ flowchart TB
 3. The bridge schema and the `.job` format are versioned; each change ships with a migration and a golden test.
 4. Lengths typed or measured on site are integer millimetres; money is integer minor units plus a currency.
 5. Numbers from standards (КМК, СП, ГОСТ, EN) live in `content/`, not in code.
-6. UI text goes through resources: Russian first, Uzbek Latin and Cyrillic second.
-7. A change merges only with formatting, lint, tests and sanitizers green.
+6. The take-off lists only what the builder chose; norms report what is missing (ADR 0008).
+7. UI text goes through resources: Russian first, Uzbek Latin and Cyrillic second.
+8. A change merges only with formatting, lint, tests and sanitizers green.
 
 ## Saving a job
 
