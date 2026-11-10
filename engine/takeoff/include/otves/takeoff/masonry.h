@@ -68,10 +68,12 @@ struct UnitMasonry {
 };
 
 struct Masonry {
-  std::vector<WallMasonry> walls;    // in input order
-  std::vector<UnitMasonry> by_unit;  // sorted by unit; only units some wall is laid from
-  std::vector<MasonryIssue> issues;  // sorted
-  double units = 0.0;                // sum over walls, in input order
+  std::vector<WallMasonry> walls;  // in input order
+  // Sorted by unit; only units some wall is laid from. The explicit initializer lets a result be
+  // built without them.
+  std::vector<UnitMasonry> by_unit{};  // NOLINT(readability-redundant-member-init)
+  std::vector<MasonryIssue> issues;    // sorted
+  double units = 0.0;                  // sum over walls, in input order
   double mortar = 0.0;
 };
 
