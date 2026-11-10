@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -67,6 +69,7 @@ internal fun PlanCanvas(
     draft: Draft?,
     draftThickness: Mm,
     drawing: Boolean,
+    focus: PointMm?,
     onTap: (at: PointMm, reach: Mm) -> Unit,
     onAim: (at: PointMm, reach: Mm) -> Unit,
     onAimCancel: () -> Unit,
@@ -88,6 +91,7 @@ internal fun PlanCanvas(
     val touchReach = with(density) { TOUCH_REACH.dp.toPx() }
     val labelGap = with(density) { LABEL_GAP.dp.toPx() }
     val measurer = rememberTextMeasurer()
+    LaunchedEffect(focus) { if (focus != null) view.reveal(focus) }
     val labelStyle = MaterialTheme.typography.labelMedium.copy(color = colors.inkSecondary)
     val draftStyle = MaterialTheme.typography.titleMedium.copy(color = colors.selection)
     val dash = with(density) { 6.dp.toPx() }
@@ -96,7 +100,7 @@ internal fun PlanCanvas(
         modifier =
             modifier
                 .clipToBounds()
-                .onSizeChanged { size -> view.centre(size.width.toFloat(), size.height.toFloat()) }
+                .onSizeChanged { size -> view.resize(size.width.toFloat(), size.height.toFloat()) }
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -201,14 +205,26 @@ private class PlanView(
     var scale by mutableFloatStateOf(pixelsPerMetre)
     var origin by mutableStateOf(Offset.Unspecified)
 
+    private var size = Size.Zero
+
     // The origin starts near the lower left, so the first walls grow up and to the right.
-    fun centre(
+    fun resize(
         width: Float,
         height: Float,
     ) {
+        size = Size(width, height)
         if (origin == Offset.Unspecified) {
             origin = Offset(width * START_LEFT, height * START_BOTTOM)
         }
+    }
+
+    // Moves the plan so [point] shows in the upper part of the screen, which a panel never covers;
+    // a point already there stays put.
+    fun reveal(point: PointMm) {
+        if (origin == Offset.Unspecified || size == Size.Zero) return
+        val at = toScreen(point)
+        val clear = Rect(size.width * REVEAL_SIDE, size.height * REVEAL_TOP, size.width * (1 - REVEAL_SIDE), size.height * REVEAL_BOTTOM)
+        if (!clear.contains(at)) origin += clear.center - at
     }
 
     fun move(
@@ -389,3 +405,6 @@ private const val LABEL_GAP = 4f
 private const val LABEL_FILL = 0.8f
 private const val FULL_TURN = 360f
 private const val LABEL_LIFT = 3f
+private const val REVEAL_SIDE = 0.15f
+private const val REVEAL_TOP = 0.2f
+private const val REVEAL_BOTTOM = 0.38f

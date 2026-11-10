@@ -37,7 +37,7 @@ flowchart TB
 | `android/data/project` | One Room file per job (`<job id>.job`): element rows and the op log, written after every engine response (ADR 0007) | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
 | `android/feature/projects` | The jobs on this phone, newest first; create, rename, delete | exists |
-| `android/feature/editor` | Plan of a job storey by storey: walls drawn in a run by touch or drag with a 90° lock and snapping to wall ends and onto walls, exact lengths typed on a number pad, windows and doors by a tap on a wall, the wall material chosen from the catalog, a select tool with an inspector (material, length, thickness, kind, size, delete), a ring beam and junction meshes chosen per storey, wall lengths and issues on the plan, undo/redo, the take-off in a panel, shared as text; drawn from engine outlines | exists |
+| `android/feature/editor` | Plan of a job storey by storey: walls drawn in a run by touch or drag with a 90° lock and snapping to wall ends and onto walls, walls entered by measured lengths and turns, exact lengths typed on a number pad, windows and doors by a tap on a wall, the wall material chosen from the catalog, a select tool with an inspector (material, length, thickness, kind, size, delete), a ring beam and junction meshes chosen per storey, wall lengths and issues on the plan, undo/redo, the take-off in a panel, shared as text; drawn from engine outlines | exists |
 | `android/feature/*` (estimate, ledger, …), `data/catalog`, `device/*` | Screens, prices, hardware | planned |
 
 ## Rules that hold everywhere

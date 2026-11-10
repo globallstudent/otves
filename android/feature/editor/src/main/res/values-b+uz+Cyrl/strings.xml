@@ -75,4 +75,11 @@
         <item quantity="one">%d та девор материали танланмаган</item>
         <item quantity="other">%d та девор материали танланмаган</item>
     </plurals>
+    <string name="measure_start">Ўлчам бўйича</string>
+    <string name="measure_title">Ўлчам бўйича девор</string>
+    <string name="measure_next">Кейинги</string>
+    <string name="measure_close">Контурни ёпиш</string>
+    <string name="turn_left">Чапга</string>
+    <string name="turn_straight">Тўғри</string>
+    <string name="turn_right">Ўнгга</string>
 </resources>

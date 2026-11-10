@@ -482,6 +482,57 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun aRoomIsEnteredByItsMeasuredLengthsAndClosed() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.startMeasure()
+
+        // 6 400 to the right, then left turns: 4 000 up and 6 400 back.
+        listOf(6, 4, 0, 0).forEach(viewModel::typeDigit)
+        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm), PointMm(6_400.mm, 0.mm)))
+        viewModel.nextMeasured()
+        viewModel.setTurn(Turn.LEFT)
+        listOf(4, 0, 0, 1).forEach(viewModel::typeDigit)
+        viewModel.eraseDigit()
+        viewModel.typeDigit(0)
+        viewModel.nextMeasured()
+        assertThat(viewModel.uiState.value.measure).isEqualTo(Measure(turn = Turn.LEFT))
+        assertThat(viewModel.uiState.value.canCloseRun).isTrue()
+        listOf(6, 4, 0, 0).forEach(viewModel::typeDigit)
+        assertThat(
+            viewModel.uiState.value.draft
+                ?.end,
+        ).isEqualTo(PointMm(0.mm, 4_000.mm))
+        viewModel.nextMeasured()
+
+        viewModel.closeMeasured()
+
+        val state = viewModel.uiState.value
+        assertThat(state.outlines).hasSize(4)
+        assertThat(state.measure).isNull()
+        assertThat(state.draft).isNull()
+        val closing = (engine.sent.last().single() as EngineCommand.AddWall).wall
+        assertThat(closing.start).isEqualTo(PointMm(0.mm, 4_000.mm))
+        assertThat(closing.end).isEqualTo(PointMm(0.mm, 0.mm))
+    }
+
+    @Test
+    fun touchesDoNotPlacePointsWhileLengthsAreEntered() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.startMeasure()
+
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        viewModel.nextMeasured()
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
+
+        viewModel.stopMeasure()
+        assertThat(viewModel.uiState.value.measure).isNull()
+        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
+    }
+
+    @Test
     fun aSecondFingerDropsThePointBeingAimed() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
 

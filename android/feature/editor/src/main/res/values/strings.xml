@@ -80,4 +80,11 @@
         <item quantity="many">У %d стен не выбран материал</item>
         <item quantity="other">У %d стены не выбран материал</item>
     </plurals>
+    <string name="measure_start">По замерам</string>
+    <string name="measure_title">Стена по замеру</string>
+    <string name="measure_next">Далее</string>
+    <string name="measure_close">Замкнуть</string>
+    <string name="turn_left">Налево</string>
+    <string name="turn_straight">Прямо</string>
+    <string name="turn_right">Направо</string>
 </resources>

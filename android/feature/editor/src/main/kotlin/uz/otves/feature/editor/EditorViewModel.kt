@@ -100,6 +100,19 @@ internal data class Draft(
         get() = end?.let { Mm(hypot((it.x.value - start.x.value).toDouble(), (it.y.value - start.y.value).toDouble()).roundToLong()) }
 }
 
+/** Which way a measured wall goes from where the last one ended. */
+internal enum class Turn { LEFT, STRAIGHT, RIGHT }
+
+/**
+ * A wall being entered from a tape or laser reading: its length in millimetres as typed so far,
+ * and which way it turns from the wall before it. The first wall of a run goes straight to the
+ * right of the plan.
+ */
+internal data class Measure(
+    val digits: String = "",
+    val turn: Turn = Turn.STRAIGHT,
+)
+
 /** A wall's exact length being typed: the digits so far, in millimetres. */
 internal data class LengthEntry(
     val wall: ElementId,
@@ -132,6 +145,10 @@ internal data class EditorUiState(
     /** The wall drawn last, whose length the user may now type. */
     val drawn: ElementId? = null,
     val entry: LengthEntry? = null,
+    /** Walls are being entered by their measured lengths. */
+    val measure: Measure? = null,
+    /** Whether the measured run can close back onto its first point. */
+    val canCloseRun: Boolean = false,
     val takeoffOpen: Boolean = false,
     /** What the builder chooses from. */
     val catalog: Catalog = Catalog(),
@@ -272,7 +289,7 @@ internal class EditorViewModel(
         reach: Mm,
     ) {
         val current = state.value
-        if (current.tool != Tool.WALL || current.level == null || current.entry != null) return
+        if (current.tool != Tool.WALL || current.level == null || current.entry != null || current.measure != null) return
         val draft = current.draft
         if (draft == null) {
             aimStartedDraft = true
@@ -316,8 +333,53 @@ internal class EditorViewModel(
     /** Ends the run of walls being drawn. */
     fun finishWall() {
         chain.clear()
-        state.update { it.copy(draft = null) }
+        state.update { it.copy(draft = null, measure = null) }
     }
+
+    /** Goes on from the run's last point by measured lengths instead of touches. */
+    fun startMeasure() = state.update { if (it.draft == null) it else it.copy(measure = Measure(), draft = Draft(it.draft.start)) }
+
+    fun stopMeasure() = state.update { it.copy(measure = null, draft = it.draft?.let { draft -> Draft(draft.start) }) }
+
+    fun setTurn(turn: Turn) = measured { it.copy(turn = turn) }
+
+    /** Builds the measured wall and goes on to the next from its end, turning the same way. */
+    fun nextMeasured() {
+        val measure = state.value.measure ?: return
+        if (state.value.draft?.end == null) return
+        commit()
+        state.update { it.copy(measure = if (it.draft == null) null else Measure(turn = measure.turn), canCloseRun = chain.size > 2) }
+    }
+
+    /** Closes the measured run with a wall back to its first point. */
+    fun closeMeasured() {
+        val first = chain.firstOrNull() ?: return
+        val draft = state.value.draft ?: return
+        state.update { it.copy(draft = Draft(draft.start, first), measure = null) }
+        commit()
+    }
+
+    // Changes the measured wall and shows where it would end.
+    private fun measured(change: (Measure) -> Measure) =
+        state.update { current ->
+            val measure = change(current.measure ?: return@update current)
+            val start = current.draft?.start ?: return@update current
+            val length = measure.digits.toLongOrNull() ?: 0
+            // The wall before gives the direction; the first wall of a run goes along +x.
+            val before = chain.getOrNull(chain.lastIndex - 1)?.takeIf { chain.last() == start }
+            val bx = if (before == null) 1.0 else (start.x.value - before.x.value).toDouble()
+            val by = if (before == null) 0.0 else (start.y.value - before.y.value).toDouble()
+            val scale = length / hypot(bx, by)
+            // The plan's y runs up, so a left turn is counter-clockwise.
+            val (dx, dy) =
+                when (measure.turn) {
+                    Turn.LEFT -> -by to bx
+                    Turn.STRAIGHT -> bx to by
+                    Turn.RIGHT -> by to -bx
+                }
+            val end = PointMm(Mm(start.x.value + (dx * scale).roundToLong()), Mm(start.y.value + (dy * scale).roundToLong()))
+            current.copy(measure = measure, draft = Draft(start, end.takeIf { length > 0 }))
+        }
 
     fun toggleOrtho() = state.update { it.copy(ortho = !it.ortho) }
 
@@ -359,7 +421,9 @@ internal class EditorViewModel(
 
     fun selectTool(tool: Tool) {
         chain.clear()
-        state.update { it.copy(tool = tool, draft = null, drawn = null, selected = null, materialOpen = false, refused = null) }
+        state.update {
+            it.copy(tool = tool, draft = null, drawn = null, measure = null, selected = null, materialOpen = false, refused = null)
+        }
     }
 
     /** Opens the number pad for a wall's exact length. */
@@ -368,14 +432,17 @@ internal class EditorViewModel(
         state.update { it.copy(entry = LengthEntry(wall, was = dimension.length)) }
     }
 
-    fun typeDigit(digit: Int) =
-        state.update { current ->
-            val entry = current.entry ?: return@update current
-            val digits = (entry.digits + digit).trimStart('0')
-            if (digits.length > MAX_LENGTH_DIGITS) current else current.copy(entry = entry.copy(digits = digits))
-        }
+    /** A key of the number pad: for the length being corrected, else for the measured wall. */
+    fun typeDigit(digit: Int) {
+        val typed = { digits: String -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_LENGTH_DIGITS } ?: digits }
+        if (state.value.entry == null) return measured { it.copy(digits = typed(it.digits)) }
+        state.update { current -> current.copy(entry = current.entry?.let { it.copy(digits = typed(it.digits)) }) }
+    }
 
-    fun eraseDigit() = state.update { current -> current.copy(entry = current.entry?.let { it.copy(digits = it.digits.dropLast(1)) }) }
+    fun eraseDigit() {
+        if (state.value.entry == null) return measured { it.copy(digits = it.digits.dropLast(1)) }
+        state.update { current -> current.copy(entry = current.entry?.let { it.copy(digits = it.digits.dropLast(1)) }) }
+    }
 
     fun cancelLength() = state.update { it.copy(entry = null) }
 
@@ -439,7 +506,14 @@ internal class EditorViewModel(
             chain.removeAt(chain.lastIndex)
             val back = chain.last()
             if (chain.size == 1) chain.clear()
-            state.update { it.copy(draft = Draft(back), drawn = null) }
+            state.update {
+                it.copy(
+                    draft = Draft(back),
+                    drawn = null,
+                    measure = it.measure?.copy(digits = ""),
+                    canCloseRun = chain.size > 2,
+                )
+            }
         } else {
             state.update { it.copy(drawn = null) }
         }
@@ -620,6 +694,7 @@ internal class EditorViewModel(
                 ringBeam = levels[shown]?.ringBeam ?: 0.mm,
                 junctionMeshes = levels[shown]?.junctionMeshes ?: false,
                 draft = if (sameLevel) current.draft else null,
+                measure = if (sameLevel) current.measure else null,
                 selected = if (sameLevel) current.selected else null,
             )
         }

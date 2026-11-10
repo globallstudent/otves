@@ -75,4 +75,11 @@
         <item quantity="one">%d ta devor materiali tanlanmagan</item>
         <item quantity="other">%d ta devor materiali tanlanmagan</item>
     </plurals>
+    <string name="measure_start">O‘lcham bo‘yicha</string>
+    <string name="measure_title">O‘lcham bo‘yicha devor</string>
+    <string name="measure_next">Keyingi</string>
+    <string name="measure_close">Konturni yopish</string>
+    <string name="turn_left">Chapga</string>
+    <string name="turn_straight">To‘g‘ri</string>
+    <string name="turn_right">O‘ngga</string>
 </resources>

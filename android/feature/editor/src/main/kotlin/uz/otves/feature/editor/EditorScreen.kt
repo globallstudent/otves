@@ -125,6 +125,11 @@ fun EditorRoute(
                 onErase = viewModel::eraseDigit,
                 onCancelLength = viewModel::cancelLength,
                 onConfirmLength = viewModel::confirmLength,
+                onMeasure = viewModel::startMeasure,
+                onStopMeasure = viewModel::stopMeasure,
+                onTurn = viewModel::setTurn,
+                onNextMeasured = viewModel::nextMeasured,
+                onCloseMeasured = viewModel::closeMeasured,
                 onMaterials = viewModel::showMaterials,
                 onMaterial = viewModel::chooseMaterial,
                 onRingBeam = viewModel::setRingBeam,
@@ -162,6 +167,11 @@ internal data class EditorActions(
     val onErase: () -> Unit = {},
     val onCancelLength: () -> Unit = {},
     val onConfirmLength: () -> Unit = {},
+    val onMeasure: () -> Unit = {},
+    val onStopMeasure: () -> Unit = {},
+    val onTurn: (Turn) -> Unit = {},
+    val onNextMeasured: () -> Unit = {},
+    val onCloseMeasured: () -> Unit = {},
     val onMaterials: (open: Boolean) -> Unit = {},
     val onMaterial: (MasonryUnitOption) -> Unit = {},
     val onRingBeam: (Mm) -> Unit = {},
@@ -188,7 +198,9 @@ internal fun EditorScreen(
                 unchosen = state.unchosen,
                 draft = state.draft,
                 draftThickness = state.thickness,
-                drawing = state.tool == Tool.WALL && state.entry == null,
+                drawing = state.tool == Tool.WALL && state.entry == null && state.measure == null,
+                // The measured wall stays in view above the number pad.
+                focus = state.draft?.takeIf { state.measure != null }?.let { it.end ?: it.start },
                 onTap = actions.onTap,
                 onAim = actions.onAim,
                 onAimCancel = actions.onAimCancel,
@@ -210,9 +222,11 @@ internal fun EditorScreen(
             }
             val selected = state.selected
             val entry = state.entry
+            val measure = state.measure
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 when {
                     entry != null -> LengthPad(entry, actions)
+                    measure != null -> MeasurePad(measure, state, actions)
                     state.materialOpen -> MaterialPanel(state, actions)
                     selected != null -> Inspector(selected, state, actions)
                     state.takeoffOpen -> TakeoffPanel(state, actions)
@@ -402,7 +416,10 @@ private fun ToolOptions(
                 state.dimensions.find { it.id == state.drawn }?.let { drawn ->
                     Pill(stringResource(R.string.length_value, grouped(drawn.length)), false, { actions.onEditLength(drawn.id) })
                 }
-                if (state.draft != null) Pill(stringResource(R.string.inspector_done), false, actions.onFinishWall)
+                if (state.draft != null) {
+                    Pill(stringResource(R.string.measure_start), false, actions.onMeasure)
+                    Pill(stringResource(R.string.inspector_done), false, actions.onFinishWall)
+                }
             }
 
             Tool.WINDOW -> {
@@ -538,39 +555,85 @@ private fun LengthPad(
     entry: LengthEntry,
     actions: EditorActions,
 ) {
-    val colors = OtvesTheme.colors
     Panel {
         PanelHeader(stringResource(R.string.length_title)) {
             PanelAction(stringResource(R.string.length_cancel), actions.onCancelLength)
         }
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Bottom) {
-            Text(
-                text = stringResource(R.string.length_value, entry.digits.toLongOrNull()?.let(::grouped) ?: "0"),
-                style = MaterialTheme.typography.displaySmall,
-                color = if (entry.digits.isEmpty()) colors.inkTertiary else colors.ink,
-                modifier = Modifier.weight(1f),
-            )
+        TypedLength(entry.digits) {
             Text(
                 stringResource(R.string.length_was, grouped(entry.was)),
                 style = MaterialTheme.typography.bodyLarge,
-                color = colors.inkSecondary,
+                color = OtvesTheme.colors.inkSecondary,
             )
         }
-        Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (row in PadRows) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { digit -> PadKey(Modifier.weight(1f), onClick = { actions.onDigit(digit) }) { Text(digit.toString()) } }
-                }
-            }
+        NumberKeys(actions, stringResource(R.string.inspector_done), actions.onConfirmLength, enabled = entry.digits.isNotEmpty())
+    }
+}
+
+// Walls entered one after another from readings: the length, then which way it goes from the wall
+// before. The plan shows the wall before it is built.
+@Composable
+private fun MeasurePad(
+    measure: Measure,
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    Panel {
+        PanelHeader(stringResource(R.string.measure_title)) {
+            PanelAction(stringResource(R.string.editor_undo), actions.onUndo, enabled = state.canUndo)
+            PanelAction(stringResource(R.string.takeoff_close), actions.onStopMeasure)
+        }
+        TypedLength(measure.digits) {
+            if (state.canCloseRun) Pill(stringResource(R.string.measure_close), false, actions.onCloseMeasured)
+        }
+        SegmentedControl(
+            options = Turn.entries.map { turnName(it) },
+            selected = measure.turn.ordinal,
+            onSelect = { actions.onTurn(Turn.entries[it]) },
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+        NumberKeys(actions, stringResource(R.string.measure_next), actions.onNextMeasured, enabled = state.draft?.end != null)
+    }
+}
+
+@Composable
+private fun TypedLength(
+    digits: String,
+    trailing: @Composable () -> Unit,
+) {
+    val colors = OtvesTheme.colors
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = stringResource(R.string.length_value, digits.toLongOrNull()?.let(::grouped) ?: "0"),
+            style = MaterialTheme.typography.displaySmall,
+            color = if (digits.isEmpty()) colors.inkTertiary else colors.ink,
+            modifier = Modifier.weight(1f),
+        )
+        trailing()
+    }
+}
+
+@Composable
+private fun NumberKeys(
+    actions: EditorActions,
+    confirm: String,
+    onConfirm: () -> Unit,
+    enabled: Boolean,
+) {
+    Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (row in PadRows) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val erase = stringResource(R.string.length_erase)
-                PadKey(Modifier.weight(1f).semantics { contentDescription = erase }, onClick = actions.onErase) {
-                    Icon(OtvesIcons.Backspace, contentDescription = null)
-                }
-                PadKey(Modifier.weight(1f), onClick = { actions.onDigit(0) }) { Text("0") }
-                PadKey(Modifier.weight(1f), onClick = actions.onConfirmLength, primary = true, enabled = entry.digits.isNotEmpty()) {
-                    Text(stringResource(R.string.inspector_done), style = MaterialTheme.typography.titleMedium)
-                }
+                row.forEach { digit -> PadKey(Modifier.weight(1f), onClick = { actions.onDigit(digit) }) { Text(digit.toString()) } }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val erase = stringResource(R.string.length_erase)
+            PadKey(Modifier.weight(1f).semantics { contentDescription = erase }, onClick = actions.onErase) {
+                Icon(OtvesIcons.Backspace, contentDescription = null)
+            }
+            PadKey(Modifier.weight(1f), onClick = { actions.onDigit(0) }) { Text("0") }
+            PadKey(Modifier.weight(1f), onClick = onConfirm, primary = true, enabled = enabled) {
+                Text(confirm, style = MaterialTheme.typography.titleMedium)
             }
         }
     }
@@ -850,6 +913,16 @@ private fun toolIcon(tool: Tool): ImageVector =
         Tool.WINDOW -> OtvesIcons.Window
         Tool.DOOR -> OtvesIcons.Door
     }
+
+@Composable
+private fun turnName(turn: Turn): String =
+    stringResource(
+        when (turn) {
+            Turn.LEFT -> R.string.turn_left
+            Turn.STRAIGHT -> R.string.turn_straight
+            Turn.RIGHT -> R.string.turn_right
+        },
+    )
 
 @Composable
 private fun toolName(tool: Tool): String =
