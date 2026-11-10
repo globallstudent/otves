@@ -35,6 +35,8 @@ erDiagram
 
 Version 2 adds `ring_beam` and `junction_meshes` to `level` and `unit_length`, `unit_width`, `unit_height` to `wall` ([ADR 0008](0008-materials-are-chosen.md)).
 
+Version 3 adds the `conditions` table ([ADR 0009](0009-job-conditions.md)).
+
 Ids are canonical UUID text. Lengths are whole millimetres. Enums are the codes of `schema/engine.fbs`.
 
 ## Consequences
