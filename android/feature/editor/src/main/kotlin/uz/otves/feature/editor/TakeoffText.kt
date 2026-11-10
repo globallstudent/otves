@@ -2,12 +2,16 @@ package uz.otves.feature.editor
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
+import uz.otves.core.model.Currency
 import uz.otves.core.model.Mm
+import uz.otves.core.model.Money
 import uz.otves.engine.MasonryUnitKind
 import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.QuantityUnit
 import uz.otves.engine.UnitSize
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
@@ -98,12 +102,7 @@ internal fun unitName(unit: QuantityUnit): String =
 
 /** `6 400`, `1,39`: a no-break space between thousands and a decimal comma, as builders write. */
 internal fun amountText(line: QuantityLine): String {
-    val digits =
-        when (line.unit) {
-            QuantityUnit.PIECE -> 0
-            QuantityUnit.KILOGRAM -> 1
-            QuantityUnit.METRE, QuantityUnit.SQUARE_METRE, QuantityUnit.CUBIC_METRE -> 2
-        }
+    val digits = shownDigits(line.unit)
     val symbols =
         DecimalFormatSymbols(Locale.ROOT).apply {
             groupingSeparator = ' '
@@ -111,6 +110,37 @@ internal fun amountText(line: QuantityLine): String {
         }
     val pattern = if (digits == 0) "#,##0" else "#,##0." + "0".repeat(digits)
     return DecimalFormat(pattern, symbols).format(line.amount)
+}
+
+private fun shownDigits(unit: QuantityUnit): Int =
+    when (unit) {
+        QuantityUnit.PIECE -> 0
+        QuantityUnit.KILOGRAM -> 1
+        QuantityUnit.METRE, QuantityUnit.SQUARE_METRE, QuantityUnit.CUBIC_METRE -> 2
+    }
+
+/** What the line costs at the builder's price: the amount as it is shown, times the price of one. */
+internal fun cost(
+    line: QuantityLine,
+    prices: Map<String, Money>,
+): Money? = prices[line.item]?.let { it * BigDecimal.valueOf(line.amount).setScale(shownDigits(line.unit), RoundingMode.HALF_UP) }
+
+/** The sum of the priced lines, or null when none has a price or their currencies differ. */
+internal fun total(
+    lines: List<QuantityLine>,
+    prices: Map<String, Money>,
+): Money? {
+    val costs = lines.mapNotNull { cost(it, prices) }
+    if (costs.isEmpty() || costs.any { it.currency != costs.first().currency }) return null
+    return costs.reduce(Money::plus)
+}
+
+/** Whole units of the currency with its name: «12 534 000 сум». */
+@Composable
+internal fun moneyText(money: Money): String {
+    val whole = BigDecimal.valueOf(money.minor).movePointLeft(money.currency.minorDigits).setScale(0, RoundingMode.HALF_UP)
+    val grouped = String.format(Locale.ROOT, "%,d", whole.toLong()).replace(',', '\u00A0')
+    return if (money.currency == Currency.UZS) stringResource(R.string.money_uzs, grouped) else "$grouped ${money.currency.name}"
 }
 
 // "22" decimetres reads as "2,2" metres.

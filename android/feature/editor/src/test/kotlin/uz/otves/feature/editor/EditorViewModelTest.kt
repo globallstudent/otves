@@ -7,14 +7,18 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import uz.otves.core.model.Currency
 import uz.otves.core.model.ElementId
+import uz.otves.core.model.Money
 import uz.otves.core.model.mm
+import uz.otves.data.catalog.Prices
 import uz.otves.data.project.JobStore
 import uz.otves.data.project.SavedJob
 import uz.otves.engine.Catalog
@@ -280,6 +284,19 @@ class EditorViewModelTest {
         }
     }
 
+    /** A price list in memory. */
+    private class FakePrices : Prices {
+        override val all = MutableStateFlow(emptyMap<String, Money>())
+
+        override suspend fun set(
+            item: String,
+            price: Money?,
+        ) {
+            all.value = if (price == null) all.value - item else all.value + (item to price)
+        }
+    }
+
+    private val prices = FakePrices()
     private val engine = FakeEngine(level)
     private var store = FakeStore()
 
@@ -291,7 +308,7 @@ class EditorViewModelTest {
 
     @Test
     fun aNewJobOpensEmptyAndGetsAGroundFloor() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
 
         val start = engine.sent.single()
         assertThat(start[0]).isEqualTo(content)
@@ -314,7 +331,7 @@ class EditorViewModelTest {
             )
         store = FakeStore(SavedJob(saved, clock = 42L, name = "Дом на Чиланзаре"))
 
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
 
         assertThat(engine.sent.single()).containsExactly(content, EngineCommand.OpenModel(saved, clock = 42L)).inOrder()
         val state = viewModel.uiState.value
@@ -328,7 +345,7 @@ class EditorViewModelTest {
     @Test
     fun leavingTheEditorClosesTheJob() {
         val owner = ViewModelStore()
-        val factory = viewModelFactory { initializer { EditorViewModel(engine, { content }, { catalog }, store) } }
+        val factory = viewModelFactory { initializer { EditorViewModel(engine, { content }, { catalog }, store, prices) } }
         ViewModelProvider.create(owner, factory)[EditorViewModel::class]
 
         owner.clear()
@@ -338,7 +355,7 @@ class EditorViewModelTest {
 
     @Test
     fun everyResponseGoesToTheJobFile() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
@@ -356,7 +373,7 @@ class EditorViewModelTest {
 
     @Test
     fun twoTapsBuildAWallAlongAnAxisAndStartTheNextAtItsEnd() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.selectThickness(250.mm)
 
         viewModel.tap(PointMm(30.mm, (-40).mm), reach)
@@ -378,7 +395,7 @@ class EditorViewModelTest {
 
     @Test
     fun undoStopsBeforeTheGroundFloor() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         assertThat(viewModel.uiState.value.canUndo).isFalse()
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
@@ -391,7 +408,7 @@ class EditorViewModelTest {
 
     @Test
     fun aTapNearAWallEndLandsOnIt() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_437.mm, 0.mm), reach)
         viewModel.finishWall()
@@ -406,7 +423,7 @@ class EditorViewModelTest {
 
     @Test
     fun withoutTheLockAWallGoesAtAnyAngleUnlessItIsNearlyAlongAnAxis() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.toggleOrtho()
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
@@ -429,7 +446,7 @@ class EditorViewModelTest {
 
     @Test
     fun aPointLinesUpWithAnotherWallEnd() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 4_000.mm), reach)
@@ -443,7 +460,7 @@ class EditorViewModelTest {
 
     @Test
     fun aWallBackToTheFirstPointClosesTheRun() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 4_000.mm), reach)
@@ -459,7 +476,7 @@ class EditorViewModelTest {
 
     @Test
     fun aPartitionMeetsTheWallAlongItsLengthAndEndsTheRun() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.finishWall()
@@ -491,7 +508,7 @@ class EditorViewModelTest {
 
     @Test
     fun aRoomIsEnteredByItsMeasuredLengthsAndClosed() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.startMeasure()
 
@@ -526,7 +543,7 @@ class EditorViewModelTest {
 
     @Test
     fun touchesDoNotPlacePointsWhileLengthsAreEntered() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.startMeasure()
 
@@ -542,7 +559,7 @@ class EditorViewModelTest {
 
     @Test
     fun aTouchBesideAnOpenListClosesItAndDrawsNothing() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.showTakeoff(true)
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
@@ -553,7 +570,7 @@ class EditorViewModelTest {
 
     @Test
     fun aSecondFingerDropsThePointBeingAimed() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
 
         viewModel.aim(PointMm(0.mm, 0.mm), reach)
         viewModel.cancelAim()
@@ -568,7 +585,7 @@ class EditorViewModelTest {
 
     @Test
     fun undoStepsBackAlongTheRun() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 4_000.mm), reach)
@@ -581,7 +598,7 @@ class EditorViewModelTest {
 
     @Test
     fun aTypedLengthMovesTheWallEndAndTheWallsThatMeetIt() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 4_000.mm), reach)
@@ -613,7 +630,7 @@ class EditorViewModelTest {
 
     @Test
     fun theLengthOfTheWallJustDrawnMovesWhereTheNextOneStarts() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_400.mm, 0.mm), reach)
         val drawn = viewModel.uiState.value.drawn!!
@@ -627,7 +644,7 @@ class EditorViewModelTest {
 
     @Test
     fun aWindowGoesIntoTheTappedWallWithTheChosenSize() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.selectTool(Tool.WINDOW)
@@ -653,7 +670,7 @@ class EditorViewModelTest {
 
     @Test
     fun aDoorStandsOnTheFloor() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.selectTool(Tool.DOOR)
 
         viewModel.tap(PointMm(1_000.mm, 0.mm), reach)
@@ -666,7 +683,7 @@ class EditorViewModelTest {
 
     @Test
     fun changingTheToolDropsAWallStart() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
         viewModel.selectTool(Tool.WINDOW)
@@ -676,7 +693,7 @@ class EditorViewModelTest {
 
     @Test
     fun aNewStoreyStandsOnTheTopOneAndIsShownOverIt() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
 
@@ -695,7 +712,7 @@ class EditorViewModelTest {
 
     @Test
     fun choosingAStoreyShowsItsWalls() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.addLevel()
@@ -710,7 +727,7 @@ class EditorViewModelTest {
 
     @Test
     fun undoingAStoreyGoesBackDown() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.addLevel()
 
         viewModel.undo()
@@ -722,7 +739,7 @@ class EditorViewModelTest {
 
     @Test
     fun aWallEndOnTheStoreyBelowCatchesTaps() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_437.mm, 0.mm), reach)
         viewModel.addLevel()
@@ -746,7 +763,7 @@ class EditorViewModelTest {
 
     @Test
     fun theSelectToolShowsWhatTheEnginePicked() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         val wall = viewModel.buildWall()
         viewModel.selectTool(Tool.SELECT)
 
@@ -765,7 +782,7 @@ class EditorViewModelTest {
 
     @Test
     fun theInspectorChangesTheSelectedWall() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         val wall = viewModel.buildWall()
         viewModel.selectTool(Tool.SELECT)
         engine.pickNext = wall
@@ -779,7 +796,7 @@ class EditorViewModelTest {
 
     @Test
     fun anotherKindIsOneStepWithItsUsualSizeAndSillAboutTheSameCentre() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.buildWall()
         viewModel.selectTool(Tool.WINDOW)
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
@@ -810,7 +827,7 @@ class EditorViewModelTest {
 
     @Test
     fun removingTheSelectionDropsIt() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         val wall = viewModel.buildWall()
         viewModel.selectTool(Tool.SELECT)
         engine.pickNext = wall
@@ -826,7 +843,7 @@ class EditorViewModelTest {
 
     @Test
     fun wallsAreDrawnWithoutAMaterialUntilOneIsChosen() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         assertThat(viewModel.uiState.value.material).isNull()
         assertThat(viewModel.uiState.value.thickness).isEqualTo(380.mm)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
@@ -849,7 +866,7 @@ class EditorViewModelTest {
 
     @Test
     fun aUnitSizeOfTheBuildersOwnIsTypedAndChosen() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.showMaterials(true)
         viewModel.startSize()
 
@@ -878,7 +895,7 @@ class EditorViewModelTest {
 
     @Test
     fun theSelectedWallTakesTheChosenMaterialAndAThicknessItBuilds() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         val wall = viewModel.buildWall()
         viewModel.selectTool(Tool.SELECT)
         engine.pickNext = wall
@@ -898,7 +915,7 @@ class EditorViewModelTest {
 
     @Test
     fun theStoreyGetsTheRingBeamAndMeshesTheBuilderAsksFor() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         assertThat(viewModel.uiState.value.ringBeam).isEqualTo(0.mm)
 
         viewModel.setRingBeam(150.mm)
@@ -921,7 +938,7 @@ class EditorViewModelTest {
             )
         store = FakeStore(SavedJob(saved, clock = 42L))
 
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
 
         assertThat(viewModel.uiState.value.material).isEqualTo(block)
         assertThat(viewModel.uiState.value.thickness).isEqualTo(390.mm)
@@ -929,7 +946,7 @@ class EditorViewModelTest {
 
     @Test
     fun theJobsConditionsFollowTheEngineAndGoWhenUndone() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         assertThat(viewModel.uiState.value.conditions).isEqualTo(Conditions())
         viewModel.showTakeoff(true)
         viewModel.showConditions(true)
@@ -945,8 +962,43 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun aTypedPriceGoesToThePriceListAndPricesTheLine() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.buildWall()
+        val line =
+            viewModel.uiState.value.takeoff
+                .single()
+
+        viewModel.editPrice(line)
+        listOf(0, 1, 4, 5, 0, 9).forEach(viewModel::typeDigit)
+        viewModel.eraseDigit()
+        viewModel.confirmPrice()
+
+        val state = viewModel.uiState.value
+        assertThat(state.priceEntry).isNull()
+        // 1 450 sum a piece, in tiyin.
+        assertThat(state.prices).containsExactly("masonry_unit", Money(145_000, Currency.UZS))
+        // 100 pieces.
+        assertThat(cost(line, state.prices)).isEqualTo(Money(14_500_000, Currency.UZS))
+        assertThat(total(state.takeoff, state.prices)).isEqualTo(Money(14_500_000, Currency.UZS))
+
+        viewModel.editPrice(line)
+        viewModel.confirmPrice()
+        assertThat(viewModel.uiState.value.prices).isEmpty()
+        assertThat(total(state.takeoff, viewModel.uiState.value.prices)).isNull()
+    }
+
+    @Test
+    fun aCostFollowsTheAmountAsItIsShown() {
+        // 5,256 m³ shows as 5,26; at 650 000 sum a cubic metre that is 3 419 000, not 3 416 400.
+        val mortar = QuantityLine("masonry", "mortar", QuantityUnit.CUBIC_METRE, 5.256)
+
+        assertThat(cost(mortar, mapOf("mortar" to Money(65_000_000, Currency.UZS)))).isEqualTo(Money(341_900_000, Currency.UZS))
+    }
+
+    @Test
     fun wallsWithoutAMaterialAreListed() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         val wall = ElementId(Uuid.fromLongs(2, 0))
         engine.issues = listOf(Issue(IssueKind.MATERIAL_NOT_CHOSEN, wall, level, null))
 
@@ -957,7 +1009,7 @@ class EditorViewModelTest {
 
     @Test
     fun eachWallOfTheStoreyGetsItsLength() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
 
         viewModel.buildWall()
 
@@ -970,7 +1022,7 @@ class EditorViewModelTest {
 
     @Test
     fun onlyTheIssuesOfTheShownStoreyAreDrawn() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         val here = Issue(IssueKind.WALL_OVERLAP, element = null, level, PointMm(0.mm, 0.mm))
         val upstairs = Issue(IssueKind.SHARP_ANGLE, element = null, ElementId(Uuid.fromLongs(9, 9)), PointMm(0.mm, 0.mm))
         engine.issues = listOf(here, upstairs)
@@ -982,7 +1034,7 @@ class EditorViewModelTest {
 
     @Test
     fun refusalAndFailedTakeoffAreShown() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
         engine.refuseNext = EngineError.OFF_PLAN

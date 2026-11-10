@@ -103,4 +103,12 @@
     <string name="grade_cement" translatable="false">ПЦ%1$d</string>
     <string name="grade_mortar" translatable="false">М%1$d</string>
     <string name="percent" translatable="false">%1$d %%</string>
+    <string name="money_uzs">%1$s сум</string>
+    <string name="price_set">Указать цену</string>
+    <string name="price_per">%1$s за %2$s</string>
+    <string name="price_for_one">за 1 %1$s</string>
+    <string name="takeoff_total">Итого</string>
+    <string name="takeoff_unpriced">Позиций без цены: %1$d</string>
+    <string name="takeoff_share_cost" translatable="false">%1$s — %2$s</string>
+    <string name="takeoff_share_total">Итого: %1$s</string>
 </resources>

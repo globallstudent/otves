@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
                                     loadContent = { withContext(Dispatchers.IO) { ContentAssets.load(assets) } },
                                     loadCatalog = { withContext(Dispatchers.IO) { ContentAssets.catalog(assets) } },
                                     openJob = { app.jobs.open(Uuid.parse(key.job)) },
+                                    prices = app.prices,
                                     onBack = { backStack.removeLastOrNull() },
                                 )
                             }

@@ -11,6 +11,7 @@ android {
 dependencies {
     implementation(projects.core.designsystem)
     implementation(projects.core.model)
+    implementation(projects.data.catalog)
     implementation(projects.data.project)
     implementation(projects.engineBridge)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

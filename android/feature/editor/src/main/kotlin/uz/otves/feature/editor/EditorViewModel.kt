@@ -10,9 +10,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import uz.otves.core.model.Currency
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
+import uz.otves.core.model.Money
 import uz.otves.core.model.mm
+import uz.otves.data.catalog.Prices
 import uz.otves.data.project.JobStore
 import uz.otves.engine.Catalog
 import uz.otves.engine.CommandResult
@@ -103,6 +106,11 @@ internal data class Draft(
         get() = end?.let { Mm(hypot((it.x.value - start.x.value).toDouble(), (it.y.value - start.y.value).toDouble()).roundToLong()) }
 }
 
+/** How many minor units make one unit of the currency: 100 tiyin in a sum. */
+internal fun Currency.minorPerUnit(): Long = (1..minorDigits).fold(1L) { units, _ -> units * DECIMAL }
+
+private const val DECIMAL = 10
+
 /** Which way a measured wall goes from where the last one ended. */
 internal enum class Turn { LEFT, STRAIGHT, RIGHT }
 
@@ -131,6 +139,12 @@ internal data class SizeEntry(
             return if (length > 0 && width > 0 && height > 0) UnitSize(Mm(length), Mm(width), Mm(height)) else null
         }
 }
+
+/** The price of one unit of a take-off item being typed, in whole units of the currency. */
+internal data class PriceEntry(
+    val line: QuantityLine,
+    val digits: String = "",
+)
 
 /** A wall's exact length being typed: the digits so far, in millimetres. */
 internal data class LengthEntry(
@@ -164,6 +178,9 @@ internal data class EditorUiState(
     /** The wall drawn last, whose length the user may now type. */
     val drawn: ElementId? = null,
     val entry: LengthEntry? = null,
+    /** The builder's prices by take-off item, for one unit of each. */
+    val prices: Map<String, Money> = emptyMap(),
+    val priceEntry: PriceEntry? = null,
     /** A unit size of the builder's own is being typed. */
     val sizeEntry: SizeEntry? = null,
     /** Walls are being entered by their measured lengths. */
@@ -222,6 +239,7 @@ internal class EditorViewModel(
     loadContent: suspend () -> EngineCommand.LoadContent,
     loadCatalog: suspend () -> Catalog,
     private val job: JobStore,
+    private val prices: Prices,
 ) : ViewModel() {
     private val state = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = state.asStateFlow()
@@ -246,6 +264,7 @@ internal class EditorViewModel(
     private val turn = Mutex()
 
     init {
+        viewModelScope.launch { prices.all.collect { all -> state.update { it.copy(prices = all) } } }
         viewModelScope.launch {
             turn.withLock {
                 val saved = job.load()
@@ -296,7 +315,7 @@ internal class EditorViewModel(
         val onLevel = current.level ?: return
         // A touch beside an open list closes it and does nothing else.
         if (current.takeoffOpen || current.materialOpen) {
-            state.update { it.copy(takeoffOpen = false, materialOpen = false, conditionsOpen = false) }
+            state.update { it.copy(takeoffOpen = false, materialOpen = false, conditionsOpen = false, priceEntry = null) }
             return
         }
         when (current.tool) {
@@ -509,8 +528,28 @@ internal class EditorViewModel(
     fun typeDigit(digit: Int) {
         val typed = { digits: String -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_LENGTH_DIGITS } ?: digits }
         if (state.value.sizeEntry != null) return sized(typed)
+        if (state.value.priceEntry != null) {
+            return priced { digits -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_PRICE_DIGITS } ?: digits }
+        }
         if (state.value.entry == null) return measured { it.copy(digits = typed(it.digits)) }
         state.update { current -> current.copy(entry = current.entry?.let { it.copy(digits = typed(it.digits)) }) }
+    }
+
+    private fun priced(change: (String) -> String) =
+        state.update { current -> current.copy(priceEntry = current.priceEntry?.let { it.copy(digits = change(it.digits)) }) }
+
+    /** Opens the keys for what the builder pays for one unit of the line's item. */
+    fun editPrice(line: QuantityLine) = state.update { it.copy(priceEntry = PriceEntry(line)) }
+
+    fun cancelPrice() = state.update { it.copy(priceEntry = null) }
+
+    /** Keeps the typed price in the builder's price list, for this job and every other; none typed forgets it. */
+    fun confirmPrice() {
+        val entry = state.value.priceEntry ?: return
+        state.update { it.copy(priceEntry = null) }
+        val whole = entry.digits.toLongOrNull() ?: 0
+        val price = if (whole > 0) Money(whole * PriceCurrency.minorPerUnit(), PriceCurrency) else null
+        viewModelScope.launch { prices.set(entry.line.item, price) }
     }
 
     // Changes the digits of the unit size being typed.
@@ -536,6 +575,7 @@ internal class EditorViewModel(
 
     fun eraseDigit() {
         if (state.value.sizeEntry != null) return sized { it.dropLast(1) }
+        if (state.value.priceEntry != null) return priced { it.dropLast(1) }
         if (state.value.entry == null) return measured { it.copy(digits = it.digits.dropLast(1)) }
         state.update { current -> current.copy(entry = current.entry?.let { it.copy(digits = it.digits.dropLast(1)) }) }
     }
@@ -955,6 +995,12 @@ internal class EditorViewModel(
         const val MAX_LENGTH_DIGITS = 5
 
         const val OWN_UNIT = "own"
+
+        // Up to 999 999 999 a unit.
+        const val MAX_PRICE_DIGITS = 9
+
+        // Prices are in sum until a job chooses its currency.
+        val PriceCurrency = Currency.UZS
 
         // A common sill height for living rooms; the user changes it per window later.
         val WindowSill = 900.mm

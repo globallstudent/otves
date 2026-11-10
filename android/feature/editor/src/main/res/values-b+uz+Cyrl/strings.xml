@@ -95,4 +95,11 @@
     <string name="condition_mortar">Қоришма</string>
     <string name="condition_unit_waste">Ғишт захираси</string>
     <string name="condition_mortar_waste">Қоришма захираси</string>
+    <string name="money_uzs">%1$s сўм</string>
+    <string name="price_set">Нархни киритиш</string>
+    <string name="price_per">%2$s учун %1$s</string>
+    <string name="price_for_one">1 %1$s учун</string>
+    <string name="takeoff_total">Жами</string>
+    <string name="takeoff_unpriced">Нархсиз қаторлар: %1$d</string>
+    <string name="takeoff_share_total">Жами: %1$s</string>
 </resources>

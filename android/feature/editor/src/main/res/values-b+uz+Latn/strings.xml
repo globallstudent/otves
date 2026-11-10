@@ -95,4 +95,11 @@
     <string name="condition_mortar">Qorishma</string>
     <string name="condition_unit_waste">G‘isht zaxirasi</string>
     <string name="condition_mortar_waste">Qorishma zaxirasi</string>
+    <string name="money_uzs">%1$s so‘m</string>
+    <string name="price_set">Narxni kiritish</string>
+    <string name="price_per">%2$s uchun %1$s</string>
+    <string name="price_for_one">1 %1$s uchun</string>
+    <string name="takeoff_total">Jami</string>
+    <string name="takeoff_unpriced">Narxsiz qatorlar: %1$d</string>
+    <string name="takeoff_share_total">Jami: %1$s</string>
 </resources>

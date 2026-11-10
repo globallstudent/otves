@@ -64,7 +64,9 @@ import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.designsystem.SegmentedControl
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
+import uz.otves.core.model.Money
 import uz.otves.core.model.mm
+import uz.otves.data.catalog.Prices
 import uz.otves.data.project.JobStore
 import uz.otves.engine.Catalog
 import uz.otves.engine.Condition
@@ -85,8 +87,8 @@ import kotlin.uuid.Uuid
 
 /**
  * The editor of one job, wired to the engine; [loadContent] reads the norms and rules,
- * [loadCatalog] what the builder chooses from, and [openJob] opens the job file, which the editor
- * closes when it leaves.
+ * [loadCatalog] what the builder chooses from, [openJob] opens the job file, which the editor
+ * closes when it leaves, and [prices] is the builder's price list.
  */
 @Composable
 fun EditorRoute(
@@ -94,10 +96,11 @@ fun EditorRoute(
     loadContent: suspend () -> EngineCommand.LoadContent,
     loadCatalog: suspend () -> Catalog,
     openJob: () -> JobStore,
+    prices: Prices,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val viewModel = viewModel { EditorViewModel(engine, loadContent, loadCatalog, openJob()) }
+    val viewModel = viewModel { EditorViewModel(engine, loadContent, loadCatalog, openJob(), prices) }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     EditorScreen(
         state = state,
@@ -140,6 +143,9 @@ fun EditorRoute(
                 onSizeField = viewModel::selectSizeField,
                 onCancelSize = viewModel::cancelSize,
                 onConfirmSize = viewModel::confirmSize,
+                onPrice = viewModel::editPrice,
+                onCancelPrice = viewModel::cancelPrice,
+                onConfirmPrice = viewModel::confirmPrice,
                 onConditions = viewModel::showConditions,
                 onCondition = viewModel::setCondition,
                 onRingBeam = viewModel::setRingBeam,
@@ -188,6 +194,9 @@ internal data class EditorActions(
     val onSizeField: (Int) -> Unit = {},
     val onCancelSize: () -> Unit = {},
     val onConfirmSize: () -> Unit = {},
+    val onPrice: (QuantityLine) -> Unit = {},
+    val onCancelPrice: () -> Unit = {},
+    val onConfirmPrice: () -> Unit = {},
     val onConditions: (open: Boolean) -> Unit = {},
     val onCondition: (Condition, Int) -> Unit = { _, _ -> },
     val onRingBeam: (Mm) -> Unit = {},
@@ -251,10 +260,12 @@ internal fun EditorScreen(
             val entry = state.entry
             val measure = state.measure
             val sizeEntry = state.sizeEntry
+            val priceEntry = state.priceEntry
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 when {
                     entry != null -> LengthPad(entry, actions)
                     sizeEntry != null -> SizePad(sizeEntry, actions)
+                    priceEntry != null -> PricePad(priceEntry, state, actions)
                     measure != null -> MeasurePad(measure, state, actions)
                     state.materialOpen -> MaterialPanel(state, actions)
                     selected != null -> Inspector(selected, state, actions)
@@ -943,7 +954,7 @@ private fun TakeoffPanel(
     Panel {
         val lines = state.takeoff.filter { it.amount != 0.0 }
         val context = LocalContext.current
-        val shared = takeoffText(state.name, lines, state.catalog.units)
+        val shared = takeoffText(state.name, lines, state.catalog.units, state.prices)
         PanelHeader(stringResource(R.string.takeoff_title)) {
             PanelAction(
                 stringResource(R.string.takeoff_share),
@@ -984,14 +995,9 @@ private fun TakeoffPanel(
                 }
                 Advice(state, IssueKind.JUNCTION_MESHES_MISSING)
                 LazyColumn(modifier = Modifier.padding(top = 8.dp).heightIn(max = TakeoffHeight)) {
-                    items(lines) { line ->
-                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                            Text(itemName(line.item, state.catalog.units), modifier = Modifier.weight(1f))
-                            Text("${amountText(line)} ${unitName(line.unit)}")
-                        }
-                        HorizontalDivider(color = OtvesTheme.colors.divider)
-                    }
+                    items(lines) { line -> TakeoffLine(line, state, actions.onPrice) }
                 }
+                Total(lines, state.prices)
                 PanelAction(stringResource(R.string.conditions_title), { actions.onConditions(true) })
             }
         }
@@ -1010,10 +1016,104 @@ private fun takeoffText(
     name: String,
     lines: List<QuantityLine>,
     units: List<MasonryUnitOption>,
+    prices: Map<String, Money>,
 ): String {
     val title = stringResource(R.string.takeoff_share_title, name.ifBlank { stringResource(R.string.editor_title) })
-    val rows = lines.map { stringResource(R.string.takeoff_share_line, itemName(it.item, units), amountText(it), unitName(it.unit)) }
-    return (listOf(title, "") + rows).joinToString("\n")
+    val rows =
+        lines.map { line ->
+            val amount = stringResource(R.string.takeoff_share_line, itemName(line.item, units), amountText(line), unitName(line.unit))
+            cost(line, prices)?.let { stringResource(R.string.takeoff_share_cost, amount, moneyText(it)) } ?: amount
+        }
+    val sum = total(lines, prices)?.let { listOf("", stringResource(R.string.takeoff_share_total, moneyText(it))) }.orEmpty()
+    return (listOf(title, "") + rows + sum).joinToString("\n")
+}
+
+// One material: how much of it, and under that what one unit costs him and what the line comes to.
+// A touch opens the price.
+@Composable
+private fun TakeoffLine(
+    line: QuantityLine,
+    state: EditorUiState,
+    onPrice: (QuantityLine) -> Unit,
+) {
+    val colors = OtvesTheme.colors
+    val price = state.prices[line.item]
+    Surface(onClick = { onPrice(line) }, color = colors.surface) {
+        Column {
+            Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Text(itemName(line.item, state.catalog.units), modifier = Modifier.weight(1f))
+                Text("${amountText(line)} ${unitName(line.unit)}")
+            }
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Text(
+                    text =
+                        if (price == null) {
+                            stringResource(R.string.price_set)
+                        } else {
+                            stringResource(R.string.price_per, moneyText(price), unitName(line.unit))
+                        },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (price == null) colors.inkTertiary else colors.inkSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                cost(line, state.prices)?.let { Text(moneyText(it), style = MaterialTheme.typography.bodyMedium) }
+            }
+            HorizontalDivider(color = colors.divider)
+        }
+    }
+}
+
+// What the priced materials come to, and how many still have no price.
+@Composable
+private fun Total(
+    lines: List<QuantityLine>,
+    prices: Map<String, Money>,
+) {
+    val sum = total(lines, prices) ?: return
+    val unpriced = lines.count { it.item !in prices }
+    Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(stringResource(R.string.takeoff_total), style = MaterialTheme.typography.titleMedium)
+            if (unpriced > 0) {
+                Text(
+                    stringResource(R.string.takeoff_unpriced, unpriced),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OtvesTheme.colors.inkSecondary,
+                )
+            }
+        }
+        Text(moneyText(sum), style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+// What the builder pays for one unit of a material, in whole units of the currency. It goes to
+// his price list, so the next job already knows it; an empty price forgets it.
+@Composable
+private fun PricePad(
+    entry: PriceEntry,
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    val colors = OtvesTheme.colors
+    Panel {
+        PanelHeader(itemName(entry.line.item, state.catalog.units)) {
+            PanelAction(stringResource(R.string.length_cancel), actions.onCancelPrice)
+        }
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = stringResource(R.string.money_uzs, entry.digits.toLongOrNull()?.let(::grouped) ?: "0"),
+                style = MaterialTheme.typography.displaySmall,
+                color = if (entry.digits.isEmpty()) colors.inkTertiary else colors.ink,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(R.string.price_for_one, unitName(entry.line.unit)),
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.inkSecondary,
+            )
+        }
+        NumberKeys(actions, stringResource(R.string.inspector_done), actions.onConfirmPrice, enabled = true)
+    }
 }
 
 private fun Context.share(text: String) {

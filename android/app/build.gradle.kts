@@ -27,6 +27,7 @@ android {
 
 dependencies {
     implementation(projects.core.designsystem)
+    implementation(projects.data.catalog)
     implementation(projects.data.project)
     implementation(projects.engineBridge)
     implementation(projects.feature.editor)
