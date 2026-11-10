@@ -32,6 +32,7 @@ import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineElement
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
+import uz.otves.engine.Footing
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
 import uz.otves.engine.Level
@@ -171,6 +172,10 @@ class EditorViewModelTest {
 
                     command is EngineCommand.SetLevelRingBeam -> {
                         edit(command.level) { (it as Level).copy(ringBeam = command.height) }
+                    }
+
+                    command is EngineCommand.SetLevelFooting -> {
+                        edit(command.level) { (it as Level).copy(footing = command.footing) }
                     }
 
                     command is EngineCommand.SetLevelJunctionMeshes -> {
@@ -926,6 +931,27 @@ class EditorViewModelTest {
             .inOrder()
         assertThat(viewModel.uiState.value.ringBeam).isEqualTo(150.mm)
         assertThat(viewModel.uiState.value.junctionMeshes).isTrue()
+    }
+
+    @Test
+    fun theStoreysFootingIsTypedAsWidthAndDepthAndRemoved() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.showTakeoff(true)
+
+        viewModel.startFooting()
+        listOf(5, 0, 0).forEach(viewModel::typeDigit)
+        viewModel.confirmSize()
+        assertThat(viewModel.uiState.value.sizeEntry).isNotNull()
+        viewModel.selectSizeField(1)
+        listOf(8, 0, 0).forEach(viewModel::typeDigit)
+        viewModel.confirmSize()
+
+        assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.SetLevelFooting(level, Footing(500.mm, 800.mm)))
+        assertThat(viewModel.uiState.value.sizeEntry).isNull()
+        assertThat(viewModel.uiState.value.footing).isEqualTo(Footing(500.mm, 800.mm))
+
+        viewModel.setFooting(null)
+        assertThat(viewModel.uiState.value.footing).isNull()
     }
 
     @Test

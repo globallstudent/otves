@@ -25,10 +25,10 @@ flowchart TB
 
 | Module | Role | Status |
 |---|---|---|
-| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels with their ring beam and junction meshes, walls with their masonry unit, openings, the job's estimating conditions, commands, document with op log, undo, gestures and opening a saved job | exists |
+| `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels with their strip footing, ring beam and junction meshes, walls with their masonry unit, openings, the job's estimating conditions, commands, document with op log, undo, gestures and opening a saved job | exists |
 | `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`); the wall under a point and opening outlines | exists |
 | `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar per chosen unit, Luau rules sandbox (`RuleSet`) | exists |
-| `content/` | Norm tables and rules in Luau: mortar, cement, lintels, ring beams, junction meshes; the catalog of masonry units and ring beam heights to choose from | exists |
+| `content/` | Norm tables and rules in Luau: mortar, cement, lintels, strip footings, ring beams, junction meshes; the catalog of masonry units and ring beam heights to choose from | exists |
 | `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement and picking at a tap, outlines with lengths, issues, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
 | `engine/render`, `export` | Drawing, PDF/DXF/IFC | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money`, `ElementId` | exists |
@@ -38,7 +38,7 @@ flowchart TB
 | `android/data/catalog` | The app-wide catalog database: the builder's own price for one unit of each take-off item, the same for every job | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
 | `android/feature/projects` | The jobs on this phone, newest first; create, rename, delete | exists |
-| `android/feature/editor` | Plan of a job storey by storey: walls drawn in a run by touch or drag with a 90° lock and snapping to wall ends and onto walls, walls entered by measured lengths and turns, exact lengths typed on a number pad, windows and doors by a tap on a wall, the wall material chosen from the catalog or typed as a size of the builder's own, a select tool with an inspector (material, length, thickness, kind, size, delete), a ring beam and junction meshes chosen per storey, the job's estimating conditions (seismic intensity, cement, mortar, waste), a price typed per take-off line with line costs and a total, shared as text or as a PDF sheet with the plan, wall lengths and issues on the plan, undo/redo, the take-off in a panel, shared as text; drawn from engine outlines | exists |
+| `android/feature/editor` | Plan of a job storey by storey: walls drawn in a run by touch or drag with a 90° lock and snapping to wall ends and onto walls, walls entered by measured lengths and turns, exact lengths typed on a number pad, windows and doors by a tap on a wall, the wall material chosen from the catalog or typed as a size of the builder's own, a select tool with an inspector (material, length, thickness, kind, size, delete), a strip footing, ring beam and junction meshes chosen per storey, the job's estimating conditions (seismic intensity, cement, mortar, waste), a price typed per take-off line with line costs and a total, shared as text or as a PDF sheet with the plan, wall lengths and issues on the plan, undo/redo, the take-off in a panel, shared as text; drawn from engine outlines | exists |
 | `android/feature/*` (estimate, ledger, …), `device/*` | Screens, hardware | planned |
 
 ## Rules that hold everywhere

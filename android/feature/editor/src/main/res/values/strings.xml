@@ -15,7 +15,7 @@
     <string name="item_cement">Цемент для раствора</string>
     <string name="item_junction_mesh">Сетка в узлах стен</string>
     <string name="item_concrete">Бетон B%1$s</string>
-    <string name="item_rebar">Арматура A%1$sС Ø%2$s</string>
+    <string name="item_rebar">Арматура A%1$s Ø%2$s</string>
     <string name="item_lintel">Перемычка от %1$s м</string>
     <string name="unit_piece">шт</string>
     <string name="unit_metre">м</string>
@@ -121,4 +121,9 @@
     <string name="estimate_cost">Сумма</string>
     <!-- The locale these strings are in, so dates match the text. -->
     <string name="editor_date_locale">ru</string>
+    <string name="level_footing">Ленточный фундамент</string>
+    <string name="footing_set">Задать сечение</string>
+    <string name="footing_section">%1$s × %2$s мм</string>
+    <string name="size_depth">Глубина, мм</string>
+    <string name="item_formwork">Опалубка</string>
 </resources>

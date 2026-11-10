@@ -151,6 +151,8 @@ fun EditorRoute(
                 onConditions = viewModel::showConditions,
                 onCondition = viewModel::setCondition,
                 onRingBeam = viewModel::setRingBeam,
+                onFooting = viewModel::startFooting,
+                onNoFooting = { viewModel.setFooting(null) },
                 onJunctionMeshes = viewModel::setJunctionMeshes,
             ),
         modifier = modifier,
@@ -202,6 +204,8 @@ internal data class EditorActions(
     val onConditions: (open: Boolean) -> Unit = {},
     val onCondition: (Condition, Int) -> Unit = { _, _ -> },
     val onRingBeam: (Mm) -> Unit = {},
+    val onFooting: () -> Unit = {},
+    val onNoFooting: () -> Unit = {},
     val onJunctionMeshes: (Boolean) -> Unit = {},
 )
 
@@ -858,9 +862,14 @@ private fun SizePad(
     actions: EditorActions,
 ) {
     val colors = OtvesTheme.colors
-    val labels = listOf(R.string.size_length, R.string.size_width, R.string.size_height)
+    val labels =
+        if (entry.footing) {
+            listOf(R.string.size_width, R.string.size_depth)
+        } else {
+            listOf(R.string.size_length, R.string.size_width, R.string.size_height)
+        }
     Panel {
-        PanelHeader(stringResource(R.string.material_own)) {
+        PanelHeader(stringResource(if (entry.footing) R.string.level_footing else R.string.material_own)) {
             PanelAction(stringResource(R.string.length_cancel), actions.onCancelSize)
         }
         Row(modifier = Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -884,7 +893,12 @@ private fun SizePad(
                 }
             }
         }
-        NumberKeys(actions, stringResource(R.string.inspector_done), actions.onConfirmSize, enabled = entry.size != null)
+        NumberKeys(
+            actions,
+            stringResource(R.string.inspector_done),
+            actions.onConfirmSize,
+            enabled = entry.size != null || entry.section != null,
+        )
     }
 }
 
@@ -935,6 +949,51 @@ private fun conditionValue(
         Condition.UNIT_WASTE, Condition.MORTAR_WASTE -> stringResource(R.string.percent, value / PER_MILLE_IN_PERCENT)
     }
 
+// What the shown storey is built with beyond its walls: each choice adds its materials below.
+@Composable
+private fun StoreyChoices(
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    Column {
+        val unchosen = state.unchosen.size
+        if (unchosen > 0) {
+            Text(
+                pluralStringResource(R.plurals.takeoff_unchosen, unchosen, unchosen),
+                style = MaterialTheme.typography.bodyMedium,
+                color = OtvesTheme.colors.warning,
+            )
+        }
+        InspectorRow(stringResource(R.string.level_footing)) {
+            val footing = state.footing
+            Pill(stringResource(R.string.option_none), footing == null, actions.onNoFooting)
+            Pill(
+                label =
+                    if (footing == null) {
+                        stringResource(R.string.footing_set)
+                    } else {
+                        stringResource(R.string.footing_section, grouped(footing.width), grouped(footing.depth))
+                    },
+                selected = footing != null,
+                onClick = actions.onFooting,
+            )
+        }
+        InspectorRow(stringResource(R.string.level_ring_beam)) {
+            Pill(stringResource(R.string.option_none), state.ringBeam.value == 0L, { actions.onRingBeam(0.mm) })
+            state.catalog.ringBeamHeights.forEach { height ->
+                Pill(grouped(height), state.ringBeam == height, { actions.onRingBeam(height) })
+            }
+        }
+        Advice(state, IssueKind.RING_BEAM_MISSING)
+        InspectorRow(stringResource(R.string.level_meshes)) {
+            Pill(stringResource(R.string.option_none), !state.junctionMeshes, { actions.onJunctionMeshes(false) })
+            Pill(stringResource(R.string.option_yes), state.junctionMeshes, { actions.onJunctionMeshes(true) })
+        }
+        Advice(state, IssueKind.JUNCTION_MESHES_MISSING)
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
 // What the norms ask of the storey and it lacks. It is said, never added: the builder decides.
 @Composable
 private fun Advice(
@@ -976,28 +1035,10 @@ private fun TakeoffPanel(
             }
 
             else -> {
-                val unchosen = state.unchosen.size
-                if (unchosen > 0) {
-                    Text(
-                        pluralStringResource(R.plurals.takeoff_unchosen, unchosen, unchosen),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = OtvesTheme.colors.warning,
-                    )
-                }
-                InspectorRow(stringResource(R.string.level_ring_beam)) {
-                    Pill(stringResource(R.string.option_none), state.ringBeam.value == 0L, { actions.onRingBeam(0.mm) })
-                    state.catalog.ringBeamHeights.forEach { height ->
-                        Pill(grouped(height), state.ringBeam == height, { actions.onRingBeam(height) })
-                    }
-                }
-                Advice(state, IssueKind.RING_BEAM_MISSING)
-                InspectorRow(stringResource(R.string.level_meshes)) {
-                    Pill(stringResource(R.string.option_none), !state.junctionMeshes, { actions.onJunctionMeshes(false) })
-                    Pill(stringResource(R.string.option_yes), state.junctionMeshes, { actions.onJunctionMeshes(true) })
-                }
-                Advice(state, IssueKind.JUNCTION_MESHES_MISSING)
-                LazyColumn(modifier = Modifier.padding(top = 8.dp).heightIn(max = TakeoffHeight)) {
-                    val bought = bought(lines)
+                // The storey's choices scroll with the lines they add; the total stays in sight.
+                val bought = bought(lines)
+                LazyColumn(modifier = Modifier.heightIn(max = TakeoffHeight)) {
+                    item { StoreyChoices(state, actions) }
                     items(lines) { line -> if (line in bought) TakeoffLine(line, state, actions.onPrice) else MixLine(line, state) }
                 }
                 Total(lines, state.prices)
@@ -1295,7 +1336,7 @@ private fun LengthPadPreview() {
 }
 
 private const val PER_MILLE_IN_PERCENT = 10
-private val TakeoffHeight = 280.dp
+private val TakeoffHeight = 440.dp
 private val InspectorLabelWidth = 124.dp
 private val FloatElevation = 2.dp
 private val PanelShape = RoundedCornerShape(10.dp)

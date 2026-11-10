@@ -25,6 +25,7 @@ import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
+import uz.otves.engine.Footing
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
 import uz.otves.engine.Level
@@ -132,16 +133,27 @@ internal data class Measure(
 )
 
 /**
- * A masonry unit the catalog does not list, being typed: its size as laid in millimetres, as
- * digits so far, and which of the three the keys go to.
+ * Sizes in millimetres being typed, as digits so far, and which of them the keys go to: a masonry
+ * unit the catalog does not list (length, width, height as laid), or a strip footing's section
+ * (width, depth).
  */
 internal data class SizeEntry(
     val digits: List<String> = listOf("", "", ""),
     val active: Int = 0,
+    /** The sizes are a strip footing's width and depth, not a masonry unit's. */
+    val footing: Boolean = false,
 ) {
+    /** The footing's section once both sizes are typed. */
+    val section: Footing?
+        get() {
+            val sizes = digits.map { it.toLongOrNull() ?: 0 }
+            return if (footing && sizes.all { it > 0 }) Footing(Mm(sizes[0]), Mm(sizes[1])) else null
+        }
+
     /** The size once all three are typed. */
     val size: UnitSize?
         get() {
+            if (footing) return null
             val (length, width, height) = digits.map { it.toLongOrNull() ?: 0 }
             return if (length > 0 && width > 0 && height > 0) UnitSize(Mm(length), Mm(width), Mm(height)) else null
         }
@@ -209,6 +221,7 @@ internal data class EditorUiState(
     val conditionsOpen: Boolean = false,
     /** What the shown storey asks for: its ring beam's height, zero for none, and junction meshes. */
     val ringBeam: Mm = 0.mm,
+    val footing: Footing? = null,
     val junctionMeshes: Boolean = false,
     val tool: Tool = Tool.WALL,
     val selected: Selected? = null,
@@ -490,8 +503,21 @@ internal class EditorViewModel(
 
     fun cancelSize() = state.update { it.copy(sizeEntry = null) }
 
-    /** Chooses the typed size as the material, as [chooseMaterial] does a catalog unit. */
+    /** Opens the keys for the section of the shown storey's strip footing. */
+    fun startFooting() = state.update { it.copy(sizeEntry = SizeEntry(digits = listOf("", ""), footing = true)) }
+
+    /** The strip footing under the shown storey's load-bearing walls; null removes it. */
+    fun setFooting(footing: Footing?) {
+        val level = state.value.level ?: return
+        send(listOf(EngineCommand.SetLevelFooting(level, footing)))
+    }
+
+    /** Chooses the typed size as the material, as [chooseMaterial] does a catalog unit, or sets the typed footing. */
     fun confirmSize() {
+        state.value.sizeEntry?.section?.let { section ->
+            state.update { it.copy(sizeEntry = null) }
+            return setFooting(section)
+        }
         val size = state.value.sizeEntry?.size ?: return
         state.update { it.copy(sizeEntry = null) }
         val listed =
@@ -811,7 +837,7 @@ internal class EditorViewModel(
             current.copy(
                 takeoff =
                     when (val takeoff = response.takeoff) {
-                        is Takeoff.Lines -> takeoff.lines
+                        is Takeoff.Lines -> merged(takeoff.lines)
                         is Takeoff.Failed -> emptyList()
                         null -> current.takeoff
                     },
@@ -831,6 +857,14 @@ internal class EditorViewModel(
         }
         show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels })
     }
+
+    // Two rules may ask for the same material, as the footing and the ring beam do for bars of one
+    // diameter; the builder buys it once, so such lines add up where the first one stands.
+    private fun merged(lines: List<QuantityLine>): List<QuantityLine> =
+        lines
+            .groupBy { it.item to it.unit }
+            .values
+            .map { same -> same.first().copy(amount = same.sumOf { it.amount }) }
 
     private fun selection(id: ElementId): Selected? =
         walls[id]?.let { Selected.WallPart(id, it) } ?: openings[id]?.let { Selected.OpeningPart(id, it) }
@@ -864,6 +898,7 @@ internal class EditorViewModel(
                 below = if (below == null) emptyList() else wallOutlines.filter { it.level == below },
                 issues = allIssues.filter { it.level == shown },
                 ringBeam = levels[shown]?.ringBeam ?: 0.mm,
+                footing = levels[shown]?.footing,
                 junctionMeshes = levels[shown]?.junctionMeshes ?: false,
                 draft = if (sameLevel) current.draft else null,
                 measure = if (sameLevel) current.measure else null,

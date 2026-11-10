@@ -29,7 +29,7 @@ internal fun itemName(
     val bags = Regex("""mortar\.cement\.bag(\d+)""").matchEntire(item)
     val masonry = Regex("""masonry_unit\.(\d+)x(\d+)x(\d+)""").matchEntire(item)
     val concrete = Regex("""concrete\.b(\d+)(?:_(\d+))?""").matchEntire(item)
-    val rebar = Regex("""rebar\.a(\d+)c\.d(\d+)""").matchEntire(item)
+    val rebar = Regex("""rebar\.a(\d+)(c?)\.d(\d+)""").matchEntire(item)
     val lintel = Regex("""lintel\.bar\.l(\d+)""").matchEntire(item)
     return when {
         masonry != null -> {
@@ -53,6 +53,10 @@ internal fun itemName(
             resources.getString(R.string.item_cement_bags, bags.groupValues[1])
         }
 
+        item == "formwork" -> {
+            resources.getString(R.string.item_formwork)
+        }
+
         item == "mesh.junction" -> {
             resources.getString(R.string.item_junction_mesh)
         }
@@ -63,7 +67,8 @@ internal fun itemName(
         }
 
         rebar != null -> {
-            resources.getString(R.string.item_rebar, rebar.groupValues[1], rebar.groupValues[2])
+            val (grade, weldable, diameter) = rebar.destructured
+            resources.getString(R.string.item_rebar, grade + if (weldable.isEmpty()) "" else REBAR_WELDABLE, diameter)
         }
 
         lintel != null -> {
@@ -173,6 +178,9 @@ private fun decimetres(value: String): String {
 }
 
 private const val DECIMETRES_PER_METRE = 10
+
+// The Cyrillic «С» of weldable bars, as in A500С.
+private const val REBAR_WELDABLE = "С"
 
 // The same texts inside a composition, in its resources.
 
