@@ -53,6 +53,10 @@ struct WallQuantities {
   // m, the height of the ring beam the wall's level asks for on top of it; zero for none. The
   // caller sets it from the level (docs/adr/0008); measuring leaves it zero.
   double ring_beam = 0.0;
+  // m, the section of the strip footing the level asks for under the wall; zero for none. Set by
+  // the caller, as ring_beam (docs/adr/0010).
+  double footing_width = 0.0;
+  double footing_depth = 0.0;
 };
 
 // A place where walls meet, with the height they share there.

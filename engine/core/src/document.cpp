@@ -373,6 +373,11 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
           [&model](const SetLevelJunctionMeshes& set) {
             return edit<Level>(model, set.level, {{LevelField::kJunctionMeshes, set.meshes}});
           },
+          [&model](const SetLevelFooting& set) {
+            return edit<Level>(
+                model, set.level,
+                {{LevelField::kFootingWidth, set.width}, {LevelField::kFootingDepth, set.depth}});
+          },
           [&model](const RemoveLevel& remove) { return remove_level(model, remove.level); },
           [this](const AddWall& add) -> std::expected<Ops, Error> {
             if (auto valid = validate(add.wall); !valid) {

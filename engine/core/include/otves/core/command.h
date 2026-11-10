@@ -41,6 +41,13 @@ struct SetLevelJunctionMeshes {
   bool meshes = false;
 };
 
+// The section of the strip footing under the level's load-bearing walls; both zero removes it.
+struct SetLevelFooting {
+  ElementId level;
+  Mm width;
+  Mm depth;
+};
+
 // Removes the level with every wall on it and every opening in those walls.
 struct RemoveLevel {
   ElementId level;
@@ -122,11 +129,11 @@ struct SetCondition {
   std::int64_t value = Conditions::kUnset;
 };
 
-using Command =
-    std::variant<AddLevel, SetLevelElevation, SetLevelHeight, RemoveLevel, AddWall, MoveWallEnd,
-                 SetWallThickness, SetWallHeight, SetWallLocationLine, RemoveWall, AddOpening,
-                 MoveOpening, ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening,
-                 SetWallUnit, SetLevelRingBeam, SetLevelJunctionMeshes, SetCondition>;
+using Command = std::variant<AddLevel, SetLevelElevation, SetLevelHeight, RemoveLevel, AddWall,
+                             MoveWallEnd, SetWallThickness, SetWallHeight, SetWallLocationLine,
+                             RemoveWall, AddOpening, MoveOpening, ResizeOpening, SetOpeningSill,
+                             SetOpeningKind, RemoveOpening, SetWallUnit, SetLevelRingBeam,
+                             SetLevelJunctionMeshes, SetCondition, SetLevelFooting>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 

@@ -114,6 +114,8 @@ std::vector<std::optional<takeoff::MasonryUnit>> choices(const Model& model,
     const Wall* wall = model.find<Wall>(measured.id);
     const Level* level = level_of(measured.id);
     measured.ring_beam = level != nullptr ? to_metres(level->ring_beam) : 0.0;
+    measured.footing_width = level != nullptr ? to_metres(level->footing_width) : 0.0;
+    measured.footing_depth = level != nullptr ? to_metres(level->footing_depth) : 0.0;
     if (wall != nullptr && wall->has_unit()) {
       units.emplace_back(takeoff::MasonryUnit{
           .length = wall->unit_length, .width = wall->unit_width, .height = wall->unit_height});

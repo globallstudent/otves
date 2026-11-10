@@ -67,6 +67,8 @@ schema::CommandKind to_code(CommandKind kind) {
       return schema::CommandKind::SetLevelJunctionMeshes;
     case CommandKind::kSetCondition:
       return schema::CommandKind::SetCondition;
+    case CommandKind::kSetLevelFooting:
+      return schema::CommandKind::SetLevelFooting;
     case CommandKind::kAddOpening:
       return schema::CommandKind::AddOpening;
     case CommandKind::kMoveOpening:
@@ -133,6 +135,8 @@ std::optional<CommandKind> from_code(schema::CommandKind kind) {
       return CommandKind::kSetLevelJunctionMeshes;
     case schema::CommandKind::SetCondition:
       return CommandKind::kSetCondition;
+    case schema::CommandKind::SetLevelFooting:
+      return CommandKind::kSetLevelFooting;
   }
   return std::nullopt;
 }
@@ -147,6 +151,10 @@ schema::LevelField to_code(LevelField field) {
       return schema::LevelField::RingBeam;
     case LevelField::kJunctionMeshes:
       return schema::LevelField::JunctionMeshes;
+    case LevelField::kFootingWidth:
+      return schema::LevelField::FootingWidth;
+    case LevelField::kFootingDepth:
+      return schema::LevelField::FootingDepth;
   }
   return schema::LevelField::Elevation;
 }
@@ -161,6 +169,10 @@ std::optional<LevelField> from_code(schema::LevelField field) {
       return LevelField::kRingBeam;
     case schema::LevelField::JunctionMeshes:
       return LevelField::kJunctionMeshes;
+    case schema::LevelField::FootingWidth:
+      return LevelField::kFootingWidth;
+    case schema::LevelField::FootingDepth:
+      return LevelField::kFootingDepth;
   }
   return std::nullopt;
 }

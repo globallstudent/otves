@@ -30,6 +30,14 @@ return {
 		-- carry a load-bearing flag. Millimetres.
 		load_bearing_min_thickness = 250,
 	},
+	-- A strip footing of a private house: ready-mix B20 (B20–B22.5 is usual), A500С Ø12 along it and
+	-- A240 Ø8 stirrups, cast straight onto the ground with no blinding.
+	footing = {
+		concrete_class = 20,
+		bar = 12,
+		min_bars = 4,
+		stirrup = 8,
+	},
 	ring_beam = {
 		concrete_class = 15, -- B15, a common ready-mix; the КМК minimum is B12.5
 		rebar = "a500c",

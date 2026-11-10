@@ -38,9 +38,11 @@ Script load(const std::filesystem::path& file) {
 RuleSet content() {
   const std::vector norms{load("norms/losses.luau"), load("norms/masonry.luau"),
                           load("norms/mortar.luau"), load("norms/practice.luau"),
-                          load("norms/rebar.luau"),  load("norms/seismic.luau")};
-  const std::vector rules{load("rules/masonry.luau"), load("rules/lintels.luau"),
-                          load("rules/ring_beam.luau"), load("rules/junction_meshes.luau")};
+                          load("norms/rebar.luau"),  load("norms/reinforcement.luau"),
+                          load("norms/seismic.luau")};
+  const std::vector rules{load("rules/footing.luau"), load("rules/masonry.luau"),
+                          load("rules/lintels.luau"), load("rules/ring_beam.luau"),
+                          load("rules/junction_meshes.luau")};
   auto set = RuleSet::compile({.norms = norms, .rules = rules});
   EXPECT_TRUE(set.has_value()) << set.error().message;
   return *std::move(set);
@@ -318,6 +320,39 @@ TEST(Content, RingBeamRejectsValuesBelowTheNorm) {
   ASSERT_FALSE(weak.has_value());
   EXPECT_NE(weak.error().message.find("ring_beam_concrete must be at least 12.5"),
             std::string::npos);
+}
+
+TEST(Content, AStripFootingIsCountedFromItsSection) {
+  const RuleSet rules = content();
+  // The partition is not load-bearing and stands on no footing.
+  Room r = room(rules, {}, {wall(5, {3200_mm, 0_mm}, {3200_mm, 4000_mm}, 120_mm)});
+  EXPECT_TRUE(lines_of(*rules.run(r.measurement, r.masonry, {}), "footing").empty());
+
+  // 500 mm wide, 800 mm deep under 20.8 m of wall.
+  for (WallQuantities& measured : r.measurement.walls) {
+    measured.footing_width = 0.5;
+    measured.footing_depth = 0.8;
+  }
+  const auto all = rules.run(r.measurement, r.masonry, {});
+
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  const auto lines = lines_of(*all, "footing");
+  ASSERT_EQ(lines.size(), 4U);
+  // B20 with 1.8 % placement loss (Сборник потерь).
+  EXPECT_NEAR(amount(lines, "concrete.b20"), 20.8 * 0.5 * 0.8 * 1.018, 1e-9);
+  // СП 63 10.3.6: 0.1 % of 500 × 730 mm is 365 mm², four Ø12 (452 mm²) cover it; 7 % for laps.
+  EXPECT_NEAR(amount(lines, "rebar.a500c.d12"), 20.8 * 4 * 0.888 * 1.07, 1e-9);
+  // Formwork on both sides.
+  EXPECT_NEAR(amount(lines, "formwork"), 2 * 20.8 * 0.8, 1e-9);
+  // Stirrups Ø8 every 300 mm, each 2 × (360 + 660) mm round the cage.
+  EXPECT_GT(amount(lines, "rebar.a240.d8"), 20.8 / 0.3 * 2.04 * 0.395);
+
+  for (WallQuantities& measured : r.measurement.walls) {
+    measured.footing_width = 0.1;
+  }
+  const auto narrow = rules.run(r.measurement, r.masonry, {});
+  ASSERT_FALSE(narrow.has_value());
+  EXPECT_NE(narrow.error().message.find("a footing must be wider than 140 mm"), std::string::npos);
 }
 
 TEST(Content, JunctionMeshesFollowIntensity) {

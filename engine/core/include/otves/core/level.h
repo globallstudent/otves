@@ -22,6 +22,10 @@ struct Level {
   Mm ring_beam{};  // NOLINT(readability-redundant-member-init)
   // Meshes in the bed joints where load-bearing walls meet.
   bool junction_meshes = false;
+  // The section of the strip footing under the load-bearing walls (docs/adr/0010); both zero for
+  // none. The explicit initializers let a level be built without naming a footing.
+  Mm footing_width{};  // NOLINT(readability-redundant-member-init)
+  Mm footing_depth{};  // NOLINT(readability-redundant-member-init)
 
   constexpr bool operator==(const Level&) const = default;
 };
@@ -34,6 +38,8 @@ enum class LevelField : std::uint8_t {
   kHeight,
   kRingBeam,
   kJunctionMeshes,
+  kFootingWidth,
+  kFootingDepth,
 };
 
 using LevelValue = std::variant<Mm, bool>;

@@ -31,7 +31,7 @@ namespace otves::takeoff {
 namespace {
 
 constexpr std::size_t kMaxItemLength = 64;
-constexpr int kWallFields = 8;
+constexpr int kWallFields = 10;
 constexpr int kMasonryWallFields = 3;
 constexpr int kUnitMasonryFields = 5;
 constexpr int kLintelFields = 5;
@@ -112,7 +112,7 @@ void close_element(lua_State* state, std::size_t index) {
 }
 
 // input = { walls = { { id, thickness, footprint_area, length, face_area, volume, openings_area,
-//                       ring_beam } },
+//                       ring_beam, footing_width, footing_depth } },
 //           lintels = { { opening, wall, length, height, thickness } },
 //           junctions = { { walls = { id }, height, meshes } },
 //           masonry = { units, mortar, walls = { { id, units, mortar } },
@@ -135,6 +135,8 @@ void push_input(lua_State* state, const Measurement& measurement, const Masonry&
     set_field(state, "volume", wall.volume);
     set_field(state, "openings_area", wall.openings_area);
     set_field(state, "ring_beam", wall.ring_beam);
+    set_field(state, "footing_width", wall.footing_width);
+    set_field(state, "footing_depth", wall.footing_depth);
     close_element(state, i);
   }
   close_table(state, "walls");

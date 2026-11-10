@@ -73,6 +73,12 @@ class Request {
     return add(Command::SetCondition, schema::CreateSetCondition(builder_, field, value).Union());
   }
 
+  Request& set_footing(ElementId level, std::int64_t width, std::int64_t depth) {
+    const schema::Uuid id = key(level);
+    return add(Command::SetLevelFooting,
+               schema::CreateSetLevelFooting(builder_, &id, width, depth).Union());
+  }
+
   Request& set_meshes(ElementId level, bool meshes) {
     const schema::Uuid id = key(level);
     return add(Command::SetLevelJunctionMeshes,
@@ -542,11 +548,12 @@ std::pair<std::string, std::string> content_file(std::string_view folder, std::s
 std::vector<std::uint8_t> load_all_content() {
   Request::Files norms;
   for (const std::string_view name :
-       {"losses", "masonry", "mortar", "practice", "rebar", "seismic"}) {
+       {"losses", "masonry", "mortar", "practice", "rebar", "reinforcement", "seismic"}) {
     norms.push_back(content_file("norms", name));
   }
   Request::Files rules;
-  for (const std::string_view name : {"masonry", "lintels", "ring_beam", "junction_meshes"}) {
+  for (const std::string_view name :
+       {"footing", "junction_meshes", "lintels", "masonry", "ring_beam"}) {
     rules.push_back(content_file("rules", name));
   }
   return Request{}.load_content(norms, rules).bytes();
@@ -717,6 +724,29 @@ TEST(Session, ConditionsAreReportedAndLoggedAsAnElement) {
   const auto second = group_of(*set.log()->Get(1));
   ASSERT_TRUE(second.has_value()) << second.error().message;
   EXPECT_TRUE(std::holds_alternative<SetConditionsField>(second->ops.front()));
+}
+
+TEST(Session, AStoreysFootingIsCountedLoggedAndUndone) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+  const ElementId level = add_level(session);
+  add_wall(session, level);
+
+  const auto& set = respond(session, Request{}.set_footing(level, 500, 800).bytes());
+  ASSERT_EQ(set.takeoff_error(), schema::ErrorCode::None);
+  // 6.4 m of footing 0.5 × 0.8 m in B20 with 1.8 % loss, and its formwork on both sides.
+  EXPECT_NEAR(amount(set, "concrete.b20"), 6.4 * 0.5 * 0.8 * 1.018, 1e-9);
+  EXPECT_NEAR(amount(set, "formwork"), 2 * 6.4 * 0.8, 1e-9);
+  EXPECT_EQ(set.changes()->Get(0)->element_as_Level()->footing_depth(), 800);
+  ASSERT_EQ(set.log()->size(), 1U);
+  EXPECT_EQ(set.log()->Get(0)->kind(), schema::CommandKind::SetLevelFooting);
+
+  const auto& half = respond(session, Request{}.set_footing(level, 500, 0).bytes());
+  EXPECT_EQ(half.results()->Get(0)->error(), schema::ErrorCode::HeightNotPositive);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(undone.changes()->Get(0)->element_as_Level()->footing_width(), 0);
 }
 
 TEST(Session, BrokenContentKeepsThePreviousContent) {

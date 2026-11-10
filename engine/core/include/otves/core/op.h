@@ -86,6 +86,7 @@ enum class CommandKind : std::uint8_t {
   kSetLevelRingBeam,
   kSetLevelJunctionMeshes,
   kSetCondition,
+  kSetLevelFooting,
 };
 
 // Orders groups across devices: last writer wins per property.

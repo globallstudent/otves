@@ -22,7 +22,7 @@ flowchart LR
 
 | Value | Fields |
 |---|---|
-| `input.walls[i]` | `id`, `thickness` m, `footprint_area` m², `length` m, `face_area` m² and `volume` m³ net of openings, `openings_area` m², `ring_beam` m (the beam its storey asks for, 0 for none) |
+| `input.walls[i]` | `id`, `thickness` m, `footprint_area` m², `length` m, `face_area` m² and `volume` m³ net of openings, `openings_area` m², `ring_beam` m (the beam its storey asks for, 0 for none), `footing_width` and `footing_depth` m (the strip footing its storey asks for, 0 for none) |
 | `input.lintels[i]` | `opening`, `wall`, `length` m to order, `height` m, `thickness` m |
 | `input.junctions[i]` | `walls` (ids), `height` m of the lowest of them, `meshes` (whether its storey asks for them) |
 | `input.masonry` | `units`, `mortar` m³, `walls[i]` with `id`, `units`, `mortar`, `by_unit[i]` with `length`, `width`, `height` mm, `units`, `mortar` |
@@ -46,8 +46,10 @@ The engine adds no waste and no rounding; the rule does both. An item is made of
 | `norms/masonry.luau` | Joints: 12 mm bed, 10 mm head | СП 70.13330.2012, 9.2.4 |
 | `norms/mortar.luau` | Cement per m³ of masonry mortar and per m³ of its sand, by cement and mortar grade | СП 82-101-98, tables 4–5 |
 | `norms/practice.luau` | Waste allowances (запас), default cement, mortar grade and seismic intensity, lintel bar 2ПБ 120 × 140, ring beam B15 A500С | Practice; ГОСТ 948-2016 table 1; editable in job settings |
+| `norms/reinforcement.luau` | Cover of a footing cast without blinding, minimum longitudinal reinforcement, stirrup pitch | СП 63.13330.2018, 10.3.2, 10.3.6, 10.3.13 |
 | `norms/rebar.luau` | Nominal bar mass per metre by diameter | ГОСТ 34028-2016, table 1 |
 | `norms/seismic.luau` | Detailing asked for from 7 points; lintel bearing 350 mm (250 mm up to a 1 500 mm opening); ring beam ≥ 150 mm, ≥ B12.5, 4Ø10 / 4Ø12 / 4Ø14 by intensity; junction meshes 1.5 m, ≥ 1 cm², every 700 mm (7–8 points) or 500 mm (9) | КМК 2.01.03-19, 3.5.10–3.5.12, 3.5.15 |
+| `rules/footing.luau` | Strip footing under walls ≥ 250 mm of the storeys that ask for one: concrete `concrete.b20` with losses, bars `rebar.a500c.d12`, stirrups `rebar.a240.d8`, `formwork` m² on both sides | `reinforcement`, `losses`, `rebar`, `practice` |
 | `rules/masonry.luau` | Units with waste, one line per unit size (`masonry_unit.250x120x65`), mortar with waste, cement in that mortar by weight and in bags, its sand; nothing until a wall has a unit | `mortar`, `practice` |
 | `rules/lintels.luau` | Bar lintels by length: `lintel.bar.l22` is a bar at least 2.2 m long, as many side by side as the wall is thick | `practice` |
 | `rules/ring_beam.luau` | Ring beam on walls ≥ 250 mm of the storeys that ask for one: concrete `concrete.b15` with losses, bars `rebar.a500c.d12` with laps; fails under the КМК minimum of 150 mm | `seismic`, `losses`, `rebar`, `practice` |

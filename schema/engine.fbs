@@ -27,6 +27,9 @@ table Level {
   height:long;
   ring_beam:long;        // height of the beam on the load-bearing walls; 0 for none (docs/adr/0008)
   junction_meshes:bool;  // meshes where load-bearing walls meet
+  // The section of the strip footing under the load-bearing walls; both 0 for none (docs/adr/0010).
+  footing_width:long;
+  footing_depth:long;
 }
 
 table Wall {
@@ -77,6 +80,7 @@ table SetLevelHeight { level:Uuid; height:long; }
 table RemoveLevel { level:Uuid; }
 table SetLevelRingBeam { level:Uuid; height:long; }
 table SetLevelJunctionMeshes { level:Uuid; meshes:bool; }
+table SetLevelFooting { level:Uuid; width:long; depth:long; }
 
 table AddWall { wall:Wall; }
 table MoveWallEnd { wall:Uuid; end:WallEnd = End; to:PointMm; }
@@ -173,6 +177,7 @@ union Command {
   SetLevelRingBeam,
   SetLevelJunctionMeshes,
   SetCondition,
+  SetLevelFooting,
 }
 
 table CommandEntry {
@@ -245,9 +250,17 @@ enum CommandKind:ubyte {
   SetLevelRingBeam = 19,
   SetLevelJunctionMeshes = 20,
   SetCondition = 21,
+  SetLevelFooting = 22,
 }
 
-enum LevelField:ubyte { Elevation = 0, Height = 1, RingBeam = 2, JunctionMeshes = 3 }
+enum LevelField:ubyte {
+  Elevation = 0,
+  Height = 1,
+  RingBeam = 2,
+  JunctionMeshes = 3,
+  FootingWidth = 4,
+  FootingDepth = 5,
+}
 enum WallField:ubyte {
   Start = 0,
   End = 1,

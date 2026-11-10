@@ -29,6 +29,7 @@ CommandKind kind_of(const Command& command) {
           [](const SetLevelRingBeam&) { return CommandKind::kSetLevelRingBeam; },
           [](const SetLevelJunctionMeshes&) { return CommandKind::kSetLevelJunctionMeshes; },
           [](const SetCondition&) { return CommandKind::kSetCondition; },
+          [](const SetLevelFooting&) { return CommandKind::kSetLevelFooting; },
       },
       command);
 }

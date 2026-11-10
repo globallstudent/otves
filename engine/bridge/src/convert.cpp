@@ -48,7 +48,9 @@ std::expected<Level, Error> to_level(const schema::Level* level) {
   return Level{.elevation = Mm{level->elevation()},
                .height = Mm{level->height()},
                .ring_beam = Mm{level->ring_beam()},
-               .junction_meshes = level->junction_meshes()};
+               .junction_meshes = level->junction_meshes(),
+               .footing_width = Mm{level->footing_width()},
+               .footing_depth = Mm{level->footing_depth()}};
 }
 
 std::expected<Wall, Error> to_wall(const schema::Wall* wall) {
@@ -118,6 +120,11 @@ std::expected<Command, Error> decode_level(const schema::CommandEntry& entry) {
     case schema::Command::SetLevelJunctionMeshes: {
       const auto* set = entry.command_as_SetLevelJunctionMeshes();
       return SetLevelJunctionMeshes{.level = to_id(set->level()), .meshes = set->meshes()};
+    }
+    case schema::Command::SetLevelFooting: {
+      const auto* set = entry.command_as_SetLevelFooting();
+      return SetLevelFooting{
+          .level = to_id(set->level()), .width = Mm{set->width()}, .depth = Mm{set->depth()}};
     }
     case schema::Command::RemoveLevel:
       return RemoveLevel{.level = to_id(entry.command_as_RemoveLevel()->level())};
@@ -331,6 +338,7 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
     case schema::Command::RemoveLevel:
     case schema::Command::SetLevelRingBeam:
     case schema::Command::SetLevelJunctionMeshes:
+    case schema::Command::SetLevelFooting:
       return decode_level(entry);
     case schema::Command::AddWall:
     case schema::Command::MoveWallEnd:
@@ -390,7 +398,8 @@ std::expected<OpeningPlacement, Error> decode(const schema::PlaceOpening* place)
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Level& level) {
   return {.type = schema::Element::Level,
           .value = schema::CreateLevel(builder, level.elevation.value(), level.height.value(),
-                                       level.ring_beam.value(), level.junction_meshes)
+                                       level.ring_beam.value(), level.junction_meshes,
+                                       level.footing_width.value(), level.footing_depth.value())
                        .Union()};
 }
 
