@@ -60,11 +60,17 @@ public enum class IssueKind {
     /** Walls meet at so small an angle that their ends are cut square. */
     SHARP_ANGLE,
 
+    /** The wall has no masonry unit, so it is not in the take-off. */
+    MATERIAL_NOT_CHOSEN,
+
     /** A kind from a newer engine than this app knows. */
     UNKNOWN,
 }
 
-/** Something to fix: an opening issue names the [element]; a wall join issue has its point [at]. */
+/**
+ * Something to fix: an opening or material issue names the [element]; a wall join issue has its
+ * point [at].
+ */
 public data class Issue(
     public val kind: IssueKind,
     public val element: ElementId?,
@@ -91,11 +97,24 @@ public data class QuantityLine(
 /** A model element as the engine reports it (engine/core). */
 public sealed interface EngineElement
 
-/** A storey; walls stand on it and measure their height from its floor. */
+/**
+ * A storey; walls stand on it and measure their height from its floor. [ringBeam] is the height of
+ * the ring beam on its load-bearing walls, zero for none; [junctionMeshes] asks for meshes where
+ * they meet. The take-off counts only what is chosen here.
+ */
 public data class Level(
     public val elevation: Mm,
     public val height: Mm,
+    public val ringBeam: Mm = Mm(0),
+    public val junctionMeshes: Boolean = false,
 ) : EngineElement
+
+/** A brick or block as laid: [length] along the wall, [width] across it, [height] of one course. */
+public data class UnitSize(
+    public val length: Mm,
+    public val width: Mm,
+    public val height: Mm,
+)
 
 public data class Wall(
     public val level: ElementId,
@@ -104,6 +123,8 @@ public data class Wall(
     public val thickness: Mm,
     public val height: Mm,
     public val locationLine: LocationLine = LocationLine.CENTER,
+    /** What the wall is laid from; null until the builder chooses. */
+    public val unit: UnitSize? = null,
 ) : EngineElement
 
 /** A window, door or empty opening, placed along its wall from the start and up from the base. */

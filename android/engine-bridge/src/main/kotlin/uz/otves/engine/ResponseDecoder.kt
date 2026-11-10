@@ -109,6 +109,7 @@ internal object ResponseDecoder {
                     IssueKindCode.NoRoomForLintel -> IssueKind.NO_ROOM_FOR_LINTEL
                     IssueKindCode.WallOverlap -> IssueKind.WALL_OVERLAP
                     IssueKindCode.SharpAngle -> IssueKind.SHARP_ANGLE
+                    IssueKindCode.MaterialNotChosen -> IssueKind.MATERIAL_NOT_CHOSEN
                     else -> IssueKind.UNKNOWN
                 },
             element = issue.element()?.let(::id),
@@ -168,7 +169,13 @@ internal object ResponseDecoder {
         return PointMm(Mm(point.x()), Mm(point.y()))
     }
 
-    private fun level(level: LevelTable): Level = Level(elevation = Mm(level.elevation()), height = Mm(level.height()))
+    private fun level(level: LevelTable): Level =
+        Level(
+            elevation = Mm(level.elevation()),
+            height = Mm(level.height()),
+            ringBeam = Mm(level.ringBeam()),
+            junctionMeshes = level.junctionMeshes(),
+        )
 
     private fun wall(wall: WallTable): Wall =
         Wall(
@@ -178,6 +185,13 @@ internal object ResponseDecoder {
             thickness = Mm(wall.thickness()),
             height = Mm(wall.height()),
             locationLine = locationLine(wall.locationLine()),
+            // The engine keeps the three sizes all zero or all positive.
+            unit =
+                if (wall.unitLength() > 0) {
+                    UnitSize(Mm(wall.unitLength()), Mm(wall.unitWidth()), Mm(wall.unitHeight()))
+                } else {
+                    null
+                },
         )
 
     private fun opening(opening: OpeningTable): Opening =

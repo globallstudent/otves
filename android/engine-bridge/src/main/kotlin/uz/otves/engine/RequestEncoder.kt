@@ -32,11 +32,14 @@ import uz.otves.schema.ResizeOpening as ResizeOpeningTable
 import uz.otves.schema.Script as ScriptTable
 import uz.otves.schema.SetLevelElevation as SetLevelElevationTable
 import uz.otves.schema.SetLevelHeight as SetLevelHeightTable
+import uz.otves.schema.SetLevelJunctionMeshes as SetLevelJunctionMeshesTable
+import uz.otves.schema.SetLevelRingBeam as SetLevelRingBeamTable
 import uz.otves.schema.SetOpeningKind as SetOpeningKindTable
 import uz.otves.schema.SetOpeningSill as SetOpeningSillTable
 import uz.otves.schema.SetWallHeight as SetWallHeightTable
 import uz.otves.schema.SetWallLocationLine as SetWallLocationLineTable
 import uz.otves.schema.SetWallThickness as SetWallThicknessTable
+import uz.otves.schema.SetWallUnit as SetWallUnitTable
 import uz.otves.schema.Undo as UndoTable
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
@@ -68,8 +71,30 @@ internal object RequestEncoder {
     private fun FlatBufferBuilder.table(command: EngineCommand): Pair<Byte, Int> =
         when (command) {
             is EngineCommand.AddLevel -> {
-                val level = LevelTable.createLevel(this, command.level.elevation.value, command.level.height.value)
-                Command.AddLevel to AddLevelTable.createAddLevel(this, level)
+                Command.AddLevel to AddLevelTable.createAddLevel(this, level(command.level))
+            }
+
+            is EngineCommand.SetLevelRingBeam -> {
+                SetLevelRingBeamTable.startSetLevelRingBeam(this)
+                SetLevelRingBeamTable.addLevel(this, uuid(command.level))
+                SetLevelRingBeamTable.addHeight(this, command.height.value)
+                Command.SetLevelRingBeam to SetLevelRingBeamTable.endSetLevelRingBeam(this)
+            }
+
+            is EngineCommand.SetLevelJunctionMeshes -> {
+                SetLevelJunctionMeshesTable.startSetLevelJunctionMeshes(this)
+                SetLevelJunctionMeshesTable.addLevel(this, uuid(command.level))
+                SetLevelJunctionMeshesTable.addMeshes(this, command.meshes)
+                Command.SetLevelJunctionMeshes to SetLevelJunctionMeshesTable.endSetLevelJunctionMeshes(this)
+            }
+
+            is EngineCommand.SetWallUnit -> {
+                SetWallUnitTable.startSetWallUnit(this)
+                SetWallUnitTable.addWall(this, uuid(command.wall))
+                SetWallUnitTable.addLength(this, command.unit?.length?.value ?: 0)
+                SetWallUnitTable.addWidth(this, command.unit?.width?.value ?: 0)
+                SetWallUnitTable.addHeight(this, command.unit?.height?.value ?: 0)
+                Command.SetWallUnit to SetWallUnitTable.endSetWallUnit(this)
             }
 
             is EngineCommand.SetLevelElevation -> {
@@ -240,10 +265,13 @@ internal object RequestEncoder {
 
     private fun FlatBufferBuilder.element(element: EngineElement): Pair<Byte, Int> =
         when (element) {
-            is Level -> Element.Level to LevelTable.createLevel(this, element.elevation.value, element.height.value)
+            is Level -> Element.Level to level(element)
             is Wall -> Element.Wall to wall(element)
             is Opening -> Element.Opening to opening(element)
         }
+
+    private fun FlatBufferBuilder.level(level: Level): Int =
+        LevelTable.createLevel(this, level.elevation.value, level.height.value, level.ringBeam.value, level.junctionMeshes)
 
     private fun FlatBufferBuilder.wall(wall: Wall): Int {
         WallTable.startWall(this)
@@ -253,6 +281,11 @@ internal object RequestEncoder {
         WallTable.addThickness(this, wall.thickness.value)
         WallTable.addHeight(this, wall.height.value)
         WallTable.addLocationLine(this, code(wall.locationLine))
+        wall.unit?.let { unit ->
+            WallTable.addUnitLength(this, unit.length.value)
+            WallTable.addUnitWidth(this, unit.width.value)
+            WallTable.addUnitHeight(this, unit.height.value)
+        }
         return WallTable.endWall(this)
     }
 

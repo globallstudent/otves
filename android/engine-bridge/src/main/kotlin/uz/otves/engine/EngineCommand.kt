@@ -49,6 +49,23 @@ public sealed interface EngineCommand {
         public val locationLine: LocationLine,
     ) : EngineCommand
 
+    /** What the wall is laid from; null clears the choice. */
+    public data class SetWallUnit(
+        public val wall: ElementId,
+        public val unit: UnitSize?,
+    ) : EngineCommand
+
+    /** The height of the ring beam on the storey's load-bearing walls; zero removes it. */
+    public data class SetLevelRingBeam(
+        public val level: ElementId,
+        public val height: Mm,
+    ) : EngineCommand
+
+    public data class SetLevelJunctionMeshes(
+        public val level: ElementId,
+        public val meshes: Boolean,
+    ) : EngineCommand
+
     /** Also removes the wall's openings. */
     public data class RemoveWall(
         public val wall: ElementId,

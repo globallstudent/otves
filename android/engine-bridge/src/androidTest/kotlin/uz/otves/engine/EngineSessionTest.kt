@@ -88,15 +88,19 @@ class EngineSessionTest {
         val loaded = session.send(listOf(ContentAssets.load(assets)))
         assertThat(loaded.results.single()).isInstanceOf(CommandResult.Done::class.java)
 
-        val level = session.send(listOf(EngineCommand.AddLevel(Level(0.mm, 3000.mm)))).createdId()
-        val built =
-            session.send(listOf(EngineCommand.AddWall(Wall(level, PointMm(0.mm, 0.mm), PointMm(6400.mm, 0.mm), 380.mm, 2800.mm))))
+        // The builder chose 1НФ brick and a 150 mm ring beam; nothing else is counted.
+        val level = session.send(listOf(EngineCommand.AddLevel(Level(0.mm, 3000.mm, ringBeam = 150.mm)))).createdId()
+        val brick = UnitSize(250.mm, 120.mm, 65.mm)
+        val wall = Wall(level, PointMm(0.mm, 0.mm), PointMm(6400.mm, 0.mm), 380.mm, 2800.mm, unit = brick)
+        val built = session.send(listOf(EngineCommand.AddWall(wall)))
 
         assertThat(built.outlines).hasSize(1)
         val lines = (built.takeoff as Takeoff.Lines).lines
         // 6.4 × 2.8 m of 380 mm 1НФ brick: about 2 686 units net, before waste.
-        assertThat(lines.single { it.item == "masonry_unit" }.amount).isGreaterThan(2686.0)
+        assertThat(lines.single { it.item == "masonry_unit.250x120x65" }.amount).isGreaterThan(2686.0)
         assertThat(lines.map { it.item }).contains("concrete.b15")
+        assertThat(lines.map { it.item }).doesNotContain("mesh.junction")
+        assertThat(ContentAssets.catalog(assets).units.map { it.size }).contains(brick)
     }
 
     @Test
