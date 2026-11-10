@@ -94,4 +94,13 @@
     <string name="size_length">Длина, мм</string>
     <string name="size_width">Ширина, мм</string>
     <string name="size_height">Высота, мм</string>
+    <string name="conditions_title">Условия расчёта</string>
+    <string name="condition_seismic">Сейсмичность, баллы</string>
+    <string name="condition_cement">Цемент</string>
+    <string name="condition_mortar">Раствор</string>
+    <string name="condition_unit_waste">Запас кирпича</string>
+    <string name="condition_mortar_waste">Запас раствора</string>
+    <string name="grade_cement" translatable="false">ПЦ%1$d</string>
+    <string name="grade_mortar" translatable="false">М%1$d</string>
+    <string name="percent" translatable="false">%1$d %%</string>
 </resources>

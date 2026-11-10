@@ -89,4 +89,10 @@
     <string name="size_length">Uzunlik, mm</string>
     <string name="size_width">Eni, mm</string>
     <string name="size_height">Balandlik, mm</string>
+    <string name="conditions_title">Hisob shartlari</string>
+    <string name="condition_seismic">Seysmiklik, ball</string>
+    <string name="condition_cement">Sement</string>
+    <string name="condition_mortar">Qorishma</string>
+    <string name="condition_unit_waste">G‘isht zaxirasi</string>
+    <string name="condition_mortar_waste">Qorishma zaxirasi</string>
 </resources>

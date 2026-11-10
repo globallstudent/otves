@@ -16,6 +16,8 @@ import uz.otves.core.model.mm
 import uz.otves.data.project.JobStore
 import uz.otves.engine.Catalog
 import uz.otves.engine.CommandResult
+import uz.otves.engine.Condition
+import uz.otves.engine.Conditions
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
@@ -175,6 +177,10 @@ internal data class EditorUiState(
     val material: UnitSize? = null,
     /** The material list is open, for the selected wall or else for new walls. */
     val materialOpen: Boolean = false,
+    /** What the job is estimated under; unset values follow the norms. */
+    val conditions: Conditions = Conditions(),
+    /** The conditions are open in place of the take-off. */
+    val conditionsOpen: Boolean = false,
     /** What the shown storey asks for: its ring beam's height, zero for none, and junction meshes. */
     val ringBeam: Mm = 0.mm,
     val junctionMeshes: Boolean = false,
@@ -225,6 +231,7 @@ internal class EditorViewModel(
     private val levels = mutableMapOf<ElementId, Level>()
     private val walls = mutableMapOf<ElementId, Wall>()
     private val openings = mutableMapOf<ElementId, Opening>()
+    private var conditions: Pair<ElementId, Conditions>? = null
     private var wallOutlines: List<WallOutline> = emptyList()
     private var openingOutlines: List<OpeningOutline> = emptyList()
     private var allIssues: List<Issue> = emptyList()
@@ -289,7 +296,7 @@ internal class EditorViewModel(
         val onLevel = current.level ?: return
         // A touch beside an open list closes it and does nothing else.
         if (current.takeoffOpen || current.materialOpen) {
-            state.update { it.copy(takeoffOpen = false, materialOpen = false) }
+            state.update { it.copy(takeoffOpen = false, materialOpen = false, conditionsOpen = false) }
             return
         }
         when (current.tool) {
@@ -415,7 +422,15 @@ internal class EditorViewModel(
 
     fun toggleOrtho() = state.update { it.copy(ortho = !it.ortho) }
 
-    fun showTakeoff(open: Boolean) = state.update { it.copy(takeoffOpen = open) }
+    fun showTakeoff(open: Boolean) = state.update { it.copy(takeoffOpen = open, conditionsOpen = false) }
+
+    /** Opens the job's estimating conditions in place of the take-off, or goes back to it. */
+    fun showConditions(open: Boolean) = state.update { it.copy(conditionsOpen = open) }
+
+    fun setCondition(
+        condition: Condition,
+        value: Int,
+    ) = send(listOf(EngineCommand.SetCondition(condition, value)))
 
     fun showMaterials(open: Boolean) = state.update { it.copy(materialOpen = open) }
 
@@ -718,10 +733,26 @@ internal class EditorViewModel(
     ) {
         for (change in response.changes) {
             when (val element = change.element) {
-                is Level -> levels[change.id] = element
-                is Wall -> walls[change.id] = element
-                is Opening -> openings[change.id] = element
-                null -> levels.remove(change.id) ?: walls.remove(change.id) ?: openings.remove(change.id)
+                is Level -> {
+                    levels[change.id] = element
+                }
+
+                is Wall -> {
+                    walls[change.id] = element
+                }
+
+                is Opening -> {
+                    openings[change.id] = element
+                }
+
+                is Conditions -> {
+                    conditions = change.id to element
+                }
+
+                null -> {
+                    if (conditions?.first == change.id) conditions = null
+                    levels.remove(change.id) ?: walls.remove(change.id) ?: openings.remove(change.id)
+                }
             }
         }
         wallOutlines = response.outlines ?: wallOutlines
@@ -746,6 +777,7 @@ internal class EditorViewModel(
                 // The selection follows its element's new value and goes when the element does.
                 selected = current.selected?.let { selection(it.id) },
                 drawn = current.drawn?.takeIf { it in walls },
+                conditions = conditions?.second ?: Conditions(),
             )
         }
         show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels })

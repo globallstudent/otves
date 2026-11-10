@@ -19,6 +19,8 @@ import uz.otves.data.project.JobStore
 import uz.otves.data.project.SavedJob
 import uz.otves.engine.Catalog
 import uz.otves.engine.CommandResult
+import uz.otves.engine.Condition
+import uz.otves.engine.Conditions
 import uz.otves.engine.ContentScript
 import uz.otves.engine.ElementChange
 import uz.otves.engine.Engine
@@ -169,6 +171,12 @@ class EditorViewModelTest {
 
                     command is EngineCommand.SetLevelJunctionMeshes -> {
                         edit(command.level) { (it as Level).copy(junctionMeshes = command.meshes) }
+                    }
+
+                    command is EngineCommand.SetCondition -> {
+                        val id = elements.entries.firstOrNull { it.value is Conditions }?.key
+                        val now = (id?.let { elements[it] } as? Conditions ?: Conditions()).copy(cementGrade = command.value)
+                        if (id == null) create(now) else edit(id) { now }
                     }
 
                     command is EngineCommand.SetWallThickness -> {
@@ -917,6 +925,23 @@ class EditorViewModelTest {
 
         assertThat(viewModel.uiState.value.material).isEqualTo(block)
         assertThat(viewModel.uiState.value.thickness).isEqualTo(390.mm)
+    }
+
+    @Test
+    fun theJobsConditionsFollowTheEngineAndGoWhenUndone() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        assertThat(viewModel.uiState.value.conditions).isEqualTo(Conditions())
+        viewModel.showTakeoff(true)
+        viewModel.showConditions(true)
+
+        viewModel.setCondition(Condition.CEMENT_GRADE, 500)
+
+        assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.SetCondition(Condition.CEMENT_GRADE, 500))
+        assertThat(viewModel.uiState.value.conditions.cementGrade).isEqualTo(500)
+        assertThat(viewModel.uiState.value.conditionsOpen).isTrue()
+
+        viewModel.undo()
+        assertThat(viewModel.uiState.value.conditions).isEqualTo(Conditions())
     }
 
     @Test

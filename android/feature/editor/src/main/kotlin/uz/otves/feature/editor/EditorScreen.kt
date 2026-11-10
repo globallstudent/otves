@@ -67,6 +67,7 @@ import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
 import uz.otves.data.project.JobStore
 import uz.otves.engine.Catalog
+import uz.otves.engine.Condition
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
@@ -139,6 +140,8 @@ fun EditorRoute(
                 onSizeField = viewModel::selectSizeField,
                 onCancelSize = viewModel::cancelSize,
                 onConfirmSize = viewModel::confirmSize,
+                onConditions = viewModel::showConditions,
+                onCondition = viewModel::setCondition,
                 onRingBeam = viewModel::setRingBeam,
                 onJunctionMeshes = viewModel::setJunctionMeshes,
             ),
@@ -185,6 +188,8 @@ internal data class EditorActions(
     val onSizeField: (Int) -> Unit = {},
     val onCancelSize: () -> Unit = {},
     val onConfirmSize: () -> Unit = {},
+    val onConditions: (open: Boolean) -> Unit = {},
+    val onCondition: (Condition, Int) -> Unit = { _, _ -> },
     val onRingBeam: (Mm) -> Unit = {},
     val onJunctionMeshes: (Boolean) -> Unit = {},
 )
@@ -253,6 +258,7 @@ internal fun EditorScreen(
                     measure != null -> MeasurePad(measure, state, actions)
                     state.materialOpen -> MaterialPanel(state, actions)
                     selected != null -> Inspector(selected, state, actions)
+                    state.takeoffOpen && state.conditionsOpen -> ConditionsPanel(state, actions)
                     state.takeoffOpen -> TakeoffPanel(state, actions)
                     else -> Tools(state, actions)
                 }
@@ -869,6 +875,53 @@ private fun SizePad(
     }
 }
 
+// What the job is estimated under. An unset condition shows the norm's value as chosen.
+@Composable
+private fun ConditionsPanel(
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    Panel {
+        PanelHeader(stringResource(R.string.conditions_title)) {
+            PanelAction(stringResource(R.string.inspector_done), { actions.onConditions(false) })
+        }
+        state.catalog.conditions.forEach { (condition, choices) ->
+            val chosen = state.conditions[condition] ?: choices.default
+            InspectorRow(conditionName(condition)) {
+                choices.values.forEach { value ->
+                    Pill(conditionValue(condition, value), value == chosen, { actions.onCondition(condition, value) })
+                }
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun conditionName(condition: Condition): String =
+    stringResource(
+        when (condition) {
+            Condition.SEISMIC_INTENSITY -> R.string.condition_seismic
+            Condition.CEMENT_GRADE -> R.string.condition_cement
+            Condition.MORTAR_GRADE -> R.string.condition_mortar
+            Condition.UNIT_WASTE -> R.string.condition_unit_waste
+            Condition.MORTAR_WASTE -> R.string.condition_mortar_waste
+        },
+    )
+
+// Grades as builders write them, waste per mille as a percentage.
+@Composable
+private fun conditionValue(
+    condition: Condition,
+    value: Int,
+): String =
+    when (condition) {
+        Condition.SEISMIC_INTENSITY -> value.toString()
+        Condition.CEMENT_GRADE -> stringResource(R.string.grade_cement, value)
+        Condition.MORTAR_GRADE -> stringResource(R.string.grade_mortar, value)
+        Condition.UNIT_WASTE, Condition.MORTAR_WASTE -> stringResource(R.string.percent, value / PER_MILLE_IN_PERCENT)
+    }
+
 // What the norms ask of the storey and it lacks. It is said, never added: the builder decides.
 @Composable
 private fun Advice(
@@ -939,6 +992,7 @@ private fun TakeoffPanel(
                         HorizontalDivider(color = OtvesTheme.colors.divider)
                     }
                 }
+                PanelAction(stringResource(R.string.conditions_title), { actions.onConditions(true) })
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -1091,6 +1145,7 @@ private fun LengthPadPreview() {
     }
 }
 
+private const val PER_MILLE_IN_PERCENT = 10
 private val TakeoffHeight = 280.dp
 private val InspectorLabelWidth = 124.dp
 private val FloatElevation = 2.dp
