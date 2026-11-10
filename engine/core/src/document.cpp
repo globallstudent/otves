@@ -351,6 +351,12 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
           [&model](const SetLevelHeight& set) {
             return edit<Level>(model, set.level, {{LevelField::kHeight, set.height}});
           },
+          [&model](const SetLevelRingBeam& set) {
+            return edit<Level>(model, set.level, {{LevelField::kRingBeam, set.height}});
+          },
+          [&model](const SetLevelJunctionMeshes& set) {
+            return edit<Level>(model, set.level, {{LevelField::kJunctionMeshes, set.meshes}});
+          },
           [&model](const RemoveLevel& remove) { return remove_level(model, remove.level); },
           [this](const AddWall& add) -> std::expected<Ops, Error> {
             if (auto valid = validate(add.wall); !valid) {
@@ -365,6 +371,12 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
             const WallField field =
                 move.end == WallEnd::kStart ? WallField::kStart : WallField::kEnd;
             return edit<Wall>(model, move.wall, {{field, move.to}});
+          },
+          [&model](const SetWallUnit& set) {
+            return edit<Wall>(model, set.wall,
+                              {{WallField::kUnitLength, set.length},
+                               {WallField::kUnitWidth, set.width},
+                               {WallField::kUnitHeight, set.height}});
           },
           [&model](const SetWallThickness& set) {
             return edit<Wall>(model, set.wall, {{WallField::kThickness, set.thickness}});

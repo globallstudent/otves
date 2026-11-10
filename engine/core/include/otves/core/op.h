@@ -77,6 +77,9 @@ enum class CommandKind : std::uint8_t {
   kRemoveOpening,
   kUndo,
   kRedo,
+  kSetWallUnit,
+  kSetLevelRingBeam,
+  kSetLevelJunctionMeshes,
 };
 
 // Orders groups across devices: last writer wins per property.

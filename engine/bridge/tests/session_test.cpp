@@ -47,6 +47,25 @@ class Request {
     return add(Command::AddWall, schema::CreateAddWall(builder_, wall).Union());
   }
 
+  // 1НФ brick, as laid.
+  Request& set_unit(ElementId wall) {
+    const schema::Uuid id = key(wall);
+    return add(Command::SetWallUnit,
+               schema::CreateSetWallUnit(builder_, &id, 250, 120, 65).Union());
+  }
+
+  Request& set_ring_beam(ElementId level, std::int64_t height) {
+    const schema::Uuid id = key(level);
+    return add(Command::SetLevelRingBeam,
+               schema::CreateSetLevelRingBeam(builder_, &id, height).Union());
+  }
+
+  Request& set_meshes(ElementId level, bool meshes) {
+    const schema::Uuid id = key(level);
+    return add(Command::SetLevelJunctionMeshes,
+               schema::CreateSetLevelJunctionMeshes(builder_, &id, meshes).Union());
+  }
+
   Request& add_window(ElementId wall) {
     const schema::Uuid in = key(wall);
     const auto opening = schema::CreateOpening(builder_, &in, 1200, 1500, 1500, 900);
@@ -559,13 +578,55 @@ TEST(Session, TakeoffRunsTheLoadedContent) {
   EXPECT_EQ(loaded.takeoff_error(), schema::ErrorCode::None);
 
   const ElementId level = add_level(session);
-  const auto& built = respond(session, Request{}.add_wall(level, 6400).bytes());
+  const auto& drawn = respond(session, Request{}.add_wall(level, 6400).bytes());
+  const ElementId wall = to_id(drawn.results()->Get(0)->created());
 
+  // Nothing was chosen yet, so nothing is counted, and the wall asks for its material.
+  ASSERT_NE(drawn.takeoff(), nullptr);
+  EXPECT_EQ(drawn.takeoff_error(), schema::ErrorCode::None);
+  EXPECT_EQ(drawn.takeoff()->size(), 0U);
+  ASSERT_EQ(drawn.issues()->size(), 1U);
+  EXPECT_EQ(drawn.issues()->Get(0)->kind(), schema::IssueKind::MaterialNotChosen);
+  EXPECT_EQ(to_id(drawn.issues()->Get(0)->element()), wall);
+
+  const auto& built = respond(session, Request{}.set_unit(wall).set_ring_beam(level, 150).bytes());
   ASSERT_NE(built.takeoff(), nullptr);
   EXPECT_EQ(built.takeoff_error(), schema::ErrorCode::None);
+  EXPECT_EQ(built.issues()->size(), 0U);
   // 6.4 m × 2.8 m of 380 mm brick: about 2 686 units net, plus 3 % waste.
-  EXPECT_GT(amount(built, "masonry_unit"), 2686);
+  EXPECT_GT(amount(built, "masonry_unit.250x120x65"), 2686);
   EXPECT_GT(amount(built, "concrete.b15"), 0.0);
+  const auto* changed = built.changes();
+  ASSERT_EQ(changed->size(), 2U);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(undone.takeoff()->size(), 3U);  // the ring beam is gone, the brick stays
+}
+
+TEST(Session, ChoicesAreLoggedAndUndone) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const ElementId wall = add_wall(session, level);
+
+  const auto& set = respond(session, Request{}.set_unit(wall).set_meshes(level, true).bytes());
+  ASSERT_EQ(set.log()->size(), 2U);
+  EXPECT_EQ(set.log()->Get(0)->kind(), schema::CommandKind::SetWallUnit);
+  EXPECT_EQ(set.log()->Get(1)->kind(), schema::CommandKind::SetLevelJunctionMeshes);
+  const auto unit = group_of(*set.log()->Get(0));
+  ASSERT_TRUE(unit.has_value()) << unit.error().message;
+  EXPECT_EQ(unit->ops.size(), 3U);
+  const auto meshes = group_of(*set.log()->Get(1));
+  ASSERT_TRUE(meshes.has_value()) << meshes.error().message;
+  EXPECT_EQ(std::get<SetLevelField>(meshes->ops.front()).after, LevelValue{true});
+
+  const auto& undone = respond(session, Request{}.undo().undo().bytes());
+  bool cleared = false;
+  for (const schema::ElementChange* change : *undone.changes()) {
+    if (const auto* value = change->element_as_Wall()) {
+      cleared = value->unit_length() == 0;
+    }
+  }
+  EXPECT_TRUE(cleared);
 }
 
 TEST(Session, BrokenContentKeepsThePreviousContent) {
@@ -579,8 +640,9 @@ TEST(Session, BrokenContentKeepsThePreviousContent) {
   EXPECT_EQ(broken.takeoff(), nullptr);
 
   const ElementId level = add_level(session);
-  const auto& built = respond(session, Request{}.add_wall(level, 6400).bytes());
-  EXPECT_GT(amount(built, "masonry_unit"), 0.0);
+  const ElementId wall = add_wall(session, level);
+  const auto& built = respond(session, Request{}.set_unit(wall).bytes());
+  EXPECT_GT(amount(built, "masonry_unit.250x120x65"), 0.0);
 }
 
 TEST(Session, IssuesNameTheOpeningsAndJoinsToFix) {
@@ -588,7 +650,7 @@ TEST(Session, IssuesNameTheOpeningsAndJoinsToFix) {
   ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
             schema::ErrorCode::None);
   const ElementId level = add_level(session);
-  add_wall(session, level);
+  respond(session, Request{}.set_unit(add_wall(session, level)).bytes());
 
   // A door at the wall's start leaves no masonry for its lintel to rest on; a second wall along
   // the first from the same point overlaps it.

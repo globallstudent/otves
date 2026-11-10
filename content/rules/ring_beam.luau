@@ -1,8 +1,8 @@
 --!strict
--- Antiseismic ring beam (армопояс) on top of the load-bearing walls: concrete with placement
--- losses and its longitudinal bars with laps. Wall height is the masonry, so the beam sits above
--- it. Settings: seismic_intensity (points), ring_beam_height (mm), ring_beam_concrete (class, 15
--- for B15).
+-- Antiseismic ring beam (армопояс) on top of the load-bearing walls of the storeys that ask for
+-- one (wall.ring_beam, its height in metres): concrete with placement losses and its longitudinal
+-- bars with laps. Wall height is the masonry, so the beam sits above it. Settings:
+-- seismic_intensity (points), ring_beam_concrete (class, 15 for B15).
 
 -- Fractions this small come from floating-point rounding, not from the plan.
 local ROUNDING = 1e-6
@@ -33,17 +33,18 @@ return {
 		local seismic = norms.seismic.ring_beam
 		local practice = norms.practice.ring_beam
 		local intensity = at_least(settings, "seismic_intensity", norms.practice.defaults.seismic_intensity, 0, " points")
-		if intensity < 7 then
-			return {} -- КМК 2.01.03-19 asks for ring beams from 7 points
-		end
-		local height = at_least(settings, "ring_beam_height", seismic.min_height, seismic.min_height, " mm")
 		local class = at_least(settings, "ring_beam_concrete", practice.concrete_class, seismic.min_concrete_class, "")
-		local bars = seismic.bars[math.min(math.floor(intensity), 10)]
+		-- КМК 2.01.03-19 asks for ring beams from 7 points; a beam chosen below that is detailed as at 7.
+		local bars = seismic.bars[math.clamp(math.floor(intensity), 7, 10)]
 
-		local area, length = 0, 0
+		local volume, length = 0, 0
 		for _, wall in input.walls do
-			if wall.thickness * 1000 >= norms.practice.walls.load_bearing_min_thickness - ROUNDING then
-				area += wall.footprint_area
+			local bearing = wall.thickness * 1000 >= norms.practice.walls.load_bearing_min_thickness - ROUNDING
+			if bearing and wall.ring_beam > 0 then
+				if wall.ring_beam * 1000 < seismic.min_height - ROUNDING then
+					error(`a ring beam must be at least {seismic.min_height} mm high`)
+				end
+				volume += wall.footprint_area * wall.ring_beam
 				length += wall.length
 			end
 		end
@@ -51,7 +52,7 @@ return {
 			return {}
 		end
 
-		local concrete = area * height / 1000 * (1 + norms.losses.concrete.beam)
+		local concrete = volume * (1 + norms.losses.concrete.beam)
 		local steel = length * bars.count * norms.rebar.kg_per_m[bars.diameter] * (1 + norms.practice.waste.rebar)
 		return {
 			{ item = concrete_item(class), unit = "m3", amount = concrete },

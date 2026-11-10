@@ -288,6 +288,45 @@ TEST(Document, SettingTheSameValueRecordsNothing) {
   EXPECT_EQ(document.log().size(), 2U);
 }
 
+TEST(Document, AWallUnitIsChosenWholeAndUndoneWhole) {
+  Document document{test_environment()};
+  const ElementId level = add_level(document);
+  ASSERT_TRUE(document.execute(AddWall{.wall = wall_4(level)}));
+  const ElementId id = only_wall(document);
+  EXPECT_FALSE(document.model().find<Wall>(id)->has_unit());
+
+  // 1НФ brick as laid.
+  ASSERT_TRUE(document.execute(
+      SetWallUnit{.wall = id, .length = 250_mm, .width = 120_mm, .height = 65_mm}));
+  EXPECT_TRUE(document.model().find<Wall>(id)->has_unit());
+  EXPECT_EQ(document.log().back().ops.size(), 3U);
+
+  const auto partial =
+      document.execute(SetWallUnit{.wall = id, .length = 250_mm, .width = 0_mm, .height = 65_mm});
+  ASSERT_FALSE(partial.has_value());
+  EXPECT_EQ(partial.error().code, ErrorCode::kUnitSizeNotPositive);
+
+  ASSERT_TRUE(document.undo());
+  EXPECT_EQ(*document.model().find<Wall>(id), wall_4(level));
+}
+
+TEST(Document, ALevelCarriesItsRingBeamAndMeshes) {
+  Document document{test_environment()};
+  const ElementId level = add_level(document);
+
+  ASSERT_TRUE(document.execute(SetLevelRingBeam{.level = level, .height = 150_mm}));
+  ASSERT_TRUE(document.execute(SetLevelJunctionMeshes{.level = level, .meshes = true}));
+  EXPECT_EQ(document.model().find<Level>(level)->ring_beam, 150_mm);
+  EXPECT_TRUE(document.model().find<Level>(level)->junction_meshes);
+  EXPECT_EQ(document.log().back().kind, CommandKind::kSetLevelJunctionMeshes);
+
+  const auto negative = document.execute(SetLevelRingBeam{.level = level, .height = -1_mm});
+  EXPECT_FALSE(negative.has_value());
+
+  ASSERT_TRUE(document.undo());
+  EXPECT_FALSE(document.model().find<Level>(level)->junction_meshes);
+}
+
 TEST(Document, ReportsDirtyElementsOnce) {
   Document document{test_environment()};
   const ElementId level = add_level(document);

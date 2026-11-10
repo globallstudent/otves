@@ -44,7 +44,10 @@ std::expected<Level, Error> to_level(const schema::Level* level) {
   if (level == nullptr) {
     return corrupt("level is missing");
   }
-  return Level{.elevation = Mm{level->elevation()}, .height = Mm{level->height()}};
+  return Level{.elevation = Mm{level->elevation()},
+               .height = Mm{level->height()},
+               .ring_beam = Mm{level->ring_beam()},
+               .junction_meshes = level->junction_meshes()};
 }
 
 std::expected<Wall, Error> to_wall(const schema::Wall* wall) {
@@ -60,7 +63,10 @@ std::expected<Wall, Error> to_wall(const schema::Wall* wall) {
               .end = to_point(*wall->end()),
               .thickness = Mm{wall->thickness()},
               .height = Mm{wall->height()},
-              .location_line = *line};
+              .location_line = *line,
+              .unit_length = Mm{wall->unit_length()},
+              .unit_width = Mm{wall->unit_width()},
+              .unit_height = Mm{wall->unit_height()}};
 }
 
 std::expected<Opening, Error> to_opening(const schema::Opening* opening) {
@@ -92,6 +98,14 @@ std::expected<Command, Error> decode_level(const schema::CommandEntry& entry) {
     case schema::Command::SetLevelHeight: {
       const auto* set = entry.command_as_SetLevelHeight();
       return SetLevelHeight{.level = to_id(set->level()), .height = Mm{set->height()}};
+    }
+    case schema::Command::SetLevelRingBeam: {
+      const auto* set = entry.command_as_SetLevelRingBeam();
+      return SetLevelRingBeam{.level = to_id(set->level()), .height = Mm{set->height()}};
+    }
+    case schema::Command::SetLevelJunctionMeshes: {
+      const auto* set = entry.command_as_SetLevelJunctionMeshes();
+      return SetLevelJunctionMeshes{.level = to_id(set->level()), .meshes = set->meshes()};
     }
     case schema::Command::RemoveLevel:
       return RemoveLevel{.level = to_id(entry.command_as_RemoveLevel()->level())};
@@ -129,6 +143,13 @@ std::expected<Command, Error> decode_wall(const schema::CommandEntry& entry) {
         return corrupt("unknown location line");
       }
       return SetWallLocationLine{.wall = to_id(set->wall()), .location_line = *line};
+    }
+    case schema::Command::SetWallUnit: {
+      const auto* set = entry.command_as_SetWallUnit();
+      return SetWallUnit{.wall = to_id(set->wall()),
+                         .length = Mm{set->length()},
+                         .width = Mm{set->width()},
+                         .height = Mm{set->height()}};
     }
     case schema::Command::RemoveWall:
       return RemoveWall{.wall = to_id(entry.command_as_RemoveWall()->wall())};
@@ -294,6 +315,8 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
     case schema::Command::SetLevelElevation:
     case schema::Command::SetLevelHeight:
     case schema::Command::RemoveLevel:
+    case schema::Command::SetLevelRingBeam:
+    case schema::Command::SetLevelJunctionMeshes:
       return decode_level(entry);
     case schema::Command::AddWall:
     case schema::Command::MoveWallEnd:
@@ -301,6 +324,7 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
     case schema::Command::SetWallHeight:
     case schema::Command::SetWallLocationLine:
     case schema::Command::RemoveWall:
+    case schema::Command::SetWallUnit:
       return decode_wall(entry);
     case schema::Command::AddOpening:
     case schema::Command::MoveOpening:
@@ -342,9 +366,10 @@ std::expected<OpeningPlacement, Error> decode(const schema::PlaceOpening* place)
 }
 
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Level& level) {
-  return {
-      .type = schema::Element::Level,
-      .value = schema::CreateLevel(builder, level.elevation.value(), level.height.value()).Union()};
+  return {.type = schema::Element::Level,
+          .value = schema::CreateLevel(builder, level.elevation.value(), level.height.value(),
+                                       level.ring_beam.value(), level.junction_meshes)
+                       .Union()};
 }
 
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Wall& wall) {
@@ -353,7 +378,9 @@ EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Wall& wall)
   const schema::PointMm end = to_schema(wall.end);
   return {.type = schema::Element::Wall,
           .value = schema::CreateWall(builder, &level, &start, &end, wall.thickness.value(),
-                                      wall.height.value(), to_schema(wall.location_line))
+                                      wall.height.value(), to_schema(wall.location_line),
+                                      wall.unit_length.value(), wall.unit_width.value(),
+                                      wall.unit_height.value())
                        .Union()};
 }
 

@@ -9,6 +9,7 @@
 #include <flatbuffers/flatbuffers.h>
 
 #include <otves/core/error.h>
+#include <otves/core/level.h>
 #include <otves/core/model.h>
 #include <otves/core/opening.h>
 #include <otves/core/units.h>
@@ -92,6 +93,41 @@ TakeoffOffsets failure(flatbuffers::FlatBufferBuilder& builder, const Error& err
           .message = builder.CreateString(error.message)};
 }
 
+// Carries what the builder chose into the measurement (docs/adr/0008): each wall's ring beam and
+// each junction's meshes from their level. Returns the unit of each measured wall, absent where
+// none was chosen; such a wall is reported in `issues`.
+std::vector<std::optional<takeoff::MasonryUnit>> choices(const Model& model,
+                                                         takeoff::Measurement& measurement,
+                                                         flatbuffers::FlatBufferBuilder& builder,
+                                                         IssueOffsets& issues) {
+  const auto level_of = [&model](ElementId wall_id) -> const Level* {
+    const Wall* wall = model.find<Wall>(wall_id);
+    return wall != nullptr ? model.find<Level>(wall->level) : nullptr;
+  };
+  std::vector<std::optional<takeoff::MasonryUnit>> units;
+  units.reserve(measurement.walls.size());
+  for (takeoff::WallQuantities& measured : measurement.walls) {
+    const Wall* wall = model.find<Wall>(measured.id);
+    const Level* level = level_of(measured.id);
+    measured.ring_beam = level != nullptr ? to_metres(level->ring_beam) : 0.0;
+    if (wall != nullptr && wall->has_unit()) {
+      units.emplace_back(takeoff::MasonryUnit{
+          .length = wall->unit_length, .width = wall->unit_width, .height = wall->unit_height});
+      continue;
+    }
+    units.emplace_back(std::nullopt);
+    const schema::Uuid element = to_schema(measured.id);
+    const schema::Uuid on = to_schema(wall != nullptr ? wall->level : ElementId{});
+    issues.push_back(
+        schema::CreateIssue(builder, schema::IssueKind::MaterialNotChosen, &element, &on));
+  }
+  for (takeoff::JunctionQuantities& junction : measurement.junctions) {
+    const Level* level = junction.walls.empty() ? nullptr : level_of(junction.walls.front());
+    junction.meshes = level != nullptr && level->junction_meshes;
+  }
+  return units;
+}
+
 }  // namespace
 
 OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Model& model,
@@ -157,14 +193,16 @@ TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Mod
   if (!lintels) {
     return failure(builder, lintels.error());
   }
-  const auto masonry_spec = takeoff::masonry_spec(*rules);
-  if (!masonry_spec) {
-    return failure(builder, masonry_spec.error());
+  const auto joints = takeoff::masonry_joints(*rules);
+  if (!joints) {
+    return failure(builder, joints.error());
   }
-  const auto measurement = takeoff::measure_levels(walls_of(model), openings_of(model), *lintels);
+  auto measurement = takeoff::measure_levels(walls_of(model), openings_of(model), *lintels);
   if (!measurement) {
     return failure(builder, measurement.error());
   }
+  const std::vector<std::optional<takeoff::MasonryUnit>> units =
+      choices(model, *measurement, builder, issues);
   for (const takeoff::OpeningIssue& issue : measurement->issues) {
     const auto* opening = model.find<Opening>(issue.opening);
     const Wall* wall = opening != nullptr ? model.find<Wall>(opening->wall) : nullptr;
@@ -172,7 +210,7 @@ TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Mod
     const schema::Uuid level = to_schema(wall != nullptr ? wall->level : ElementId{});
     issues.push_back(schema::CreateIssue(builder, issue_code(issue.kind), &element, &level));
   }
-  const auto masonry = takeoff::count_masonry(measurement->walls, *masonry_spec);
+  const auto masonry = takeoff::count_masonry(measurement->walls, units, *joints);
   if (!masonry) {
     return failure(builder, masonry.error());
   }

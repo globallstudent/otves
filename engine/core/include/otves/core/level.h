@@ -16,6 +16,12 @@ namespace otves {
 struct Level {
   Mm elevation;  // of the floor above the project zero (±0,000)
   Mm height;     // floor to floor
+  // Seismic detailing the builder chose for this storey (docs/adr/0008); the take-off counts only
+  // what is set here. The explicit initializer lets a level be built without naming a ring beam.
+  // Height of the beam on top of the load-bearing walls; zero for none.
+  Mm ring_beam{};  // NOLINT(readability-redundant-member-init)
+  // Meshes in the bed joints where load-bearing walls meet.
+  bool junction_meshes = false;
 
   constexpr bool operator==(const Level&) const = default;
 };
@@ -26,11 +32,15 @@ struct Level {
 enum class LevelField : std::uint8_t {
   kElevation,
   kHeight,
+  kRingBeam,
+  kJunctionMeshes,
 };
 
-using LevelValue = std::variant<Mm>;
+using LevelValue = std::variant<Mm, bool>;
 
 [[nodiscard]] LevelValue get_field(const Level& level, LevelField field);
+// The value's alternative must match the field (bool for kJunctionMeshes, Mm for the rest); a
+// mismatch is a programming error.
 void set_field(Level& level, LevelField field, const LevelValue& value);
 
 template <>

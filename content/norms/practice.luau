@@ -23,13 +23,6 @@ return {
 		width = 120,
 		joint = 10,
 	},
-	-- The unit a new job is laid in: single brick 1НФ (ГОСТ 530-2012), millimetres as laid:
-	-- length along the wall, width across it, course height.
-	masonry_unit = {
-		length = 250,
-		width = 120,
-		height = 65,
-	},
 	walls = {
 		-- Thinner walls are partitions (КМК 3.9.7): no ring beam and no junction meshes, until walls
 		-- carry a load-bearing flag. Millimetres.

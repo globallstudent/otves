@@ -25,6 +25,9 @@ CommandKind kind_of(const Command& command) {
           [](const SetOpeningSill&) { return CommandKind::kSetOpeningSill; },
           [](const SetOpeningKind&) { return CommandKind::kSetOpeningKind; },
           [](const RemoveOpening&) { return CommandKind::kRemoveOpening; },
+          [](const SetWallUnit&) { return CommandKind::kSetWallUnit; },
+          [](const SetLevelRingBeam&) { return CommandKind::kSetLevelRingBeam; },
+          [](const SetLevelJunctionMeshes&) { return CommandKind::kSetLevelJunctionMeshes; },
       },
       command);
 }

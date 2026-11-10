@@ -31,6 +31,14 @@ std::expected<void, Error> validate(const Wall& wall) {
   if (wall.height <= Mm{0}) {
     return make_error(ErrorCode::kHeightNotPositive, "wall height must be positive");
   }
+  const bool none =
+      wall.unit_length == Mm{0} && wall.unit_width == Mm{0} && wall.unit_height == Mm{0};
+  const bool whole =
+      wall.unit_length > Mm{0} && wall.unit_width > Mm{0} && wall.unit_height > Mm{0};
+  if (!none && !whole) {
+    return make_error(ErrorCode::kUnitSizeNotPositive,
+                      "masonry unit sizes must be all positive or all zero");
+  }
   return {};
 }
 
@@ -46,6 +54,12 @@ WallValue get_field(const Wall& wall, WallField field) {
       return wall.height;
     case WallField::kLocationLine:
       return wall.location_line;
+    case WallField::kUnitLength:
+      return wall.unit_length;
+    case WallField::kUnitWidth:
+      return wall.unit_width;
+    case WallField::kUnitHeight:
+      return wall.unit_height;
   }
   OTVES_ASSERT(false);
   return wall.start;
@@ -67,6 +81,15 @@ void set_field(Wall& wall, WallField field, const WallValue& value) {
       return;
     case WallField::kLocationLine:
       assign(wall.location_line, value);
+      return;
+    case WallField::kUnitLength:
+      assign(wall.unit_length, value);
+      return;
+    case WallField::kUnitWidth:
+      assign(wall.unit_width, value);
+      return;
+    case WallField::kUnitHeight:
+      assign(wall.unit_height, value);
       return;
   }
   OTVES_ASSERT(false);

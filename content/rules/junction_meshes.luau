@@ -1,6 +1,6 @@
 --!strict
--- Meshes in the bed joints where load-bearing walls meet (КМК 2.01.03-19, 3.5.12): one layer at
--- every pitch of height below the wall's top, where the ring beam takes over. Item "mesh.junction"
+-- Meshes in the bed joints where load-bearing walls meet (КМК 2.01.03-19, 3.5.12), on the storeys
+-- that ask for them (junction.meshes): one layer at every pitch of height below the wall's top. Item "mesh.junction"
 -- is one 1.5 m mesh with at least 1 cm² of longitudinal bars. Settings: seismic_intensity (points).
 
 -- Fractions this small come from floating-point rounding, not from the plan.
@@ -15,10 +15,8 @@ return {
 		if type(intensity) ~= "number" then
 			error("seismic_intensity must be a number")
 		end
-		if intensity < 7 then
-			return {}
-		end
-		local pitch_mm = norms.seismic.junction_mesh.pitch[math.floor(intensity)]
+		-- The norm starts at 7 points; meshes chosen below that are spaced as at 7.
+		local pitch_mm = norms.seismic.junction_mesh.pitch[math.max(math.floor(intensity), 7)]
 		if pitch_mm == nil then
 			error(`junction meshes above 9 points follow КМК 3.5.1, which is not modelled yet`)
 		end
@@ -38,7 +36,7 @@ return {
 					walls += 1
 				end
 			end
-			if walls >= 2 then
+			if junction.meshes and walls >= 2 then
 				meshes += math.max(0, math.ceil(junction.height / pitch - ROUNDING) - 1)
 			end
 		end

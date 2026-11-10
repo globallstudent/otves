@@ -31,10 +31,11 @@ namespace otves::takeoff {
 namespace {
 
 constexpr std::size_t kMaxItemLength = 64;
-constexpr int kWallFields = 7;
+constexpr int kWallFields = 8;
 constexpr int kMasonryWallFields = 3;
+constexpr int kUnitMasonryFields = 5;
 constexpr int kLintelFields = 5;
-constexpr int kJunctionFields = 2;
+constexpr int kJunctionFields = 3;
 
 struct UnitName {
   std::string_view name;
@@ -110,11 +111,13 @@ void close_element(lua_State* state, std::size_t index) {
   lua_rawseti(state, -2, static_cast<int>(index + 1));
 }
 
-// input = { walls = { { id, thickness, footprint_area, length, face_area, volume, openings_area }
-// },
+// input = { walls = { { id, thickness, footprint_area, length, face_area, volume, openings_area,
+//                       ring_beam } },
 //           lintels = { { opening, wall, length, height, thickness } },
-//           junctions = { { walls = { id }, height } },
-//           masonry = { units, mortar, walls = { { id, units, mortar } } } }, in metres.
+//           junctions = { { walls = { id }, height, meshes } },
+//           masonry = { units, mortar, walls = { { id, units, mortar } },
+//                       by_unit = { { length, width, height, units, mortar } } } },
+// in metres, except unit sizes, which are whole millimetres.
 void push_input(lua_State* state, const Measurement& measurement, const Masonry& masonry) {
   const std::span<const WallQuantities> walls = measurement.walls;
   const std::span<const Lintel> lintels = measurement.lintels;
@@ -131,6 +134,7 @@ void push_input(lua_State* state, const Measurement& measurement, const Masonry&
     set_field(state, "face_area", wall.face_area);
     set_field(state, "volume", wall.volume);
     set_field(state, "openings_area", wall.openings_area);
+    set_field(state, "ring_beam", wall.ring_beam);
     close_element(state, i);
   }
   close_table(state, "walls");
@@ -160,11 +164,13 @@ void push_input(lua_State* state, const Measurement& measurement, const Masonry&
     }
     close_table(state, "walls");
     set_field(state, "height", junction.height);
+    lua_pushboolean(state, junction.meshes ? 1 : 0);
+    lua_rawsetfield(state, -2, "meshes");
     close_element(state, i);
   }
   close_table(state, "junctions");
 
-  lua_createtable(state, 0, 3);
+  lua_createtable(state, 0, 4);
   set_field(state, "units", masonry.units);
   set_field(state, "mortar", masonry.mortar);
   lua_createtable(state, static_cast<int>(masonry.walls.size()), 0);
@@ -177,6 +183,18 @@ void push_input(lua_State* state, const Measurement& measurement, const Masonry&
     close_element(state, i);
   }
   close_table(state, "walls");
+  lua_createtable(state, static_cast<int>(masonry.by_unit.size()), 0);
+  for (std::size_t i = 0; i < masonry.by_unit.size(); ++i) {
+    const UnitMasonry& of_unit = masonry.by_unit[i];
+    lua_createtable(state, 0, kUnitMasonryFields);
+    set_field(state, "length", static_cast<double>(of_unit.unit.length.value()));
+    set_field(state, "width", static_cast<double>(of_unit.unit.width.value()));
+    set_field(state, "height", static_cast<double>(of_unit.unit.height.value()));
+    set_field(state, "units", of_unit.units);
+    set_field(state, "mortar", of_unit.mortar);
+    close_element(state, i);
+  }
+  close_table(state, "by_unit");
   close_table(state, "masonry");
 
   lua_setreadonly(state, -1, 1);
@@ -447,31 +465,19 @@ Result<LintelSpec> lintel_spec(const RuleSet& rules) {
   return spec;
 }
 
-Result<MasonrySpec> masonry_spec(const RuleSet& rules) {
-  const auto unit = [&rules](std::string_view key) {
-    const std::array<std::string_view, 2> path{"masonry_unit", key};
-    return rules.length("practice", path);
-  };
+Result<Joints> masonry_joints(const RuleSet& rules) {
   const auto joint = [&rules](std::string_view key) {
     const std::array<std::string_view, 2> path{"joints", key};
     return rules.length("masonry", path);
   };
-  const Result<Mm> length = unit("length");
-  const Result<Mm> width = unit("width");
-  const Result<Mm> height = unit("height");
   const Result<Mm> bed = joint("bed");
   const Result<Mm> head = joint("head");
-  for (const Result<Mm>* value : {&length, &width, &height, &bed, &head}) {
+  for (const Result<Mm>* value : {&bed, &head}) {
     if (!*value) {
       return std::unexpected{value->error()};
     }
   }
-  const MasonrySpec spec{.unit = {.length = *length, .width = *width, .height = *height},
-                         .joints = {.bed = *bed, .head = *head}};
-  if (auto valid = validate(spec); !valid) {
-    return std::unexpected{std::move(valid).error()};
-  }
-  return spec;
+  return Joints{.bed = *bed, .head = *head};
 }
 
 }  // namespace otves::takeoff

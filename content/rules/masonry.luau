@@ -1,5 +1,6 @@
 --!strict
--- Masonry materials for the job: units and mortar with waste, and the cement in that mortar.
+-- Masonry materials for the job: the units the walls are laid from, one line per unit size
+-- ("masonry_unit.250x120x65", millimetres as laid), and mortar with waste and the cement in it.
 -- Settings: unit_waste and mortar_waste (fractions), cement ("PC400", "PC500"),
 -- mortar_grade ("M50" to "M200"). Missing settings fall back to norms.practice.
 
@@ -36,12 +37,20 @@ return {
 			error(`no cement norm for {cement} in mortar {grade}`)
 		end
 
-		local units = math.max(0, math.ceil(input.masonry.units * (1 + unit_waste) - ROUNDING))
+		local lines = {}
+		for _, of_unit in input.masonry.by_unit do
+			table.insert(lines, {
+				item = `masonry_unit.{of_unit.length}x{of_unit.width}x{of_unit.height}`,
+				unit = "pcs",
+				amount = math.max(0, math.ceil(of_unit.units * (1 + unit_waste) - ROUNDING)),
+			})
+		end
+		if #lines == 0 then
+			return {} -- no wall has a unit yet
+		end
 		local mortar = input.masonry.mortar * (1 + mortar_waste)
-		return {
-			{ item = "masonry_unit", unit = "pcs", amount = units },
-			{ item = "mortar", unit = "m3", amount = mortar },
-			{ item = "mortar.cement", unit = "kg", amount = mortar * cement_per_m3 },
-		}
+		table.insert(lines, { item = "mortar", unit = "m3", amount = mortar })
+		table.insert(lines, { item = "mortar.cement", unit = "kg", amount = mortar * cement_per_m3 })
+		return lines
 	end,
 }

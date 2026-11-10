@@ -28,6 +28,17 @@ struct SetLevelHeight {
   Mm height;
 };
 
+// The height of the ring beam on the level's load-bearing walls; zero removes it.
+struct SetLevelRingBeam {
+  ElementId level;
+  Mm height;
+};
+
+struct SetLevelJunctionMeshes {
+  ElementId level;
+  bool meshes = false;
+};
+
 // Removes the level with every wall on it and every opening in those walls.
 struct RemoveLevel {
   ElementId level;
@@ -57,6 +68,14 @@ struct SetWallHeight {
 struct SetWallLocationLine {
   ElementId wall;
   LocationLine location_line = LocationLine::kCenter;
+};
+
+// The masonry unit as laid; all zero clears the choice.
+struct SetWallUnit {
+  ElementId wall;
+  Mm length;
+  Mm width;
+  Mm height;
 };
 
 // Removes the wall and every opening in it.
@@ -97,7 +116,8 @@ struct RemoveOpening {
 using Command =
     std::variant<AddLevel, SetLevelElevation, SetLevelHeight, RemoveLevel, AddWall, MoveWallEnd,
                  SetWallThickness, SetWallHeight, SetWallLocationLine, RemoveWall, AddOpening,
-                 MoveOpening, ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening>;
+                 MoveOpening, ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening,
+                 SetWallUnit, SetLevelRingBeam, SetLevelJunctionMeshes>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 

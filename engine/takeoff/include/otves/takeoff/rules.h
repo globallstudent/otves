@@ -85,8 +85,7 @@ class RuleSet {
 // norms.practice.lintel.
 [[nodiscard]] Result<LintelSpec> lintel_spec(const RuleSet& rules);
 
-// Masonry from content: joints from norms.masonry.joints, the unit from
-// norms.practice.masonry_unit.
-[[nodiscard]] Result<MasonrySpec> masonry_spec(const RuleSet& rules);
+// Mortar joints from norms.masonry.joints. The unit is the wall's own (docs/adr/0008).
+[[nodiscard]] Result<Joints> masonry_joints(const RuleSet& rules);
 
 }  // namespace otves::takeoff

@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "source": "КМК 2.01.03-19, 3.5.10: at least 150 mm high",
+  "heights": [150, 200, 250, 300]
+}

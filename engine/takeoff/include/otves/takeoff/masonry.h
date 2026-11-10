@@ -3,6 +3,7 @@
 #include <compare>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -18,6 +19,8 @@ struct MasonryUnit {
   Mm length;
   Mm width;
   Mm height;
+
+  constexpr auto operator<=>(const MasonryUnit&) const = default;
 };
 
 // Mortar joint thickness: bed joints between courses, head joints between units in a course.
@@ -57,8 +60,16 @@ struct WallMasonry {
   double mortar = 0.0;  // m³
 };
 
+// What the walls laid from one unit take together.
+struct UnitMasonry {
+  MasonryUnit unit;
+  double units = 0.0;   // pieces, not rounded
+  double mortar = 0.0;  // m³
+};
+
 struct Masonry {
   std::vector<WallMasonry> walls;    // in input order
+  std::vector<UnitMasonry> by_unit;  // sorted by unit; only units some wall is laid from
   std::vector<MasonryIssue> issues;  // sorted
   double units = 0.0;                // sum over walls, in input order
   double mortar = 0.0;
@@ -68,5 +79,12 @@ struct Masonry {
 // (length + head) × (height + bed) cell of its face; mortar is the rest of the volume.
 [[nodiscard]] std::expected<Masonry, Error> count_masonry(std::span<const WallQuantities> walls,
                                                           const MasonrySpec& spec);
+
+// The same for walls laid from different units: `units[i]` is the unit of `walls[i]`, absent when
+// none was chosen (docs/adr/0008); such a wall gets no units and no mortar.
+// Precondition: `units` is as long as `walls`.
+[[nodiscard]] std::expected<Masonry, Error> count_masonry(
+    std::span<const WallQuantities> walls, std::span<const std::optional<MasonryUnit>> units,
+    const Joints& joints);
 
 }  // namespace otves::takeoff

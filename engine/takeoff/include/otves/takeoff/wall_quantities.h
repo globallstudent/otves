@@ -50,12 +50,17 @@ struct WallQuantities {
   double face_area = 0.0;       // m², one face: length × height, less openings and lintels
   double volume = 0.0;          // m³, footprint area × height, less their face × thickness
   double openings_area = 0.0;   // m², the openings cut from one face
+  // m, the height of the ring beam the wall's level asks for on top of it; zero for none. The
+  // caller sets it from the level (docs/adr/0008); measuring leaves it zero.
+  double ring_beam = 0.0;
 };
 
 // A place where walls meet, with the height they share there.
 struct JunctionQuantities {
   std::vector<ElementId> walls;  // sorted
   double height = 0.0;           // m, the lowest of the walls
+  // Whether the walls' level asks for meshes where walls meet; set by the caller, as ring_beam.
+  bool meshes = false;
 };
 
 enum class OpeningIssueKind : std::uint8_t {

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "units": [
+    {
+      "id": "brick.1nf",
+      "kind": "brick",
+      "mark": "1НФ",
+      "standard": "ГОСТ 530-2012",
+      "length": 250,
+      "width": 120,
+      "height": 65,
+      "thicknesses": [120, 250, 380, 510, 640]
+    },
+    {
+      "id": "brick.1_4nf",
+      "kind": "brick",
+      "mark": "1,4НФ",
+      "standard": "ГОСТ 530-2012",
+      "length": 250,
+      "width": 120,
+      "height": 88,
+      "thicknesses": [120, 250, 380, 510, 640]
+    },
+    {
+      "id": "stone.2_1nf",
+      "kind": "stone",
+      "mark": "2,1НФ",
+      "standard": "ГОСТ 530-2012",
+      "length": 250,
+      "width": 120,
+      "height": 140,
+      "thicknesses": [120, 250, 380, 510, 640]
+    },
+    {
+      "id": "block.390x190x188",
+      "kind": "block",
+      "mark": "",
+      "standard": "ГОСТ 6133-2019",
+      "length": 390,
+      "width": 190,
+      "height": 188,
+      "thicknesses": [190, 390]
+    }
+  ]
+}

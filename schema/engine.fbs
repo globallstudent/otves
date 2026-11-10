@@ -25,6 +25,8 @@ enum WallEnd:ubyte { Start = 0, End = 1 }
 table Level {
   elevation:long;
   height:long;
+  ring_beam:long;        // height of the beam on the load-bearing walls; 0 for none (docs/adr/0008)
+  junction_meshes:bool;  // meshes where load-bearing walls meet
 }
 
 table Wall {
@@ -34,6 +36,10 @@ table Wall {
   thickness:long;
   height:long;
   location_line:LocationLine = Center;
+  // The masonry unit as laid; all 0 until chosen (docs/adr/0008).
+  unit_length:long;
+  unit_width:long;
+  unit_height:long;
 }
 
 table Opening {
@@ -49,6 +55,8 @@ table AddLevel { level:Level; }
 table SetLevelElevation { level:Uuid; elevation:long; }
 table SetLevelHeight { level:Uuid; height:long; }
 table RemoveLevel { level:Uuid; }
+table SetLevelRingBeam { level:Uuid; height:long; }
+table SetLevelJunctionMeshes { level:Uuid; meshes:bool; }
 
 table AddWall { wall:Wall; }
 table MoveWallEnd { wall:Uuid; end:WallEnd = End; to:PointMm; }
@@ -56,6 +64,7 @@ table SetWallThickness { wall:Uuid; thickness:long; }
 table SetWallHeight { wall:Uuid; height:long; }
 table SetWallLocationLine { wall:Uuid; location_line:LocationLine = Center; }
 table RemoveWall { wall:Uuid; }
+table SetWallUnit { wall:Uuid; length:long; width:long; height:long; }
 
 table AddOpening { opening:Opening; }
 table MoveOpening { opening:Uuid; offset:long; }
@@ -140,6 +149,9 @@ union Command {
   PlaceOpening,
   OpenModel,
   Pick,
+  SetWallUnit,
+  SetLevelRingBeam,
+  SetLevelJunctionMeshes,
 }
 
 table CommandEntry {
@@ -207,18 +219,31 @@ enum CommandKind:ubyte {
   RemoveOpening = 15,
   Undo = 16,
   Redo = 17,
+  SetWallUnit = 18,
+  SetLevelRingBeam = 19,
+  SetLevelJunctionMeshes = 20,
 }
 
-enum LevelField:ubyte { Elevation = 0, Height = 1 }
-enum WallField:ubyte { Start = 0, End = 1, Thickness = 2, Height = 3, LocationLine = 4 }
+enum LevelField:ubyte { Elevation = 0, Height = 1, RingBeam = 2, JunctionMeshes = 3 }
+enum WallField:ubyte {
+  Start = 0,
+  End = 1,
+  Thickness = 2,
+  Height = 3,
+  LocationLine = 4,
+  UnitLength = 5,
+  UnitWidth = 6,
+  UnitHeight = 7,
+}
 enum OpeningField:ubyte { Offset = 0, Width = 1, Height = 2, Sill = 3, Kind = 4 }
 
 // Property-level changes (engine/core/op.h). Create and delete carry the whole element.
 table CreateOp { id:Uuid; element:Element; }
 table DeleteOp { id:Uuid; element:Element; }
+// JunctionMeshes uses 0 and 1; the other fields millimetres.
 table SetLevelFieldOp { id:Uuid; field:LevelField; before:long; after:long; }
-// Start and End use the points; Thickness and Height millimetres and LocationLine its code in
-// before and after.
+// Start and End use the points; LocationLine its code and the other fields millimetres in before
+// and after.
 table SetWallFieldOp {
   id:Uuid;
   field:WallField;
@@ -288,10 +313,11 @@ enum IssueKind:ubyte {
   NoRoomForLintel = 4,     // the lintel rises above the wall's top
   WallOverlap = 5,         // walls along one line from a point, or one inside another
   SharpAngle = 6,          // walls meet at so small an angle that their ends are cut square
+  MaterialNotChosen = 7,   // the wall has no masonry unit, so it is not in the take-off
 }
 
-// Something in the model a builder has to fix (engine/geom, engine/takeoff). An opening issue
-// names the opening; a wall join issue has the point where the walls meet.
+// Something in the model a builder has to fix (engine/geom, engine/takeoff). An opening or
+// material issue names the element; a wall join issue has the point where the walls meet.
 table Issue {
   kind:IssueKind = OpeningOutsideWall;
   element:Uuid;

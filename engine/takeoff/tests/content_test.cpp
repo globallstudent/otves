@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -58,7 +59,7 @@ OpeningInput window(std::int64_t n, Mm width) {
 }
 
 // A room 6 400 × 4 000 between centre lines, 380 mm of 1НФ brick with 12/10 mm joints, 2 800 high,
-// with lintels from content.
+// with lintels from content. Its storey asks for a 150 mm ring beam and junction meshes.
 struct Room {
   Measurement measurement;
   Masonry masonry;
@@ -75,10 +76,17 @@ Room room(const RuleSet& rules, const std::vector<OpeningInput>& openings = {},
       wall(1, {0_mm, 0_mm}, {6400_mm, 0_mm}), wall(2, {6400_mm, 0_mm}, {6400_mm, 4000_mm}),
       wall(3, {6400_mm, 4000_mm}, {0_mm, 4000_mm}), wall(4, {0_mm, 4000_mm}, {0_mm, 0_mm})};
   walls.insert(walls.end(), more_walls.begin(), more_walls.end());
-  const MasonrySpec brick = masonry_spec(rules).value();
+  const MasonrySpec brick{.unit = {.length = 250_mm, .width = 120_mm, .height = 65_mm},
+                          .joints = masonry_joints(rules).value()};
   Room result;
   result.measurement =
       measure_walls(walls, openings, lintel_spec(rules).value(), geom::join_walls(walls)).value();
+  for (WallQuantities& measured : result.measurement.walls) {
+    measured.ring_beam = 0.15;
+  }
+  for (JunctionQuantities& junction : result.measurement.junctions) {
+    junction.meshes = true;
+  }
   result.masonry = count_masonry(result.measurement.walls, brick).value();
   return result;
 }
@@ -114,16 +122,53 @@ TEST(Content, LintelSpecComesFromNorms) {
   EXPECT_EQ(spec->height, 140_mm);
 }
 
-TEST(Content, MasonrySpecComesFromNorms) {
-  const auto spec = masonry_spec(content());
+TEST(Content, JointsComeFromNorms) {
+  const auto joints = masonry_joints(content());
 
-  ASSERT_TRUE(spec.has_value()) << spec.error().message;
-  // 1НФ brick (ГОСТ 530-2012) with СП 70.13330.2012 9.2.4 joints.
-  EXPECT_EQ(spec->unit.length, 250_mm);
-  EXPECT_EQ(spec->unit.width, 120_mm);
-  EXPECT_EQ(spec->unit.height, 65_mm);
-  EXPECT_EQ(spec->joints.bed, 12_mm);
-  EXPECT_EQ(spec->joints.head, 10_mm);
+  ASSERT_TRUE(joints.has_value()) << joints.error().message;
+  // СП 70.13330.2012 9.2.4.
+  EXPECT_EQ(joints->bed, 12_mm);
+  EXPECT_EQ(joints->head, 10_mm);
+}
+
+TEST(Content, OnlyWhatWasChosenIsCounted) {
+  const RuleSet rules = content();
+  Room r = room(rules);
+  // No wall has a unit, and the storey asks for no ring beam and no meshes.
+  const std::vector<std::optional<MasonryUnit>> none(r.measurement.walls.size());
+  r.masonry = count_masonry(r.measurement.walls, none, masonry_joints(rules).value()).value();
+  for (WallQuantities& measured : r.measurement.walls) {
+    measured.ring_beam = 0.0;
+  }
+  for (JunctionQuantities& junction : r.measurement.junctions) {
+    junction.meshes = false;
+  }
+
+  const auto all = rules.run(r.measurement, r.masonry, {});
+
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  EXPECT_TRUE(all->empty());
+}
+
+TEST(Content, EachUnitSizeGetsItsOwnLine) {
+  const RuleSet rules = content();
+  const Room r = room(rules, {}, {wall(5, {3200_mm, 0_mm}, {3200_mm, 4000_mm}, 190_mm)});
+  // The outer walls in 1НФ brick, the partition in 390 × 190 × 188 blocks.
+  std::vector<std::optional<MasonryUnit>> units(
+      r.measurement.walls.size(), MasonryUnit{.length = 250_mm, .width = 120_mm, .height = 65_mm});
+  units.back() = MasonryUnit{.length = 390_mm, .width = 190_mm, .height = 188_mm};
+  const Masonry masonry =
+      count_masonry(r.measurement.walls, units, masonry_joints(rules).value()).value();
+
+  const auto all = rules.run(r.measurement, masonry, {});
+
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  const auto lines = lines_of(*all, "masonry");
+  ASSERT_EQ(lines.size(), 4U);
+  ASSERT_EQ(masonry.by_unit.size(), 2U);
+  EXPECT_EQ(amount(lines, "masonry_unit.250x120x65"), std::ceil(masonry.by_unit[0].units * 1.03));
+  EXPECT_EQ(amount(lines, "masonry_unit.390x190x188"), std::ceil(masonry.by_unit[1].units * 1.03));
+  EXPECT_DOUBLE_EQ(amount(lines, "mortar"), masonry.mortar * 1.07);
 }
 
 TEST(Content, MasonryRuleUsesPracticeDefaults) {
@@ -135,7 +180,7 @@ TEST(Content, MasonryRuleUsesPracticeDefaults) {
   const auto lines = lines_of(*all, "masonry");
   ASSERT_EQ(lines.size(), 3U);
   // 58.24 m² of face, three wythes: 8 727.3 net units.
-  EXPECT_EQ(amount(lines, "masonry_unit"), std::ceil(r.masonry.units * 1.03));
+  EXPECT_EQ(amount(lines, "masonry_unit.250x120x65"), std::ceil(r.masonry.units * 1.03));
   EXPECT_DOUBLE_EQ(amount(lines, "mortar"), r.masonry.mortar * 1.07);
   // СП 82-101-98: 300 kg of М400 cement per m³ of М100 mortar.
   EXPECT_DOUBLE_EQ(amount(lines, "mortar.cement"), r.masonry.mortar * 1.07 * 300);
@@ -153,7 +198,7 @@ TEST(Content, MasonryRuleFollowsJobSettings) {
 
   ASSERT_TRUE(all.has_value()) << all.error().message;
   const auto lines = lines_of(*all, "masonry");
-  EXPECT_EQ(amount(lines, "masonry_unit"), std::ceil(r.masonry.units * 1.05));
+  EXPECT_EQ(amount(lines, "masonry_unit.250x120x65"), std::ceil(r.masonry.units * 1.05));
   EXPECT_DOUBLE_EQ(amount(lines, "mortar.cement"), r.masonry.mortar * 1.1 * 330);
 }
 
@@ -185,7 +230,7 @@ TEST(Content, WindowAndLintelSaveBricksAndMortar) {
   // cells each.
   const double holes = 2.25 + (2.0 * 0.14);
   EXPECT_NEAR(solid.masonry.units - with_window.masonry.units, holes * 3 / (0.26 * 0.077), 1e-6);
-  EXPECT_EQ(amount(lines_of(*all, "masonry"), "masonry_unit"),
+  EXPECT_EQ(amount(lines_of(*all, "masonry"), "masonry_unit.250x120x65"),
             std::ceil(with_window.masonry.units * 1.03));
   EXPECT_LT(with_window.masonry.mortar, solid.masonry.mortar);
 }
@@ -225,9 +270,11 @@ TEST(Content, RingBeamTopsTheLoadBearingWalls) {
 
 TEST(Content, RingBeamFollowsIntensityHeightAndConcrete) {
   const RuleSet rules = content();
-  const Room r = room(rules);
-  const Settings settings{
-      {"seismic_intensity", 8.0}, {"ring_beam_height", 250.0}, {"ring_beam_concrete", 12.5}};
+  Room r = room(rules);
+  for (WallQuantities& measured : r.measurement.walls) {
+    measured.ring_beam = 0.25;
+  }
+  const Settings settings{{"seismic_intensity", 8.0}, {"ring_beam_concrete", 12.5}};
   const auto all = rules.run(r.measurement, r.masonry, settings);
 
   ASSERT_TRUE(all.has_value()) << all.error().message;
@@ -235,18 +282,24 @@ TEST(Content, RingBeamFollowsIntensityHeightAndConcrete) {
   EXPECT_NEAR(amount(lines, "concrete.b12_5"), 20.8 * 0.38 * 0.25 * 1.028, 1e-9);
   EXPECT_NEAR(amount(lines, "rebar.a500c.d10"), 20.8 * 4 * 0.617 * 1.07, 1e-9);
 
+  // Below 7 points the norm asks for no beam; one that was chosen is detailed as at 7.
   const auto calm = rules.run(r.measurement, r.masonry, {{"seismic_intensity", 6.0}});
   ASSERT_TRUE(calm.has_value()) << calm.error().message;
-  EXPECT_TRUE(lines_of(*calm, "ring_beam").empty());
+  EXPECT_NEAR(amount(lines_of(*calm, "ring_beam"), "rebar.a500c.d10"), 20.8 * 4 * 0.617 * 1.07,
+              1e-9);
 }
 
 TEST(Content, RingBeamRejectsValuesBelowTheNorm) {
   const RuleSet rules = content();
   const Room r = room(rules);
+  Room thin = r;
+  for (WallQuantities& measured : thin.measurement.walls) {
+    measured.ring_beam = 0.12;
+  }
 
-  const auto low = rules.run(r.measurement, r.masonry, {{"ring_beam_height", 120.0}});
+  const auto low = rules.run(thin.measurement, thin.masonry, {});
   ASSERT_FALSE(low.has_value());
-  EXPECT_NE(low.error().message.find("ring_beam_height must be at least 150 mm"),
+  EXPECT_NE(low.error().message.find("a ring beam must be at least 150 mm high"),
             std::string::npos);
   const auto weak = rules.run(r.measurement, r.masonry, {{"ring_beam_concrete", 10.0}});
   ASSERT_FALSE(weak.has_value());

@@ -58,6 +58,12 @@ schema::CommandKind to_code(CommandKind kind) {
       return schema::CommandKind::SetWallLocationLine;
     case CommandKind::kRemoveWall:
       return schema::CommandKind::RemoveWall;
+    case CommandKind::kSetWallUnit:
+      return schema::CommandKind::SetWallUnit;
+    case CommandKind::kSetLevelRingBeam:
+      return schema::CommandKind::SetLevelRingBeam;
+    case CommandKind::kSetLevelJunctionMeshes:
+      return schema::CommandKind::SetLevelJunctionMeshes;
     case CommandKind::kAddOpening:
       return schema::CommandKind::AddOpening;
     case CommandKind::kMoveOpening:
@@ -116,6 +122,12 @@ std::optional<CommandKind> from_code(schema::CommandKind kind) {
       return CommandKind::kUndo;
     case schema::CommandKind::Redo:
       return CommandKind::kRedo;
+    case schema::CommandKind::SetWallUnit:
+      return CommandKind::kSetWallUnit;
+    case schema::CommandKind::SetLevelRingBeam:
+      return CommandKind::kSetLevelRingBeam;
+    case schema::CommandKind::SetLevelJunctionMeshes:
+      return CommandKind::kSetLevelJunctionMeshes;
   }
   return std::nullopt;
 }
@@ -126,6 +138,10 @@ schema::LevelField to_code(LevelField field) {
       return schema::LevelField::Elevation;
     case LevelField::kHeight:
       return schema::LevelField::Height;
+    case LevelField::kRingBeam:
+      return schema::LevelField::RingBeam;
+    case LevelField::kJunctionMeshes:
+      return schema::LevelField::JunctionMeshes;
   }
   return schema::LevelField::Elevation;
 }
@@ -136,6 +152,10 @@ std::optional<LevelField> from_code(schema::LevelField field) {
       return LevelField::kElevation;
     case schema::LevelField::Height:
       return LevelField::kHeight;
+    case schema::LevelField::RingBeam:
+      return LevelField::kRingBeam;
+    case schema::LevelField::JunctionMeshes:
+      return LevelField::kJunctionMeshes;
   }
   return std::nullopt;
 }
@@ -152,6 +172,12 @@ schema::WallField to_code(WallField field) {
       return schema::WallField::Height;
     case WallField::kLocationLine:
       return schema::WallField::LocationLine;
+    case WallField::kUnitLength:
+      return schema::WallField::UnitLength;
+    case WallField::kUnitWidth:
+      return schema::WallField::UnitWidth;
+    case WallField::kUnitHeight:
+      return schema::WallField::UnitHeight;
   }
   return schema::WallField::Start;
 }
@@ -168,6 +194,12 @@ std::optional<WallField> from_code(schema::WallField field) {
       return WallField::kHeight;
     case schema::WallField::LocationLine:
       return WallField::kLocationLine;
+    case schema::WallField::UnitLength:
+      return WallField::kUnitLength;
+    case schema::WallField::UnitWidth:
+      return WallField::kUnitWidth;
+    case schema::WallField::UnitHeight:
+      return WallField::kUnitHeight;
   }
   return std::nullopt;
 }
@@ -212,6 +244,14 @@ std::optional<Code> code_of(std::int64_t value) {
     return std::nullopt;
   }
   return static_cast<Code>(value);
+}
+
+std::int64_t number(const LevelValue& value) {
+  return std::visit(Overloaded{
+                        [](Mm length) { return length.value(); },
+                        [](bool on) { return std::int64_t{on ? 1 : 0}; },
+                    },
+                    value);
 }
 
 std::int64_t number(const WallValue& value) {
@@ -265,8 +305,7 @@ flatbuffers::Offset<schema::OpEntry> encode_op(flatbuffers::FlatBufferBuilder& b
           [&builder](const SetLevelField& set) {
             const schema::Uuid key = to_schema(set.id);
             const auto value = schema::CreateSetLevelFieldOp(builder, &key, to_code(set.field),
-                                                             std::get<Mm>(set.before).value(),
-                                                             std::get<Mm>(set.after).value());
+                                                             number(set.before), number(set.after));
             return schema::CreateOpEntry(builder, schema::Op::SetLevelFieldOp, value.Union());
           },
           [&builder](const SetWallField& set) {
@@ -316,10 +355,16 @@ Result<Op> level_op(const schema::SetLevelFieldOp* set) {
   if (!field) {
     return corrupt("unknown level field");
   }
+  const auto value = [&field](std::int64_t number) -> LevelValue {
+    if (*field == LevelField::kJunctionMeshes) {
+      return number != 0;
+    }
+    return Mm{number};
+  };
   return SetLevelField{.id = to_id(set->id()),
                        .field = *field,
-                       .before = Mm{set->before()},
-                       .after = Mm{set->after()}};
+                       .before = value(set->before()),
+                       .after = value(set->after())};
 }
 
 Result<WallValue> wall_value(WallField field, std::int64_t number, const schema::PointMm* at) {
@@ -332,6 +377,9 @@ Result<WallValue> wall_value(WallField field, std::int64_t number, const schema:
       return to_point(*at);
     case WallField::kThickness:
     case WallField::kHeight:
+    case WallField::kUnitLength:
+    case WallField::kUnitWidth:
+    case WallField::kUnitHeight:
       return Mm{number};
     case WallField::kLocationLine: {
       const auto code = code_of<schema::LocationLine>(number);

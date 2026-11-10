@@ -32,6 +32,15 @@ struct Wall {
   Mm thickness;
   Mm height;
   LocationLine location_line = LocationLine::kCenter;
+  // The brick or block the wall is laid from, as laid: along the wall, across it, one course.
+  // All zero until the builder chooses (docs/adr/0008); the explicit initializers let geometry
+  // code build walls without naming a unit.
+  Mm unit_length{};  // NOLINT(readability-redundant-member-init)
+  Mm unit_width{};   // NOLINT(readability-redundant-member-init)
+  Mm unit_height{};  // NOLINT(readability-redundant-member-init)
+
+  // Whether a masonry unit was chosen.
+  [[nodiscard]] constexpr bool has_unit() const { return unit_length > Mm{0}; }
 
   constexpr bool operator==(const Wall&) const = default;
 };
@@ -50,14 +59,17 @@ enum class WallField : std::uint8_t {
   kThickness,
   kHeight,
   kLocationLine,
+  kUnitLength,
+  kUnitWidth,
+  kUnitHeight,
 };
 
 using WallValue = std::variant<PointMm, Mm, LocationLine>;
 
 [[nodiscard]] WallValue get_field(const Wall& wall, WallField field);
 
-// The value's alternative must match the field (PointMm for kStart/kEnd, Mm for kThickness and
-// kHeight, LocationLine for kLocationLine); a mismatch is a programming error.
+// The value's alternative must match the field (PointMm for kStart/kEnd, LocationLine for
+// kLocationLine, Mm for the rest); a mismatch is a programming error.
 void set_field(Wall& wall, WallField field, const WallValue& value);
 
 template <>
