@@ -84,6 +84,13 @@ internal data class Dimension(
     val length: Mm,
 )
 
+/** One storey as it is drawn: its walls, the openings in them and the walls' lengths. */
+internal data class Storey(
+    val outlines: List<WallOutline>,
+    val openings: List<OpeningOutline>,
+    val dimensions: List<Dimension>,
+)
+
 /** A line through an existing wall end that the aimed point lined up with. */
 internal data class Guide(
     val from: PointMm,
@@ -166,6 +173,8 @@ internal data class EditorUiState(
     val openings: List<OpeningOutline> = emptyList(),
     /** The walls of the storey below, drawn faintly to build on. */
     val below: List<WallOutline> = emptyList(),
+    /** Every storey from the bottom up, for a sheet of the whole job. */
+    val storeys: List<Storey> = emptyList(),
     /** What to fix on the current storey. */
     val issues: List<Issue> = emptyList(),
     val dimensions: List<Dimension> = emptyList(),
@@ -831,17 +840,27 @@ internal class EditorViewModel(
         val shown = level ?: ordered.lastOrNull()
         val below = ordered.getOrNull(ordered.indexOf(shown) - 1)
         if (shown != state.value.level) chain.clear()
+        val storeys =
+            ordered.associateWith { storey ->
+                val outlines = wallOutlines.filter { it.level == storey }
+                Storey(
+                    outlines = outlines,
+                    openings = openingOutlines.filter { it.level == storey },
+                    dimensions =
+                        outlines.mapNotNull { outline ->
+                            walls[outline.wall]?.let { Dimension(outline.wall, it, outline.length) }
+                        },
+                )
+            }
         state.update { current ->
             val sameLevel = shown == current.level
             current.copy(
                 levels = ordered,
                 level = shown,
-                outlines = wallOutlines.filter { it.level == shown },
-                dimensions =
-                    wallOutlines
-                        .filter { it.level == shown }
-                        .mapNotNull { outline -> walls[outline.wall]?.let { Dimension(outline.wall, it, outline.length) } },
-                openings = openingOutlines.filter { it.level == shown },
+                storeys = storeys.values.toList(),
+                outlines = storeys[shown]?.outlines.orEmpty(),
+                dimensions = storeys[shown]?.dimensions.orEmpty(),
+                openings = storeys[shown]?.openings.orEmpty(),
                 below = if (below == null) emptyList() else wallOutlines.filter { it.level == below },
                 issues = allIssues.filter { it.level == shown },
                 ringBeam = levels[shown]?.ringBeam ?: 0.mm,

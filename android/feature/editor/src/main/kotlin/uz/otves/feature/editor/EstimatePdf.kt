@@ -10,7 +10,9 @@ import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.text.TextPaint
 import android.text.TextUtils
+import androidx.compose.ui.geometry.Offset
 import androidx.core.content.FileProvider
+import androidx.core.graphics.withRotation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uz.otves.engine.PointM
@@ -21,9 +23,10 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import kotlin.math.atan2
 
 /**
- * The job's materials as a sheet to send: the plan of the shown storey, then every material with
+ * The job's materials as a sheet to send: the plan of every storey, then every material with
  * its amount, the builder's price and the cost, and the total. A4 in points, as many pages as the
  * lines need.
  */
@@ -34,6 +37,7 @@ internal class EstimatePdf(
     private val heading = text(TEXT_SIZE, SECONDARY)
     private val body = text(TEXT_SIZE, INK)
     private val quiet = text(TEXT_SIZE, SECONDARY)
+    private val small = text(LABEL_SIZE, SECONDARY)
     private val strong = text(TOTAL_SIZE, INK, bold = true)
     private val rule = Paint().apply { color = DIVIDER }
     private val wallFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = WALL }
@@ -57,7 +61,7 @@ internal class EstimatePdf(
         val document = PdfDocument()
         val sheet = Sheet(document)
         sheet.header(state, date)
-        sheet.plan(state)
+        sheet.plans(state)
         sheet.table(state)
         sheet.finish()
         document.writeTo(out)
@@ -102,41 +106,102 @@ internal class EstimatePdf(
             y += LINE
         }
 
-        // The shown storey's walls with their openings cut out, as large as the box allows.
-        fun plan(state: EditorUiState) {
-            val points = state.outlines.flatMap { it.points }
-            if (points.isEmpty()) return
+        // Each storey's walls with their openings cut out and their lengths written beside them, as
+        // large as the box allows.
+        fun plans(state: EditorUiState) {
+            state.storeys.forEachIndexed { index, storey ->
+                if (storey.outlines.isNotEmpty()) plan(storey, resources.getString(R.string.level_name, index + 1))
+            }
+        }
+
+        private fun plan(
+            storey: Storey,
+            name: String,
+        ) {
+            val points = storey.outlines.flatMap { it.points }
             val left = points.minOf { it.x }
             val bottom = points.minOf { it.y }
             val wide = (points.maxOf { it.x } - left).coerceAtLeast(MIN_EXTENT)
             val tall = (points.maxOf { it.y } - bottom).coerceAtLeast(MIN_EXTENT)
-            val scale = minOf(CONTENT / wide, PLAN_HEIGHT / tall).toFloat()
-            val height = (tall * scale).toFloat()
-            val storey = state.levels.indexOf(state.level) + 1
-            canvas.drawText(resources.getString(R.string.level_name, storey), MARGIN, y + TEXT_SIZE, heading)
+            // Room around the walls for the lengths written outside them.
+            val scale = minOf((CONTENT - 2 * LABEL_ROOM) / wide, (PLAN_HEIGHT - 2 * LABEL_ROOM) / tall).toFloat()
+            val height = (tall * scale).toFloat() + 2 * LABEL_ROOM
+            room(LINE + height)
+            canvas.drawText(name, MARGIN, y + TEXT_SIZE, heading)
             y += LINE
             val top = y
+
+            fun at(
+                x: Double,
+                up: Double,
+            ) = Offset(MARGIN + LABEL_ROOM + ((x - left) * scale).toFloat(), top + height - LABEL_ROOM - ((up - bottom) * scale).toFloat())
 
             fun path(outline: List<PointM>) =
                 Path().apply {
                     outline.forEachIndexed { index, point ->
-                        val x = MARGIN + ((point.x - left) * scale).toFloat()
-                        val down = top + height - ((point.y - bottom) * scale).toFloat()
-                        if (index == 0) moveTo(x, down) else lineTo(x, down)
+                        val corner = at(point.x, point.y)
+                        if (index == 0) moveTo(corner.x, corner.y) else lineTo(corner.x, corner.y)
                     }
                     close()
                 }
-            for (outline in state.outlines) {
+            val chosen =
+                storey.dimensions
+                    .filter { it.wall.unit != null }
+                    .map { it.id }
+                    .toSet()
+            for (outline in storey.outlines) {
                 val wall = path(outline.points)
-                if (outline.wall !in state.unchosen) canvas.drawPath(wall, wallFill)
+                if (outline.wall in chosen) canvas.drawPath(wall, wallFill)
                 canvas.drawPath(wall, wallEdge)
             }
-            for (opening in state.openings) {
+            for (opening in storey.openings) {
                 val hole = path(opening.points)
                 canvas.drawPath(hole, gap)
                 canvas.drawPath(hole, wallEdge)
             }
-            y += height + LINE
+            val bodies = storey.outlines.map { outline -> outline.wall to outline.points.map { at(it.x, it.y) } }
+            val written = mutableListOf<Offset>()
+            for (dimension in storey.dimensions) {
+                val others = bodies.filter { it.first != dimension.id }.map { it.second }
+                length(dimension, scale, others, written, ::at)
+            }
+            y += height + ROW_GAP
+        }
+
+        // The wall's length beside it and along it: by one face at the middle unless another wall
+        // or another length lies there, then by the other face or nearer an end.
+        private fun length(
+            dimension: Dimension,
+            scale: Float,
+            others: List<List<Offset>>,
+            written: MutableList<Offset>,
+            at: (Double, Double) -> Offset,
+        ) {
+            val wall = dimension.wall
+            val start = at(wall.start.x.value / MM_PER_METRE, wall.start.y.value / MM_PER_METRE)
+            val end = at(wall.end.x.value / MM_PER_METRE, wall.end.y.value / MM_PER_METRE)
+            val run = end - start
+            val long = run.getDistance()
+            val label = dimension.length.value.toString()
+            val width = small.measureText(label)
+            if (long == 0f || width > long) return
+            val along = run / long
+            val side = Offset(along.y, -along.x)
+            val away = (wall.thickness.value / 2 / MM_PER_METRE * scale).toFloat() + LABEL_SIZE
+            val half = along * (width / 2)
+            val places = LABEL_PLACES.flatMap { part -> listOf(start + run * part + side * away, start + run * part - side * away) }
+            val free = { place: Offset ->
+                others.none { inside(place, it) || inside(place - half, it) || inside(place + half, it) } &&
+                    written.none { (it - place).getDistance() < width }
+            }
+            val centre = places.firstOrNull(free) ?: places.first()
+            written += centre
+            var degrees = Math.toDegrees(atan2(run.y, run.x).toDouble()).toFloat()
+            // Never upside down, and on an upright wall read from the bottom up, as on drawings.
+            if (degrees >= QUARTER_TURN || degrees < -QUARTER_TURN) degrees += HALF_TURN
+            canvas.withRotation(degrees, centre.x, centre.y) {
+                drawText(label, centre.x - width / 2, centre.y + LABEL_SIZE / 3, small)
+            }
         }
 
         fun table(state: EditorUiState) {
@@ -226,6 +291,14 @@ internal class EstimatePdf(
         const val ROW_GAP = 6f
         const val ROW = TEXT_SIZE + 2 * ROW_GAP
         const val HAIRLINE = 0.6f
+        const val LABEL_SIZE = 7f
+        const val LABEL_ROOM = 14f
+        const val MM_PER_METRE = 1000.0
+        const val QUARTER_TURN = 90f
+        const val HALF_TURN = 180f
+
+        // Where along a wall its length may be written, the middle first.
+        val LABEL_PLACES = listOf(0.5f, 0.3f, 0.7f)
 
         // A single short wall is not blown up to fill the box: at least this many metres show.
         const val MIN_EXTENT = 4.0

@@ -148,9 +148,10 @@ internal fun PlanCanvas(
             drawPath(path, colors.ink, style = Stroke(width = wallStroke))
         }
         val bodies = outlines.map { outline -> outline.wall to outline.points.map { view.toScreen(it.x, it.y) } }
+        val written = mutableListOf<Offset>()
         for (dimension in dimensions) {
             val others = bodies.filter { it.first != dimension.id }.map { it.second }
-            dimension(view, dimension, measurer.measure(dimension.length.value.toString(), labelStyle), labelGap, others)
+            dimension(view, dimension, measurer.measure(dimension.length.value.toString(), labelStyle), labelGap, others, written)
         }
         // The selection in the plan's only accent colour; openings stay cut out of a selected wall.
         outlines.find { it.wall == selected }?.let { outline ->
@@ -301,7 +302,7 @@ private fun path(
     }
 
 // The wall's length beside it, along the wall and never upside down: by its left face at the
-// middle unless another wall lies there, then by the other face or nearer an end. Left out when
+// middle unless another wall or another length lies there, then by the other face or nearer an end. Left out when
 // the wall is too short on screen to hold it.
 private fun DrawScope.dimension(
     view: PlanView,
@@ -309,6 +310,7 @@ private fun DrawScope.dimension(
     label: TextLayoutResult,
     gap: Float,
     others: List<List<Offset>>,
+    written: MutableList<Offset>,
 ) {
     val wall = dimension.wall
     val start = view.toScreen(wall.start.x.value / MM_PER_METRE, wall.start.y.value / MM_PER_METRE)
@@ -331,9 +333,12 @@ private fun DrawScope.dimension(
     val half = along * (label.size.width / 2f)
     val places =
         LABEL_PLACES.flatMap { along -> listOf(start + run * along + left * toLeft, start + run * along - left * toRight) }
-    val centre =
-        places.firstOrNull { at -> others.none { body -> inside(at, body) || inside(at - half, body) || inside(at + half, body) } }
-            ?: places.first()
+    val free = { at: Offset ->
+        others.none { body -> inside(at, body) || inside(at - half, body) || inside(at + half, body) } &&
+            written.none { (it - at).getDistance() < label.size.width }
+    }
+    val centre = places.firstOrNull(free) ?: places.first()
+    written += centre
     var degrees = angle(run)
     // Upright, and on an upright wall read from the bottom up, as on drawings.
     if (degrees >= QUARTER_TURN || degrees < -QUARTER_TURN) degrees += HALF_TURN
@@ -397,8 +402,8 @@ private fun DrawScope.opening(
     }
 }
 
-// Whether a screen point lies inside a polygon, by counting the edges a ray to the right crosses.
-private fun inside(
+// Whether a point lies inside a polygon, by counting the edges a ray to the right crosses.
+internal fun inside(
     point: Offset,
     polygon: List<Offset>,
 ): Boolean {
