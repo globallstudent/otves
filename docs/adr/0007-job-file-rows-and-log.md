@@ -37,6 +37,8 @@ Version 2 adds `ring_beam` and `junction_meshes` to `level` and `unit_length`, `
 
 Version 3 adds the `conditions` table ([ADR 0009](0009-job-conditions.md)).
 
+Version 4 adds `footing_width` and `footing_depth` to `level` ([ADR 0010](0010-strip-footing-on-a-level.md)).
+
 Ids are canonical UUID text. Lengths are whole millimetres. Enums are the codes of `schema/engine.fbs`.
 
 ## Consequences
