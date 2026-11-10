@@ -92,6 +92,8 @@ internal data class Draft(
     val start: PointMm,
     val end: PointMm? = null,
     val guides: List<Guide> = emptyList(),
+    /** [end] lies on another wall, between its ends: the wall will meet it there. */
+    val meets: Boolean = false,
 ) {
     /** Along the wall's axis, as the engine will report it. */
     val length: Mm?
@@ -278,7 +280,7 @@ internal class EditorViewModel(
             return
         }
         val snapped = snap(at, reach, from = draft.start)
-        state.update { it.copy(draft = draft.copy(end = snapped.point, guides = snapped.guides)) }
+        state.update { it.copy(draft = draft.copy(end = snapped.point, guides = snapped.guides, meets = snapped.onWall)) }
     }
 
     /** A second finger came down: the plan moves instead, and the point is not placed. */
@@ -286,7 +288,7 @@ internal class EditorViewModel(
         val started = aimStartedDraft
         aimStartedDraft = false
         state.update { current ->
-            current.copy(draft = if (started) null else current.draft?.copy(end = null, guides = emptyList()))
+            current.copy(draft = if (started) null else current.draft?.let { Draft(it.start) })
         }
     }
 
@@ -298,11 +300,11 @@ internal class EditorViewModel(
         val onLevel = current.level ?: return
         val end = draft.end
         if (end == null || end == draft.start) {
-            state.update { it.copy(draft = draft.copy(end = null, guides = emptyList())) }
+            state.update { it.copy(draft = Draft(draft.start)) }
             return
         }
-        // A wall that ends on another wall's end closes the run.
-        val closes = end in chain || walls.values.any { it.level == onLevel && (it.start == end || it.end == end) }
+        // A wall that ends on another wall closes the run.
+        val closes = draft.meets || end in chain || walls.values.any { it.level == onLevel && (it.start == end || it.end == end) }
         if (chain.isEmpty()) chain += draft.start
         chain += end
         if (closes) chain.clear()
@@ -632,13 +634,15 @@ internal class EditorViewModel(
     private data class Snapped(
         val point: PointMm,
         val guides: List<Guide> = emptyList(),
+        val onWall: Boolean = false,
     )
 
     // Where a touch lands. Ends join only where points are equal to the millimetre, so a touch
     // within reach of a wall end lands on it; ends on the storey below count too, so walls stand
     // on walls. Otherwise a wall from [from] turns onto the nearer axis (always with the 90° lock,
     // else within a few degrees of it), and each free coordinate lines up with a wall end within
-    // reach or falls on the grid.
+    // reach or falls on the grid. A point within reach of another wall's axis then lands on it,
+    // so a partition meets the wall along its length.
     private fun snap(
         at: PointMm,
         reach: Mm,
@@ -677,7 +681,66 @@ internal class EditorViewModel(
                 from != null && alongY -> PointMm(from.x, line(at.y) { it.y })
                 else -> PointMm(line(at.x) { it.x }, line(at.y) { it.y })
             }
+        val constraint =
+            when {
+                from != null && alongX -> Axis.X
+                from != null && alongY -> Axis.Y
+                else -> null
+            }
+        val met =
+            walls.values
+                .filter { it.level == current.level }
+                .mapNotNull { onAxis(it, at, point, constraint) }
+                .minByOrNull { distance(it, at) }
+                ?.takeIf { distance(it, at) <= reach.value }
+        if (met != null) {
+            return Snapped(met, guides.filter { it.from.x == met.x || it.from.y == met.y }.map { it.copy(to = met) }, onWall = true)
+        }
         return Snapped(point, guides.map { it.copy(to = point) })
+    }
+
+    private enum class Axis { X, Y }
+
+    // The point of [wall]'s axis, strictly between its ends, where a touch [at] already snapped
+    // to [snapped] would meet it: along the [constraint] axis through [snapped] when the wall
+    // being drawn is held to one, else the nearest point, keeping the snapped coordinate along a
+    // wall that runs along an axis. Null when there is no such point.
+    private fun onAxis(
+        wall: Wall,
+        at: PointMm,
+        snapped: PointMm,
+        constraint: Axis?,
+    ): PointMm? {
+        val ux = wall.end.x.value - wall.start.x.value
+        val uy = wall.end.y.value - wall.start.y.value
+        val inside = { t: Double -> t > 0.0 && t < 1.0 }
+        val along = { t: Double ->
+            PointMm(Mm(wall.start.x.value + (t * ux).roundToLong()), Mm(wall.start.y.value + (t * uy).roundToLong()))
+        }
+        return when (constraint) {
+            Axis.X -> {
+                val t = if (uy == 0L) -1.0 else (snapped.y.value - wall.start.y.value).toDouble() / uy
+                if (inside(t)) along(t).copy(y = snapped.y) else null
+            }
+
+            Axis.Y -> {
+                val t = if (ux == 0L) -1.0 else (snapped.x.value - wall.start.x.value).toDouble() / ux
+                if (inside(t)) along(t).copy(x = snapped.x) else null
+            }
+
+            null -> {
+                val length = (ux * ux + uy * uy).toDouble()
+                val keepY = ux == 0L && inside((snapped.y.value - wall.start.y.value).toDouble() / uy)
+                val keepX = uy == 0L && inside((snapped.x.value - wall.start.x.value).toDouble() / ux)
+                val t = ((at.x.value - wall.start.x.value) * ux + (at.y.value - wall.start.y.value) * uy) / length
+                when {
+                    keepY -> PointMm(wall.start.x, snapped.y)
+                    keepX -> PointMm(snapped.x, wall.start.y)
+                    inside(t) -> along(t)
+                    else -> null
+                }
+            }
+        }
     }
 
     private fun distance(

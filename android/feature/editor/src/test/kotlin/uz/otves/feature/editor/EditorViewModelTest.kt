@@ -450,6 +450,38 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun aPartitionMeetsTheWallAlongItsLengthAndEndsTheRun() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
+        viewModel.finishWall()
+
+        // Starts on the wall, 3 m along it, though the finger is 180 mm off.
+        viewModel.tap(PointMm(3_020.mm, 180.mm), reach)
+        assertThat(
+            viewModel.uiState.value.draft
+                ?.start,
+        ).isEqualTo(PointMm(3_000.mm, 0.mm))
+        viewModel.tap(PointMm(3_100.mm, 2_530.mm), reach)
+        assertThat((engine.sent.last().single() as EngineCommand.AddWall).wall.end).isEqualTo(PointMm(3_000.mm, 2_500.mm))
+
+        // Back down onto the first wall: the 90° lock keeps x, the wall gives y.
+        viewModel.finishWall()
+        viewModel.tap(PointMm(5_000.mm, 2_000.mm), reach)
+        viewModel.aim(PointMm(5_060.mm, 150.mm), reach)
+        assertThat(
+            viewModel.uiState.value.draft
+                ?.end,
+        ).isEqualTo(PointMm(5_000.mm, 0.mm))
+        assertThat(
+            viewModel.uiState.value.draft
+                ?.meets,
+        ).isTrue()
+        viewModel.commit()
+        assertThat(viewModel.uiState.value.draft).isNull()
+    }
+
+    @Test
     fun aSecondFingerDropsThePointBeingAimed() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
 
