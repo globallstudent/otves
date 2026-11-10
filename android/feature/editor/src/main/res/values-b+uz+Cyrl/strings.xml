@@ -102,4 +102,6 @@
     <string name="takeoff_total">Жами</string>
     <string name="takeoff_unpriced">Нархсиз қаторлар: %1$d</string>
     <string name="takeoff_share_total">Жами: %1$s</string>
+    <string name="item_sand">Қоришма учун қум</string>
+    <string name="item_cement_bags">Цемент, %1$s кг ли қоп</string>
 </resources>

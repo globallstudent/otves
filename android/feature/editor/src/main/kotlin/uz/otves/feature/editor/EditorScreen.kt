@@ -995,7 +995,8 @@ private fun TakeoffPanel(
                 }
                 Advice(state, IssueKind.JUNCTION_MESHES_MISSING)
                 LazyColumn(modifier = Modifier.padding(top = 8.dp).heightIn(max = TakeoffHeight)) {
-                    items(lines) { line -> TakeoffLine(line, state, actions.onPrice) }
+                    val bought = bought(lines)
+                    items(lines) { line -> if (line in bought) TakeoffLine(line, state, actions.onPrice) else MixLine(line, state) }
                 }
                 Total(lines, state.prices)
                 PanelAction(stringResource(R.string.conditions_title), { actions.onConditions(true) })
@@ -1019,10 +1020,12 @@ private fun takeoffText(
     prices: Map<String, Money>,
 ): String {
     val title = stringResource(R.string.takeoff_share_title, name.ifBlank { stringResource(R.string.editor_title) })
+    val bought = bought(lines)
     val rows =
         lines.map { line ->
             val amount = stringResource(R.string.takeoff_share_line, itemName(line.item, units), amountText(line), unitName(line.unit))
-            cost(line, prices)?.let { stringResource(R.string.takeoff_share_cost, amount, moneyText(it)) } ?: amount
+            cost(line, prices)?.takeIf { line in bought }?.let { stringResource(R.string.takeoff_share_cost, amount, moneyText(it)) }
+                ?: amount
         }
     val sum = total(lines, prices)?.let { listOf("", stringResource(R.string.takeoff_share_total, moneyText(it))) }.orEmpty()
     return (listOf(title, "") + rows + sum).joinToString("\n")
@@ -1063,6 +1066,21 @@ private fun TakeoffLine(
     }
 }
 
+// A material mixed on site from the lines after it: how much of it, for the mixer; it has no price
+// of its own.
+@Composable
+private fun MixLine(
+    line: QuantityLine,
+    state: EditorUiState,
+) {
+    val colors = OtvesTheme.colors
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(itemName(line.item, state.catalog.units), color = colors.inkSecondary, modifier = Modifier.weight(1f))
+        Text("${amountText(line)} ${unitName(line.unit)}", color = colors.inkSecondary)
+    }
+    HorizontalDivider(color = colors.divider)
+}
+
 // What the priced materials come to, and how many still have no price.
 @Composable
 private fun Total(
@@ -1070,7 +1088,7 @@ private fun Total(
     prices: Map<String, Money>,
 ) {
     val sum = total(lines, prices) ?: return
-    val unpriced = lines.count { it.item !in prices }
+    val unpriced = bought(lines).count { it.item !in prices }
     Row(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
             Text(stringResource(R.string.takeoff_total), style = MaterialTheme.typography.titleMedium)

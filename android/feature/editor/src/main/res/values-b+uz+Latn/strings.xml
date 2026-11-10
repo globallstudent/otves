@@ -102,4 +102,6 @@
     <string name="takeoff_total">Jami</string>
     <string name="takeoff_unpriced">Narxsiz qatorlar: %1$d</string>
     <string name="takeoff_share_total">Jami: %1$s</string>
+    <string name="item_sand">Qorishma uchun qum</string>
+    <string name="item_cement_bags">Sement, %1$s kg li qop</string>
 </resources>

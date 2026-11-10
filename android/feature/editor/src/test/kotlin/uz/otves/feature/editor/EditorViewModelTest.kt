@@ -989,6 +989,31 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun onlyThePartsOfAMixAreBoughtAndTotalled() {
+        val lines =
+            listOf(
+                QuantityLine("masonry", "masonry_unit.250x120x65", QuantityUnit.PIECE, 1_000.0),
+                QuantityLine("masonry", "mortar", QuantityUnit.CUBIC_METRE, 1.0),
+                QuantityLine("masonry", "mortar.cement", QuantityUnit.KILOGRAM, 300.0),
+                QuantityLine("masonry", "mortar.cement.bag50", QuantityUnit.PIECE, 6.0),
+                QuantityLine("masonry", "mortar.sand", QuantityUnit.CUBIC_METRE, 1.18),
+            )
+        val sum = { whole: Long -> Money(whole * 100, Currency.UZS) }
+        // A price left on the mortar or on the cement by weight is not counted twice.
+        val prices =
+            mapOf(
+                "mortar" to sum(650_000),
+                "mortar.cement" to sum(1_400),
+                "mortar.cement.bag50" to sum(70_000),
+                "mortar.sand" to sum(150_000),
+            )
+
+        assertThat(bought(lines).map { it.item }).containsExactly("masonry_unit.250x120x65", "mortar.cement.bag50", "mortar.sand").inOrder()
+        // Six bags and 1,18 m³ of sand.
+        assertThat(total(lines, prices)).isEqualTo(sum(6 * 70_000 + 177_000))
+    }
+
+    @Test
     fun aCostFollowsTheAmountAsItIsShown() {
         // 5,256 m³ shows as 5,26; at 650 000 sum a cubic metre that is 3 419 000, not 3 416 400.
         val mortar = QuantityLine("masonry", "mortar", QuantityUnit.CUBIC_METRE, 5.256)

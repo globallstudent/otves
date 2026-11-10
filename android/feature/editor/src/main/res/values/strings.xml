@@ -111,4 +111,6 @@
     <string name="takeoff_unpriced">Позиций без цены: %1$d</string>
     <string name="takeoff_share_cost" translatable="false">%1$s — %2$s</string>
     <string name="takeoff_share_total">Итого: %1$s</string>
+    <string name="item_sand">Песок для раствора</string>
+    <string name="item_cement_bags">Цемент, мешки по %1$s кг</string>
 </resources>

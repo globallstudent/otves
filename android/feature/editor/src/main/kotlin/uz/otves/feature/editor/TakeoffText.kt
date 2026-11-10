@@ -25,6 +25,7 @@ internal fun itemName(
     item: String,
     units: List<MasonryUnitOption>,
 ): String {
+    val bags = Regex("""mortar\.cement\.bag(\d+)""").matchEntire(item)
     val masonry = Regex("""masonry_unit\.(\d+)x(\d+)x(\d+)""").matchEntire(item)
     val concrete = Regex("""concrete\.b(\d+)(?:_(\d+))?""").matchEntire(item)
     val rebar = Regex("""rebar\.a(\d+)c\.d(\d+)""").matchEntire(item)
@@ -41,6 +42,14 @@ internal fun itemName(
 
         item == "mortar.cement" -> {
             stringResource(R.string.item_cement)
+        }
+
+        item == "mortar.sand" -> {
+            stringResource(R.string.item_sand)
+        }
+
+        bags != null -> {
+            stringResource(R.string.item_cement_bags, bags.groupValues[1])
         }
 
         item == "mesh.junction" -> {
@@ -119,18 +128,25 @@ private fun shownDigits(unit: QuantityUnit): Int =
         QuantityUnit.METRE, QuantityUnit.SQUARE_METRE, QuantityUnit.CUBIC_METRE -> 2
     }
 
+/**
+ * The lines the builder buys. A line whose item other lines continue after a dot is made of them
+ * (`mortar` of `mortar.cement` and `mortar.sand`), so the parts are bought and priced, not the whole.
+ */
+internal fun bought(lines: List<QuantityLine>): List<QuantityLine> =
+    lines.filter { line -> lines.none { it.item.startsWith(line.item + ".") } }
+
 /** What the line costs at the builder's price: the amount as it is shown, times the price of one. */
 internal fun cost(
     line: QuantityLine,
     prices: Map<String, Money>,
 ): Money? = prices[line.item]?.let { it * BigDecimal.valueOf(line.amount).setScale(shownDigits(line.unit), RoundingMode.HALF_UP) }
 
-/** The sum of the priced lines, or null when none has a price or their currencies differ. */
+/** The sum of the priced lines the builder buys, or null when none has a price or their currencies differ. */
 internal fun total(
     lines: List<QuantityLine>,
     prices: Map<String, Money>,
 ): Money? {
-    val costs = lines.mapNotNull { cost(it, prices) }
+    val costs = bought(lines).mapNotNull { cost(it, prices) }
     if (costs.isEmpty() || costs.any { it.currency != costs.first().currency }) return null
     return costs.reduce(Money::plus)
 }
