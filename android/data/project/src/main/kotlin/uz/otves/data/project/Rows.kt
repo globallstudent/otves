@@ -5,7 +5,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// Tables of a job file, schema version 3 (docs/adr/0007, 0008, 0009). Ids are canonical UUID text, lengths
+// Tables of a job file, schema version 4 (docs/adr/0007 to 0010). Ids are canonical UUID text, lengths
 // whole millimetres, enums the codes of schema/engine.fbs.
 
 @Entity(tableName = "job")
@@ -23,6 +23,9 @@ internal data class LevelRow(
     val height: Long,
     @ColumnInfo(name = "ring_beam", defaultValue = "0") val ringBeam: Long,
     @ColumnInfo(name = "junction_meshes", defaultValue = "0") val junctionMeshes: Boolean,
+    // The strip footing's section; both zero for none.
+    @ColumnInfo(name = "footing_width", defaultValue = "0") val footingWidth: Long,
+    @ColumnInfo(name = "footing_depth", defaultValue = "0") val footingDepth: Long,
 )
 
 @Entity(tableName = "wall", indices = [Index("level_id")])

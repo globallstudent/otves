@@ -113,7 +113,15 @@ public data class Level(
     public val height: Mm,
     public val ringBeam: Mm = Mm(0),
     public val junctionMeshes: Boolean = false,
+    /** The strip footing under the storey's load-bearing walls (docs/adr/0010); null for none. */
+    public val footing: Footing? = null,
 ) : EngineElement
+
+/** The section of a strip footing: how wide and how deep it is cast. */
+public data class Footing(
+    public val width: Mm,
+    public val depth: Mm,
+)
 
 /**
  * What the job is estimated under (docs/adr/0009); a null value is left to the norm default.

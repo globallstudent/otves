@@ -29,7 +29,12 @@ class MigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(3).use { connection ->
+        helper.runMigrationsAndValidate(4).use { connection ->
+            // docs/adr/0010: no footing until the builder gives one.
+            connection.prepare("SELECT footing_width, footing_depth FROM level").use { level ->
+                assertThat(level.step()).isTrue()
+                assertThat((0..1).map(level::getLong)).containsExactly(0L, 0L).inOrder()
+            }
             // docs/adr/0009: no conditions yet, so the norms' defaults apply.
             connection.prepare("SELECT COUNT(*) FROM conditions").use { conditions ->
                 assertThat(conditions.step()).isTrue()

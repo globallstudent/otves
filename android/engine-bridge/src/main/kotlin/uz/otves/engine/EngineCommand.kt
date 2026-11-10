@@ -61,6 +61,12 @@ public sealed interface EngineCommand {
         public val height: Mm,
     ) : EngineCommand
 
+    /** The strip footing under the storey's load-bearing walls; null removes it. */
+    public data class SetLevelFooting(
+        public val level: ElementId,
+        public val footing: Footing?,
+    ) : EngineCommand
+
     public data class SetLevelJunctionMeshes(
         public val level: ElementId,
         public val meshes: Boolean,

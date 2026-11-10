@@ -4,6 +4,7 @@ import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.engine.Conditions
 import uz.otves.engine.EngineElement
+import uz.otves.engine.Footing
 import uz.otves.engine.Level
 import uz.otves.engine.LocationLine
 import uz.otves.engine.LogEntry
@@ -28,7 +29,16 @@ internal fun ElementId.key(): String = uuid.toString()
 
 internal fun elementId(key: String): ElementId = ElementId(Uuid.parse(key))
 
-internal fun Level.row(id: ElementId): LevelRow = LevelRow(id.key(), elevation.value, height.value, ringBeam.value, junctionMeshes)
+internal fun Level.row(id: ElementId): LevelRow =
+    LevelRow(
+        id.key(),
+        elevation.value,
+        height.value,
+        ringBeam.value,
+        junctionMeshes,
+        footing?.width?.value ?: 0,
+        footing?.depth?.value ?: 0,
+    )
 
 internal fun Wall.row(id: ElementId): WallRow =
     WallRow(
@@ -74,7 +84,14 @@ internal fun ConditionsRow.element(): Pair<ElementId, EngineElement> =
     elementId(id) to Conditions(seismicIntensity, cementGrade, mortarGrade, unitWaste, mortarWaste)
 
 internal fun LevelRow.element(): Pair<ElementId, EngineElement> =
-    elementId(id) to Level(Mm(elevation), Mm(height), Mm(ringBeam), junctionMeshes)
+    elementId(id) to
+        Level(
+            Mm(elevation),
+            Mm(height),
+            Mm(ringBeam),
+            junctionMeshes,
+            footing = if (footingWidth > 0) Footing(Mm(footingWidth), Mm(footingDepth)) else null,
+        )
 
 internal fun WallRow.element(): Pair<ElementId, EngineElement> =
     elementId(id) to

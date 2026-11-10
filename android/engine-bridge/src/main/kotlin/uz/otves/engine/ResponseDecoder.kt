@@ -191,6 +191,8 @@ internal object ResponseDecoder {
             height = Mm(level.height()),
             ringBeam = Mm(level.ringBeam()),
             junctionMeshes = level.junctionMeshes(),
+            // The engine keeps the two sizes both zero or both positive.
+            footing = if (level.footingWidth() > 0) Footing(Mm(level.footingWidth()), Mm(level.footingDepth())) else null,
         )
 
     private fun wall(wall: WallTable): Wall =

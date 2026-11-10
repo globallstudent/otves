@@ -34,6 +34,7 @@ import uz.otves.schema.ResizeOpening as ResizeOpeningTable
 import uz.otves.schema.Script as ScriptTable
 import uz.otves.schema.SetCondition as SetConditionTable
 import uz.otves.schema.SetLevelElevation as SetLevelElevationTable
+import uz.otves.schema.SetLevelFooting as SetLevelFootingTable
 import uz.otves.schema.SetLevelHeight as SetLevelHeightTable
 import uz.otves.schema.SetLevelJunctionMeshes as SetLevelJunctionMeshesTable
 import uz.otves.schema.SetLevelRingBeam as SetLevelRingBeamTable
@@ -85,6 +86,14 @@ internal object RequestEncoder {
                 SetLevelRingBeamTable.addLevel(this, uuid(command.level))
                 SetLevelRingBeamTable.addHeight(this, command.height.value)
                 Command.SetLevelRingBeam to SetLevelRingBeamTable.endSetLevelRingBeam(this)
+            }
+
+            is EngineCommand.SetLevelFooting -> {
+                SetLevelFootingTable.startSetLevelFooting(this)
+                SetLevelFootingTable.addLevel(this, uuid(command.level))
+                SetLevelFootingTable.addWidth(this, command.footing?.width?.value ?: 0)
+                SetLevelFootingTable.addDepth(this, command.footing?.depth?.value ?: 0)
+                Command.SetLevelFooting to SetLevelFootingTable.endSetLevelFooting(this)
             }
 
             is EngineCommand.SetLevelJunctionMeshes -> {
@@ -300,7 +309,15 @@ internal object RequestEncoder {
         )
 
     private fun FlatBufferBuilder.level(level: Level): Int =
-        LevelTable.createLevel(this, level.elevation.value, level.height.value, level.ringBeam.value, level.junctionMeshes)
+        LevelTable.createLevel(
+            this,
+            level.elevation.value,
+            level.height.value,
+            level.ringBeam.value,
+            level.junctionMeshes,
+            level.footing?.width?.value ?: 0,
+            level.footing?.depth?.value ?: 0,
+        )
 
     private fun FlatBufferBuilder.wall(wall: Wall): Int {
         WallTable.startWall(this)
