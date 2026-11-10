@@ -70,6 +70,7 @@ internal fun PlanCanvas(
     draftThickness: Mm,
     drawing: Boolean,
     focus: PointMm?,
+    fit: Int,
     onTap: (at: PointMm, reach: Mm) -> Unit,
     onAim: (at: PointMm, reach: Mm) -> Unit,
     onAimCancel: () -> Unit,
@@ -92,6 +93,8 @@ internal fun PlanCanvas(
     val labelGap = with(density) { LABEL_GAP.dp.toPx() }
     val measurer = rememberTextMeasurer()
     LaunchedEffect(focus) { if (focus != null) view.reveal(focus) }
+    val shown by rememberUpdatedState(outlines)
+    LaunchedEffect(fit) { if (fit > 0) view.fit(shown.flatMap { it.points }) }
     val labelStyle = MaterialTheme.typography.labelMedium.copy(color = colors.inkSecondary)
     val draftStyle = MaterialTheme.typography.titleMedium.copy(color = colors.selection)
     val dash = with(density) { 6.dp.toPx() }
@@ -216,6 +219,24 @@ private class PlanView(
         if (origin == Offset.Unspecified) {
             origin = Offset(width * START_LEFT, height * START_BOTTOM)
         }
+    }
+
+    // Shows all of [points] between the controls along the top and the bottom, as large as fits.
+    fun fit(points: List<PointM>) {
+        if (points.isEmpty() || size == Size.Zero) return
+        val left = points.minOf { it.x }
+        val right = points.maxOf { it.x }
+        val bottom = points.minOf { it.y }
+        val top = points.maxOf { it.y }
+        val area = Rect(size.width * FIT_SIDE, size.height * FIT_TOP, size.width * (1 - FIT_SIDE), size.height * FIT_BOTTOM)
+        val wide = (right - left).coerceAtLeast(MIN_EXTENT)
+        val tall = (top - bottom).coerceAtLeast(MIN_EXTENT)
+        scale = minOf(area.width / wide, area.height / tall).toFloat().coerceIn(MIN_SCALE, MAX_SCALE)
+        origin =
+            Offset(
+                area.center.x - ((left + right) / 2 * scale).toFloat(),
+                area.center.y + ((bottom + top) / 2 * scale).toFloat(),
+            )
     }
 
     // Moves the plan so [point] shows in the upper part of the screen, which a panel never covers;
@@ -405,6 +426,12 @@ private const val LABEL_GAP = 4f
 private const val LABEL_FILL = 0.8f
 private const val FULL_TURN = 360f
 private const val LABEL_LIFT = 3f
+private const val FIT_SIDE = 0.12f
+private const val FIT_TOP = 0.2f
+private const val FIT_BOTTOM = 0.72f
+
+// A single short wall is not blown up to fill the screen: at least this many metres show.
+private const val MIN_EXTENT = 4.0
 private const val REVEAL_SIDE = 0.15f
 private const val REVEAL_TOP = 0.2f
 private const val REVEAL_BOTTOM = 0.38f

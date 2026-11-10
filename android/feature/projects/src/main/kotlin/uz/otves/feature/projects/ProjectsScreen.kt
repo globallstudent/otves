@@ -161,6 +161,7 @@ internal fun ProjectsScreen(
     }
     state.jobs.find { it.id.toString() == deleting }?.let { job ->
         AlertDialog(
+            containerColor = OtvesTheme.colors.surface,
             onDismissRequest = { deleting = null },
             title = { Text(stringResource(R.string.projects_delete_title, job.name)) },
             text = { Text(stringResource(R.string.projects_delete_body)) },
@@ -275,6 +276,7 @@ private fun NameDialog(
 ) {
     var name by rememberSaveable { mutableStateOf(suggested) }
     AlertDialog(
+        containerColor = OtvesTheme.colors.surface,
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

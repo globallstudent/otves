@@ -260,6 +260,11 @@ internal class EditorViewModel(
     ) {
         val current = state.value
         val onLevel = current.level ?: return
+        // A touch beside an open list closes it and does nothing else.
+        if (current.takeoffOpen || current.materialOpen) {
+            state.update { it.copy(takeoffOpen = false, materialOpen = false) }
+            return
+        }
         when (current.tool) {
             Tool.SELECT -> {
                 pick(onLevel, at, reach)
@@ -762,12 +767,13 @@ internal class EditorViewModel(
                 from != null && alongY -> Axis.Y
                 else -> null
             }
+        // A finger on the wall's body is on the wall: the reach counts from its faces.
         val met =
             walls.values
                 .filter { it.level == current.level }
-                .mapNotNull { onAxis(it, at, point, constraint) }
-                .minByOrNull { distance(it, at) }
-                ?.takeIf { distance(it, at) <= reach.value }
+                .mapNotNull { wall ->
+                    onAxis(wall, at, point, constraint)?.takeIf { distance(it, at) <= reach.value + wall.thickness.value / 2 }
+                }.minByOrNull { distance(it, at) }
         if (met != null) {
             return Snapped(met, guides.filter { it.from.x == met.x || it.from.y == met.y }.map { it.copy(to = met) }, onWall = true)
         }

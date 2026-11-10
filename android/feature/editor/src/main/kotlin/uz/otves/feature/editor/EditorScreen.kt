@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,7 +35,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -186,6 +189,11 @@ internal fun EditorScreen(
     actions: EditorActions,
     modifier: Modifier = Modifier,
 ) {
+    // Counts requests to show the whole plan: the button, a job opening, a measured run ending.
+    var fit by remember { mutableIntStateOf(0) }
+    val measuring = state.measure != null
+    LaunchedEffect(measuring, state.ready) { if (!measuring && state.ready) fit++ }
+    val listOpen = state.takeoffOpen || state.materialOpen
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
         Box(modifier = Modifier.safeDrawingPadding()) {
             PlanCanvas(
@@ -198,7 +206,8 @@ internal fun EditorScreen(
                 unchosen = state.unchosen,
                 draft = state.draft,
                 draftThickness = state.thickness,
-                drawing = state.tool == Tool.WALL && state.entry == null && state.measure == null,
+                drawing = state.tool == Tool.WALL && state.entry == null && state.measure == null && !listOpen,
+                fit = fit,
                 // The measured wall stays in view above the number pad.
                 focus = state.draft?.takeIf { state.measure != null }?.let { it.end ?: it.start },
                 onTap = actions.onTap,
@@ -216,6 +225,7 @@ internal fun EditorScreen(
                     RoundButton(OtvesIcons.Back, stringResource(R.string.editor_back), actions.onBack)
                     if (state.ready) LevelPill(state.levels, state.level, actions.onLevel, actions.onAddLevel)
                     Spacer(Modifier.weight(1f))
+                    RoundButton(OtvesIcons.Fit, stringResource(R.string.editor_fit), { fit++ })
                     RoundButton(OtvesIcons.List, stringResource(R.string.takeoff_title), { actions.onTakeoff(true) })
                 }
                 Notice(state)
@@ -393,9 +403,11 @@ private fun ToolOptions(
     state: EditorUiState,
     actions: EditorActions,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = OtvesDimens.gutter),
+    // Wraps, so no command hides past the edge of the screen.
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = OtvesDimens.gutter),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         when (state.tool) {
             Tool.SELECT -> {
@@ -1017,7 +1029,7 @@ private fun LengthPadPreview() {
 }
 
 private val TakeoffHeight = 280.dp
-private val InspectorLabelWidth = 96.dp
+private val InspectorLabelWidth = 124.dp
 private val FloatElevation = 2.dp
 private val PanelShape = RoundedCornerShape(10.dp)
 private val PadRows = listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3))

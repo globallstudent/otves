@@ -21,6 +21,7 @@ public object OtvesIcons {
     public val Door: ImageVector = icon("Door", "M3 20h18M6 20V6M6 6a14 14 0 0 1 14 14")
     public val List: ImageVector = icon("List", "M4 6h16M4 12h16M4 18h10")
     public val Backspace: ImageVector = icon("Backspace", "M9 5h11v14H9l-6-7zM13 9.5l5 5M18 9.5l-5 5")
+    public val Fit: ImageVector = icon("Fit", "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5")
     public val Plus: ImageVector = icon("Plus", "M12 5v14M5 12h14")
 
     private fun icon(

@@ -84,4 +84,5 @@
     <string name="turn_right">O‘ngga</string>
     <string name="issue_ring_beam" tools:ignore="TypographyDashes">KMK 2.01.03-19 bo‘yicha qavatning yuk ko‘taruvchi devorlariga armopoyas kerak</string>
     <string name="issue_meshes" tools:ignore="TypographyDashes">KMK 2.01.03-19 bo‘yicha yuk ko‘taruvchi devorlar tugunlariga to‘r kerak</string>
+    <string name="editor_fit">Butun rejani ko‘rsatish</string>
 </resources>

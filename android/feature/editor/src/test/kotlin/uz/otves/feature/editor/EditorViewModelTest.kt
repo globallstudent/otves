@@ -468,7 +468,7 @@ class EditorViewModelTest {
         // Back down onto the first wall: the 90° lock keeps x, the wall gives y.
         viewModel.finishWall()
         viewModel.tap(PointMm(5_000.mm, 2_000.mm), reach)
-        viewModel.aim(PointMm(5_060.mm, 150.mm), reach)
+        viewModel.aim(PointMm(5_060.mm, 450.mm), reach)
         assertThat(
             viewModel.uiState.value.draft
                 ?.end,
@@ -530,6 +530,17 @@ class EditorViewModelTest {
         viewModel.stopMeasure()
         assertThat(viewModel.uiState.value.measure).isNull()
         assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
+    }
+
+    @Test
+    fun aTouchBesideAnOpenListClosesItAndDrawsNothing() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store)
+        viewModel.showTakeoff(true)
+
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+
+        assertThat(viewModel.uiState.value.takeoffOpen).isFalse()
+        assertThat(viewModel.uiState.value.draft).isNull()
     }
 
     @Test

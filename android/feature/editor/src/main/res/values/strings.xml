@@ -89,4 +89,5 @@
     <string name="turn_right">Направо</string>
     <string name="issue_ring_beam" tools:ignore="TypographyDashes">По КМК 2.01.03-19 на несущих стенах этажа нужен армопояс</string>
     <string name="issue_meshes" tools:ignore="TypographyDashes">По КМК 2.01.03-19 в узлах несущих стен нужны сетки</string>
+    <string name="editor_fit">Показать весь план</string>
 </resources>
