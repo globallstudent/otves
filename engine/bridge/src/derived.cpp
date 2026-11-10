@@ -4,6 +4,7 @@
 #include <expected>
 #include <map>
 #include <optional>
+#include <set>
 #include <vector>
 
 #include <flatbuffers/flatbuffers.h>
@@ -128,6 +129,47 @@ std::vector<std::optional<takeoff::MasonryUnit>> choices(const Model& model,
   return units;
 }
 
+// Reports the levels whose load-bearing walls lack the ring beam or the junction meshes the norm
+// asks for. The take-off never adds them (docs/adr/0008); the builder decides.
+void advise(const Model& model, const takeoff::Measurement& measurement,
+            const takeoff::SeismicAdvice& advice, flatbuffers::FlatBufferBuilder& builder,
+            IssueOffsets& issues) {
+  if (!advice.required) {
+    return;
+  }
+  const auto bearing = [&model, &advice](ElementId id) -> const Wall* {
+    const Wall* wall = model.find<Wall>(id);
+    return wall != nullptr && wall->thickness >= advice.load_bearing ? wall : nullptr;
+  };
+  std::set<ElementId> no_beam;
+  std::set<ElementId> no_meshes;
+  for (const takeoff::WallQuantities& measured : measurement.walls) {
+    const Wall* wall = bearing(measured.id);
+    if (wall != nullptr && measured.ring_beam == 0.0) {
+      no_beam.insert(wall->level);
+    }
+  }
+  for (const takeoff::JunctionQuantities& junction : measurement.junctions) {
+    const Wall* first = nullptr;
+    const auto meeting = std::ranges::count_if(junction.walls, [&](ElementId id) {
+      const Wall* wall = bearing(id);
+      first = wall != nullptr ? wall : first;
+      return wall != nullptr;
+    });
+    if (meeting >= 2 && !junction.meshes && first != nullptr) {
+      no_meshes.insert(first->level);
+    }
+  }
+  const auto report = [&](const std::set<ElementId>& levels, schema::IssueKind kind) {
+    for (const ElementId level : levels) {
+      const schema::Uuid on = to_schema(level);
+      issues.push_back(schema::CreateIssue(builder, kind, nullptr, &on));
+    }
+  };
+  report(no_beam, schema::IssueKind::RingBeamMissing);
+  report(no_meshes, schema::IssueKind::JunctionMeshesMissing);
+}
+
 }  // namespace
 
 OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Model& model,
@@ -203,6 +245,10 @@ TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Mod
   }
   const std::vector<std::optional<takeoff::MasonryUnit>> units =
       choices(model, *measurement, builder, issues);
+  // Advice is extra: content without these norms still gives a take-off.
+  if (const auto advice = takeoff::seismic_advice(*rules)) {
+    advise(model, *measurement, *advice, builder, issues);
+  }
   for (const takeoff::OpeningIssue& issue : measurement->issues) {
     const auto* opening = model.find<Opening>(issue.opening);
     const Wall* wall = opening != nullptr ? model.find<Wall>(opening->wall) : nullptr;

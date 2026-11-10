@@ -85,6 +85,15 @@ class RuleSet {
 // norms.practice.lintel.
 [[nodiscard]] Result<LintelSpec> lintel_spec(const RuleSet& rules);
 
+// When the norm asks for a ring beam and junction meshes that a level may lack.
+struct SeismicAdvice {
+  bool required = false;  // the design intensity reaches norms.seismic.detailing_from
+  Mm load_bearing;        // walls at least this thick are load-bearing (norms.practice.walls)
+};
+
+// From norms.seismic and norms.practice, at the default design intensity.
+[[nodiscard]] Result<SeismicAdvice> seismic_advice(const RuleSet& rules);
+
 // Mortar joints from norms.masonry.joints. The unit is the wall's own (docs/adr/0008).
 [[nodiscard]] Result<Joints> masonry_joints(const RuleSet& rules);
 

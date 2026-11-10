@@ -314,6 +314,10 @@ enum IssueKind:ubyte {
   WallOverlap = 5,         // walls along one line from a point, or one inside another
   SharpAngle = 6,          // walls meet at so small an angle that their ends are cut square
   MaterialNotChosen = 7,   // the wall has no masonry unit, so it is not in the take-off
+  // The norm asks for seismic detailing the level does not have (docs/adr/0008); these name the
+  // level only.
+  RingBeamMissing = 8,
+  JunctionMeshesMissing = 9,
 }
 
 // Something in the model a builder has to fix (engine/geom, engine/takeoff). An opening or

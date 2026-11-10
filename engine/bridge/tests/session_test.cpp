@@ -47,6 +47,15 @@ class Request {
     return add(Command::AddWall, schema::CreateAddWall(builder_, wall).Union());
   }
 
+  // A wall up from the origin, meeting add_wall's at a corner.
+  Request& add_wall_up(ElementId level, std::int64_t length) {
+    const schema::Uuid on = key(level);
+    const schema::PointMm start{0, 0};
+    const schema::PointMm end{0, length};
+    const auto wall = schema::CreateWall(builder_, &on, &start, &end, 380, 2800);
+    return add(Command::AddWall, schema::CreateAddWall(builder_, wall).Union());
+  }
+
   // 1НФ brick, as laid.
   Request& set_unit(ElementId wall) {
     const schema::Uuid id = key(wall);
@@ -585,9 +594,13 @@ TEST(Session, TakeoffRunsTheLoadedContent) {
   ASSERT_NE(drawn.takeoff(), nullptr);
   EXPECT_EQ(drawn.takeoff_error(), schema::ErrorCode::None);
   EXPECT_EQ(drawn.takeoff()->size(), 0U);
-  ASSERT_EQ(drawn.issues()->size(), 1U);
+  // At 9 points the norm also asks for a ring beam on its storey.
+  ASSERT_EQ(drawn.issues()->size(), 2U);
   EXPECT_EQ(drawn.issues()->Get(0)->kind(), schema::IssueKind::MaterialNotChosen);
   EXPECT_EQ(to_id(drawn.issues()->Get(0)->element()), wall);
+  EXPECT_EQ(drawn.issues()->Get(1)->kind(), schema::IssueKind::RingBeamMissing);
+  EXPECT_EQ(drawn.issues()->Get(1)->element(), nullptr);
+  EXPECT_EQ(to_id(drawn.issues()->Get(1)->level()), level);
 
   const auto& built = respond(session, Request{}.set_unit(wall).set_ring_beam(level, 150).bytes());
   ASSERT_NE(built.takeoff(), nullptr);
@@ -629,6 +642,26 @@ TEST(Session, ChoicesAreLoggedAndUndone) {
   EXPECT_TRUE(cleared);
 }
 
+TEST(Session, NormsReportTheMeshesACornerLacks) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+  const ElementId level = add_level(session);
+  respond(session, Request{}.set_ring_beam(level, 150).bytes());
+  const ElementId first = add_wall(session, level);
+  const auto& corner = respond(session, Request{}.add_wall_up(level, 4000).bytes());
+  const ElementId second = to_id(corner.results()->Get(0)->created());
+
+  const auto& chosen = respond(session, Request{}.set_unit(first).set_unit(second).bytes());
+  ASSERT_EQ(chosen.issues()->size(), 1U);
+  EXPECT_EQ(chosen.issues()->Get(0)->kind(), schema::IssueKind::JunctionMeshesMissing);
+  EXPECT_EQ(to_id(chosen.issues()->Get(0)->level()), level);
+
+  const auto& meshed = respond(session, Request{}.set_meshes(level, true).bytes());
+  EXPECT_EQ(meshed.issues()->size(), 0U);
+  EXPECT_GT(amount(meshed, "mesh.junction"), 0.0);
+}
+
 TEST(Session, BrokenContentKeepsThePreviousContent) {
   Session session{kDevice};
   ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
@@ -650,7 +683,7 @@ TEST(Session, IssuesNameTheOpeningsAndJoinsToFix) {
   ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
             schema::ErrorCode::None);
   const ElementId level = add_level(session);
-  respond(session, Request{}.set_unit(add_wall(session, level)).bytes());
+  respond(session, Request{}.set_unit(add_wall(session, level)).set_ring_beam(level, 150).bytes());
 
   // A door at the wall's start leaves no masonry for its lintel to rest on; a second wall along
   // the first from the same point overlaps it.

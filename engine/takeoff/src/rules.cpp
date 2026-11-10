@@ -465,6 +465,22 @@ Result<LintelSpec> lintel_spec(const RuleSet& rules) {
   return spec;
 }
 
+Result<SeismicAdvice> seismic_advice(const RuleSet& rules) {
+  // Intensities are whole points; `length` reads any whole number.
+  const std::array<std::string_view, 1> from_path{"detailing_from"};
+  const std::array<std::string_view, 2> intensity_path{"defaults", "seismic_intensity"};
+  const std::array<std::string_view, 2> thickness_path{"walls", "load_bearing_min_thickness"};
+  const Result<Mm> from = rules.length("seismic", from_path);
+  const Result<Mm> intensity = rules.length("practice", intensity_path);
+  const Result<Mm> thickness = rules.length("practice", thickness_path);
+  for (const Result<Mm>* value : {&from, &intensity, &thickness}) {
+    if (!*value) {
+      return std::unexpected{value->error()};
+    }
+  }
+  return SeismicAdvice{.required = *intensity >= *from, .load_bearing = *thickness};
+}
+
 Result<Joints> masonry_joints(const RuleSet& rules) {
   const auto joint = [&rules](std::string_view key) {
     const std::array<std::string_view, 2> path{"joints", key};

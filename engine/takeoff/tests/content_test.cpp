@@ -131,6 +131,15 @@ TEST(Content, JointsComeFromNorms) {
   EXPECT_EQ(joints->head, 10_mm);
 }
 
+TEST(Content, SeismicAdviceComesFromNorms) {
+  const auto advice = seismic_advice(content());
+
+  ASSERT_TRUE(advice.has_value()) << advice.error().message;
+  // 9 points by default, detailing from 7 (КМК 2.01.03-19); walls from 250 mm bear load.
+  EXPECT_TRUE(advice->required);
+  EXPECT_EQ(advice->load_bearing, 250_mm);
+}
+
 TEST(Content, OnlyWhatWasChosenIsCounted) {
   const RuleSet rules = content();
   Room r = room(rules);

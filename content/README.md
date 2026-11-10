@@ -47,7 +47,7 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 | `norms/mortar.luau` | Cement per m³ of masonry mortar by cement and mortar grade | СП 82-101-98, tables 4–5 |
 | `norms/practice.luau` | Waste allowances (запас), default cement, mortar grade and seismic intensity, lintel bar 2ПБ 120 × 140, ring beam B15 A500С | Practice; ГОСТ 948-2016 table 1; editable in job settings |
 | `norms/rebar.luau` | Nominal bar mass per metre by diameter | ГОСТ 34028-2016, table 1 |
-| `norms/seismic.luau` | Lintel bearing 350 mm (250 mm up to a 1 500 mm opening); ring beam ≥ 150 mm, ≥ B12.5, 4Ø10 / 4Ø12 / 4Ø14 by intensity; junction meshes 1.5 m, ≥ 1 cm², every 700 mm (7–8 points) or 500 mm (9) | КМК 2.01.03-19, 3.5.10–3.5.12, 3.5.15 |
+| `norms/seismic.luau` | Detailing asked for from 7 points; lintel bearing 350 mm (250 mm up to a 1 500 mm opening); ring beam ≥ 150 mm, ≥ B12.5, 4Ø10 / 4Ø12 / 4Ø14 by intensity; junction meshes 1.5 m, ≥ 1 cm², every 700 mm (7–8 points) or 500 mm (9) | КМК 2.01.03-19, 3.5.10–3.5.12, 3.5.15 |
 | `rules/masonry.luau` | Units with waste, one line per unit size (`masonry_unit.250x120x65`), mortar with waste, cement in that mortar; nothing until a wall has a unit | `mortar`, `practice` |
 | `rules/lintels.luau` | Bar lintels by length: `lintel.bar.l22` is a bar at least 2.2 m long, as many side by side as the wall is thick | `practice` |
 | `rules/ring_beam.luau` | Ring beam on walls ≥ 250 mm of the storeys that ask for one: concrete `concrete.b15` with losses, bars `rebar.a500c.d12` with laps; fails under the КМК minimum of 150 mm | `seismic`, `losses`, `rebar`, `practice` |
@@ -66,4 +66,4 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 
 Wall height is the masonry: the ring beam sits on top of it. Walls thinner than 250 mm (`practice.walls`) count as partitions until walls carry a load-bearing flag.
 
-The engine also reads `seismic.lintel` and `practice.lintel.height` to place lintels (`lintel_spec`), and `masonry.joints` to count each wall's units (`masonry_joints`). The unit is the wall's own, and the ring beam and meshes its storey's. GOST 948 marks are not chosen yet: their length table is not verified.
+The engine also reads `seismic.lintel` and `practice.lintel.height` to place lintels (`lintel_spec`), and `masonry.joints` to count each wall's units (`masonry_joints`). The unit is the wall's own, and the ring beam and meshes its storey's. With `seismic.detailing_from` and `practice.defaults.seismic_intensity` it reports the storeys that lack a ring beam or meshes the norm asks for (`seismic_advice`); it never adds them. GOST 948 marks are not chosen yet: their length table is not verified.

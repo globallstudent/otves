@@ -7,6 +7,8 @@ return {
 		jurisdiction = "UZ",
 		status = "mandatory",
 	},
+	-- Ring beams and junction meshes are asked for from this design intensity, in points.
+	detailing_from = 7,
 	lintel = {
 		bearing = 350, -- on each side of the opening
 		short_bearing = 250, -- on each side of an opening up to short_span wide
