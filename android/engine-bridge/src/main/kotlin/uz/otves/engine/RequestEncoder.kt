@@ -11,6 +11,8 @@ import uz.otves.schema.AddLevel as AddLevelTable
 import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.BeginGesture as BeginGestureTable
+import uz.otves.schema.Conditions as ConditionsTable
+import uz.otves.schema.ConditionsField as ConditionsFieldCode
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.EndGesture as EndGestureTable
 import uz.otves.schema.Level as LevelTable
@@ -30,6 +32,7 @@ import uz.otves.schema.RemoveOpening as RemoveOpeningTable
 import uz.otves.schema.RemoveWall as RemoveWallTable
 import uz.otves.schema.ResizeOpening as ResizeOpeningTable
 import uz.otves.schema.Script as ScriptTable
+import uz.otves.schema.SetCondition as SetConditionTable
 import uz.otves.schema.SetLevelElevation as SetLevelElevationTable
 import uz.otves.schema.SetLevelHeight as SetLevelHeightTable
 import uz.otves.schema.SetLevelJunctionMeshes as SetLevelJunctionMeshesTable
@@ -49,6 +52,9 @@ import uz.otves.schema.WallEnd as WallEndCode
 internal object RequestEncoder {
     private const val VERSION = 1L
     private const val INITIAL_SIZE = 1024
+
+    // The schema's value for a condition left to the norm.
+    private const val UNSET = -1
 
     fun encode(commands: List<EngineCommand>): ByteBuffer {
         val builder = FlatBufferBuilder(INITIAL_SIZE)
@@ -86,6 +92,18 @@ internal object RequestEncoder {
                 SetLevelJunctionMeshesTable.addLevel(this, uuid(command.level))
                 SetLevelJunctionMeshesTable.addMeshes(this, command.meshes)
                 Command.SetLevelJunctionMeshes to SetLevelJunctionMeshesTable.endSetLevelJunctionMeshes(this)
+            }
+
+            is EngineCommand.SetCondition -> {
+                val field =
+                    when (command.condition) {
+                        Condition.SEISMIC_INTENSITY -> ConditionsFieldCode.SeismicIntensity
+                        Condition.CEMENT_GRADE -> ConditionsFieldCode.CementGrade
+                        Condition.MORTAR_GRADE -> ConditionsFieldCode.MortarGrade
+                        Condition.UNIT_WASTE -> ConditionsFieldCode.UnitWaste
+                        Condition.MORTAR_WASTE -> ConditionsFieldCode.MortarWaste
+                    }
+                Command.SetCondition to SetConditionTable.createSetCondition(this, field, (command.value ?: UNSET).toLong())
             }
 
             is EngineCommand.SetWallUnit -> {
@@ -268,7 +286,18 @@ internal object RequestEncoder {
             is Level -> Element.Level to level(element)
             is Wall -> Element.Wall to wall(element)
             is Opening -> Element.Opening to opening(element)
+            is Conditions -> Element.Conditions to conditions(element)
         }
+
+    private fun FlatBufferBuilder.conditions(conditions: Conditions): Int =
+        ConditionsTable.createConditions(
+            this,
+            (conditions.seismicIntensity ?: UNSET).toLong(),
+            (conditions.cementGrade ?: UNSET).toLong(),
+            (conditions.mortarGrade ?: UNSET).toLong(),
+            (conditions.unitWaste ?: UNSET).toLong(),
+            (conditions.mortarWaste ?: UNSET).toLong(),
+        )
 
     private fun FlatBufferBuilder.level(level: Level): Int =
         LevelTable.createLevel(this, level.elevation.value, level.height.value, level.ringBeam.value, level.junctionMeshes)

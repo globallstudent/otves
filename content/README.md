@@ -26,7 +26,7 @@ flowchart LR
 | `input.lintels[i]` | `opening`, `wall`, `length` m to order, `height` m, `thickness` m |
 | `input.junctions[i]` | `walls` (ids), `height` m of the lowest of them, `meshes` (whether its storey asks for them) |
 | `input.masonry` | `units`, `mortar` m³, `walls[i]` with `id`, `units`, `mortar`, `by_unit[i]` with `length`, `width`, `height` mm, `units`, `mortar` |
-| `settings` | Job settings by name, numbers or strings; absent ones are `nil` |
+| `settings` | The job's estimating conditions by name, numbers or strings; ones the builder left unset are `nil` |
 | line | `item` (`a-z 0-9 _ .`, ≤ 64), `unit` (`pcs`, `m`, `m2`, `m3`, `kg`), `amount` (finite, ≥ 0) |
 
 The engine adds no waste and no rounding; the rule does both. One rule may not return the same item and unit twice.
@@ -53,6 +53,7 @@ The engine adds no waste and no rounding; the rule does both. One rule may not r
 | `rules/ring_beam.luau` | Ring beam on walls ≥ 250 mm of the storeys that ask for one: concrete `concrete.b15` with losses, bars `rebar.a500c.d12` with laps; fails under the КМК minimum of 150 mm | `seismic`, `losses`, `rebar`, `practice` |
 | `rules/junction_meshes.luau` | `mesh.junction` pieces where two or more walls ≥ 250 mm meet on the storeys that ask for them, one per pitch below the top; fails above 9 points, where КМК 3.5.1 meshes are not modelled |
 | `catalog/masonry_units.json` | 1НФ, 1,4НФ and 2,1НФ (ГОСТ 530-2012), 390 × 190 × 188 block (ГОСТ 6133-2019) | the standards |
+| `catalog/conditions.json` | The values offered for each estimating condition, with the default of `norms/practice` | [ADR 0009](../docs/adr/0009-job-conditions.md) |
 | `catalog/ring_beam.json` | Ring beam heights from 150 mm | КМК 2.01.03-19, 3.5.10 | `seismic`, `practice` |
 
 ## Settings

@@ -32,6 +32,7 @@ public enum class EngineError {
 
     /** An opening wider than its wall. */
     DOES_NOT_FIT,
+    CONDITION_OUT_OF_RANGE,
 
     /** A code from a newer engine than this app knows. */
     UNKNOWN,

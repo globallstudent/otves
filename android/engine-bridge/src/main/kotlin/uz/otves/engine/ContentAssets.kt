@@ -24,6 +24,14 @@ public data class Catalog(
     public val units: List<MasonryUnitOption> = emptyList(),
     /** Ring beam heights, the norm's minimum first. */
     public val ringBeamHeights: List<Mm> = emptyList(),
+    /** The values offered for each estimating condition, with the norm default among them. */
+    public val conditions: Map<Condition, ConditionChoices> = emptyMap(),
+)
+
+/** What a condition may be set to; [default] is what the norms use while it is unset. */
+public data class ConditionChoices(
+    public val default: Int,
+    public val values: List<Int>,
 )
 
 /** Reads the content bundle (content/) that ships in the APK's assets. */
@@ -31,6 +39,7 @@ public object ContentAssets {
     private const val EXTENSION = ".luau"
     private const val UNITS = "catalog/masonry_units.json"
     private const val RING_BEAM = "catalog/ring_beam.json"
+    private const val CONDITIONS = "catalog/conditions.json"
 
     public fun load(assets: AssetManager): EngineCommand.LoadContent =
         EngineCommand.LoadContent(norms = read(assets, "norms"), rules = read(assets, "rules"))
@@ -39,7 +48,19 @@ public object ContentAssets {
         Catalog(
             units = masonryUnits(text(assets, UNITS)),
             ringBeamHeights = lengths(JSONObject(text(assets, RING_BEAM)).getJSONArray("heights")),
+            conditions = conditions(text(assets, CONDITIONS)),
         )
+
+    internal fun conditions(json: String): Map<Condition, ConditionChoices> {
+        val all = JSONObject(json)
+        return Condition.entries
+            .filter { all.has(it.name.lowercase()) }
+            .associateWith { condition ->
+                val choices = all.getJSONObject(condition.name.lowercase())
+                val values = choices.getJSONArray("values")
+                ConditionChoices(choices.getInt("default"), (0 until values.length()).map(values::getInt))
+            }
+    }
 
     private fun text(
         assets: AssetManager,

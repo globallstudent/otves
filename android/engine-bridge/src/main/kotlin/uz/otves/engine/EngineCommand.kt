@@ -66,6 +66,12 @@ public sealed interface EngineCommand {
         public val meshes: Boolean,
     ) : EngineCommand
 
+    /** Sets one estimating condition of the job; null returns it to the norm default. */
+    public data class SetCondition(
+        public val condition: Condition,
+        public val value: Int?,
+    ) : EngineCommand
+
     /** Also removes the wall's openings. */
     public data class RemoveWall(
         public val wall: ElementId,

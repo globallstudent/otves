@@ -115,6 +115,29 @@ public data class Level(
     public val junctionMeshes: Boolean = false,
 ) : EngineElement
 
+/**
+ * What the job is estimated under (docs/adr/0009); a null value is left to the norm default.
+ * Grades are their numbers (400 for ПЦ400, 100 for М100), waste allowances per mille.
+ */
+public data class Conditions(
+    public val seismicIntensity: Int? = null,
+    public val cementGrade: Int? = null,
+    public val mortarGrade: Int? = null,
+    public val unitWaste: Int? = null,
+    public val mortarWaste: Int? = null,
+) : EngineElement {
+    public operator fun get(condition: Condition): Int? =
+        when (condition) {
+            Condition.SEISMIC_INTENSITY -> seismicIntensity
+            Condition.CEMENT_GRADE -> cementGrade
+            Condition.MORTAR_GRADE -> mortarGrade
+            Condition.UNIT_WASTE -> unitWaste
+            Condition.MORTAR_WASTE -> mortarWaste
+        }
+}
+
+public enum class Condition { SEISMIC_INTENSITY, CEMENT_GRADE, MORTAR_GRADE, UNIT_WASTE, MORTAR_WASTE }
+
 /** A brick or block as laid: [length] along the wall, [width] across it, [height] of one course. */
 public data class UnitSize(
     public val length: Mm,

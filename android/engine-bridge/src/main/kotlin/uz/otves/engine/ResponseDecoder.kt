@@ -8,6 +8,7 @@ import uz.otves.schema.Response
 import java.nio.ByteBuffer
 import kotlin.uuid.Uuid
 import uz.otves.schema.CommandResult as ResultTable
+import uz.otves.schema.Conditions as ConditionsTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
@@ -157,6 +158,7 @@ internal object ResponseDecoder {
                 Element.Level -> level(change.element(LevelTable()) as LevelTable)
                 Element.Wall -> wall(change.element(WallTable()) as WallTable)
                 Element.Opening -> opening(change.element(OpeningTable()) as OpeningTable)
+                Element.Conditions -> conditions(change.element(ConditionsTable()) as ConditionsTable)
                 else -> error("The engine sent an unknown element type ${change.elementType()}")
             }
         return ElementChange(id = id, element = element)
@@ -169,6 +171,18 @@ internal object ResponseDecoder {
     private fun point(point: PointStruct?): PointMm {
         checkNotNull(point) { "A wall has no point" }
         return PointMm(Mm(point.x()), Mm(point.y()))
+    }
+
+    // The schema's -1 is "left to the norm".
+    private fun conditions(conditions: ConditionsTable): Conditions {
+        val chosen = { value: Long -> value.takeIf { it >= 0 }?.toInt() }
+        return Conditions(
+            seismicIntensity = chosen(conditions.seismicIntensity()),
+            cementGrade = chosen(conditions.cementGrade()),
+            mortarGrade = chosen(conditions.mortarGrade()),
+            unitWaste = chosen(conditions.unitWaste()),
+            mortarWaste = chosen(conditions.mortarWaste()),
+        )
     }
 
     private fun level(level: LevelTable): Level =
@@ -248,6 +262,7 @@ internal object ResponseDecoder {
             ErrorCode.Internal -> EngineError.INTERNAL
             ErrorCode.NoWall -> EngineError.NO_WALL
             ErrorCode.DoesNotFit -> EngineError.DOES_NOT_FIT
+            ErrorCode.ConditionOutOfRange -> EngineError.CONDITION_OUT_OF_RANGE
             else -> EngineError.UNKNOWN
         }
 }

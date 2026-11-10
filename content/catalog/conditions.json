@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "source": "Defaults repeat norms/practice.luau; grades are those of norms/mortar.luau",
+  "seismic_intensity": { "default": 9, "values": [6, 7, 8, 9] },
+  "cement_grade": { "default": 400, "values": [400, 500] },
+  "mortar_grade": { "default": 100, "values": [75, 100, 150, 200] },
+  "unit_waste": { "default": 30, "values": [0, 30, 50, 100] },
+  "mortar_waste": { "default": 70, "values": [0, 50, 70, 100] }
+}
