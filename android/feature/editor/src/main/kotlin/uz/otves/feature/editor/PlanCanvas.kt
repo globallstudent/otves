@@ -69,7 +69,7 @@ internal fun PlanCanvas(
     draft: Draft?,
     draftThickness: Mm,
     drawing: Boolean,
-    focus: PointMm?,
+    focus: List<PointMm>,
     fit: Int,
     onTap: (at: PointMm, reach: Mm) -> Unit,
     onAim: (at: PointMm, reach: Mm) -> Unit,
@@ -92,7 +92,7 @@ internal fun PlanCanvas(
     val touchReach = with(density) { TOUCH_REACH.dp.toPx() }
     val labelGap = with(density) { LABEL_GAP.dp.toPx() }
     val measurer = rememberTextMeasurer()
-    LaunchedEffect(focus) { if (focus != null) view.reveal(focus) }
+    LaunchedEffect(focus) { view.reveal(focus) }
     val shown by rememberUpdatedState(outlines)
     LaunchedEffect(fit) { if (fit > 0) view.fit(shown.flatMap { it.points }) }
     val labelStyle = MaterialTheme.typography.labelMedium.copy(color = colors.inkSecondary)
@@ -147,8 +147,10 @@ internal fun PlanCanvas(
             drawPath(path, if (outline.wall in unchosen) colors.surface else colors.inkTertiary)
             drawPath(path, colors.ink, style = Stroke(width = wallStroke))
         }
+        val bodies = outlines.map { outline -> outline.wall to outline.points.map { view.toScreen(it.x, it.y) } }
         for (dimension in dimensions) {
-            dimension(view, dimension, measurer.measure(dimension.length.value.toString(), labelStyle), labelGap)
+            val others = bodies.filter { it.first != dimension.id }.map { it.second }
+            dimension(view, dimension, measurer.measure(dimension.length.value.toString(), labelStyle), labelGap, others)
         }
         // The selection in the plan's only accent colour; openings stay cut out of a selected wall.
         outlines.find { it.wall == selected }?.let { outline ->
@@ -239,13 +241,20 @@ private class PlanView(
             )
     }
 
-    // Moves the plan so [point] shows in the upper part of the screen, which a panel never covers;
-    // a point already there stays put.
-    fun reveal(point: PointMm) {
-        if (origin == Offset.Unspecified || size == Size.Zero) return
-        val at = toScreen(point)
+    // Moves the plan so [points] show in the upper part of the screen, which a panel never covers,
+    // zooming out when they do not fit there; points already there stay put.
+    fun reveal(points: List<PointMm>) {
+        if (points.isEmpty() || origin == Offset.Unspecified || size == Size.Zero) return
         val clear = Rect(size.width * REVEAL_SIDE, size.height * REVEAL_TOP, size.width * (1 - REVEAL_SIDE), size.height * REVEAL_BOTTOM)
-        if (!clear.contains(at)) origin += clear.center - at
+        val wide = (points.maxOf { it.x.value } - points.minOf { it.x.value }) / MM_PER_METRE * scale
+        val tall = (points.maxOf { it.y.value } - points.minOf { it.y.value }) / MM_PER_METRE * scale
+        val shrink = minOf(clear.width / wide, clear.height / tall).toFloat()
+        if (shrink < 1f) scale = (scale * shrink).coerceAtLeast(MIN_SCALE)
+        val at = points.map(::toScreen)
+        if (at.any { !clear.contains(it) }) {
+            val centre = Offset((at.minOf { it.x } + at.maxOf { it.x }) / 2f, (at.minOf { it.y } + at.maxOf { it.y }) / 2f)
+            origin += clear.center - centre
+        }
     }
 
     fun move(
@@ -291,13 +300,15 @@ private fun path(
         close()
     }
 
-// The wall's length beside its left face, along the wall and never upside down; left out when the
-// wall is too short on screen to hold it.
+// The wall's length beside it, along the wall and never upside down: by its left face at the
+// middle unless another wall lies there, then by the other face or nearer an end. Left out when
+// the wall is too short on screen to hold it.
 private fun DrawScope.dimension(
     view: PlanView,
     dimension: Dimension,
     label: TextLayoutResult,
     gap: Float,
+    others: List<List<Offset>>,
 ) {
     val wall = dimension.wall
     val start = view.toScreen(wall.start.x.value / MM_PER_METRE, wall.start.y.value / MM_PER_METRE)
@@ -314,8 +325,15 @@ private fun DrawScope.dimension(
             LocationLine.LEFT_FACE -> 0.0
             LocationLine.RIGHT_FACE -> wall.thickness.value.toDouble()
         }
-    val reach = (face / MM_PER_METRE * view.scale).toFloat() + gap + label.size.height / 2f
-    val centre = (start + end) / 2f + left * reach
+    val clearance = gap + label.size.height / 2f
+    val toLeft = (face / MM_PER_METRE * view.scale).toFloat() + clearance
+    val toRight = ((wall.thickness.value - face) / MM_PER_METRE * view.scale).toFloat() + clearance
+    val half = along * (label.size.width / 2f)
+    val places =
+        LABEL_PLACES.flatMap { along -> listOf(start + run * along + left * toLeft, start + run * along - left * toRight) }
+    val centre =
+        places.firstOrNull { at -> others.none { body -> inside(at, body) || inside(at - half, body) || inside(at + half, body) } }
+            ?: places.first()
     var degrees = angle(run)
     // Upright, and on an upright wall read from the bottom up, as on drawings.
     if (degrees >= QUARTER_TURN || degrees < -QUARTER_TURN) degrees += HALF_TURN
@@ -379,6 +397,20 @@ private fun DrawScope.opening(
     }
 }
 
+// Whether a screen point lies inside a polygon, by counting the edges a ray to the right crosses.
+private fun inside(
+    point: Offset,
+    polygon: List<Offset>,
+): Boolean {
+    var crossings = 0
+    for (index in polygon.indices) {
+        val a = polygon[index]
+        val b = polygon[(index + 1) % polygon.size]
+        if ((a.y > point.y) != (b.y > point.y) && point.x < a.x + (point.y - a.y) / (b.y - a.y) * (b.x - a.x)) crossings++
+    }
+    return crossings % 2 == 1
+}
+
 // Degrees clockwise from +x on screen, as drawArc measures them.
 private fun angle(direction: Offset): Float = Math.toDegrees(atan2(direction.y, direction.x).toDouble()).toFloat()
 
@@ -426,6 +458,9 @@ private const val LABEL_GAP = 4f
 private const val LABEL_FILL = 0.8f
 private const val FULL_TURN = 360f
 private const val LABEL_LIFT = 3f
+
+// Where along a wall its length may be written, the middle first.
+private val LABEL_PLACES = listOf(0.5f, 0.3f, 0.7f)
 private const val FIT_SIDE = 0.12f
 private const val FIT_TOP = 0.2f
 private const val FIT_BOTTOM = 0.72f
