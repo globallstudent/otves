@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,11 +17,13 @@ import org.junit.Before
 import org.junit.Test
 import uz.otves.core.model.Currency
 import uz.otves.core.model.ElementId
+import uz.otves.core.model.Mm
 import uz.otves.core.model.Money
 import uz.otves.core.model.mm
 import uz.otves.data.catalog.Prices
 import uz.otves.data.project.JobStore
 import uz.otves.data.project.SavedJob
+import uz.otves.engine.Aimed
 import uz.otves.engine.Catalog
 import uz.otves.engine.CommandResult
 import uz.otves.engine.Condition
@@ -33,6 +36,7 @@ import uz.otves.engine.EngineElement
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
 import uz.otves.engine.Footing
+import uz.otves.engine.Guide
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
 import uz.otves.engine.Level
@@ -47,11 +51,14 @@ import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.QuantityUnit
 import uz.otves.engine.Takeoff
+import uz.otves.engine.Turn
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
 import uz.otves.engine.WallEnd
 import uz.otves.engine.WallOutline
 import uz.otves.schema.CommandKind
+import kotlin.math.abs
+import kotlin.math.sign
 import kotlin.uuid.Uuid
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -73,7 +80,10 @@ class EditorViewModelTest {
 
     /**
      * A small engine: keeps the elements, reports changes, outlines and one log group per request
-     * that changed the model, and undoes the last element created. Picks what the test chose.
+     * that changed the model, and undoes its last step. Picks what the test chose. It knows no
+     * geometry (engine/geom has the real thing and its tests): an aim answers the finger's own
+     * point unless the test says otherwise, and measured walls and typed lengths run along the
+     * axes only.
      */
     private class FakeEngine(
         private val ground: ElementId,
@@ -82,12 +92,30 @@ class EditorViewModelTest {
         var refuseNext: EngineError? = null
         var pickNext: ElementId? = null
         var issues: List<Issue> = emptyList()
+
+        /** What the next aim answers instead of the finger's own point. */
+        var aimNext: Aimed? = null
+
+        /** Requests wait for it, as they wait for the engine thread. */
+        var hold: CompletableDeferred<Unit>? = null
         private var next = 1L
         private val elements = linkedMapOf<ElementId, EngineElement>()
-        private val steps = ArrayDeque<ElementId>()
+
+        // What undoes each step, returning the changes it makes.
+        private val steps = ArrayDeque<() -> List<ElementChange>>()
+
+        private fun endsAt(point: PointMm): Boolean = elements.values.any { it is Wall && (it.start == point || it.end == point) }
+
+        private fun along(
+            from: PointMm,
+            dx: Int,
+            dy: Int,
+            length: Long,
+        ) = PointMm(from.x + Mm(dx * length), from.y + Mm(dy * length))
 
         override suspend fun send(commands: List<EngineCommand>): EngineResponse {
             sent += commands
+            hold?.await()
             val refusal = refuseNext
             refuseNext = null
             val results = mutableListOf<CommandResult>()
@@ -100,7 +128,10 @@ class EditorViewModelTest {
                 id: ElementId = ElementId(Uuid.fromLongs(++next, 0)),
             ) {
                 elements[id] = element
-                steps.addLast(id)
+                steps.addLast {
+                    elements.remove(id)
+                    listOf(ElementChange(id, null))
+                }
                 results += CommandResult.Done(id)
                 changes += ElementChange(id, element)
             }
@@ -157,6 +188,54 @@ class EditorViewModelTest {
 
                     command is EngineCommand.Pick -> {
                         results += CommandResult.Done(null, picked = pickNext)
+                    }
+
+                    command is EngineCommand.Aim -> {
+                        val from = command.from ?: command.at
+                        val length = abs((command.at.x - from.x).value) + abs((command.at.y - from.y).value)
+                        results += CommandResult.Done(null, aimed = aimNext ?: Aimed(command.at, Mm(length), meets = endsAt(command.at)))
+                        aimNext = null
+                    }
+
+                    command is EngineCommand.AimMeasured -> {
+                        // The wall before gives the heading; a left turn is counter-clockwise.
+                        val hx = command.before?.let { (command.from.x - it.x).value.sign } ?: 1
+                        val hy = command.before?.let { (command.from.y - it.y).value.sign } ?: 0
+                        val point =
+                            when (command.turn) {
+                                Turn.LEFT -> along(command.from, -hy, hx, command.length.value)
+                                Turn.STRAIGHT -> along(command.from, hx, hy, command.length.value)
+                                Turn.RIGHT -> along(command.from, hy, -hx, command.length.value)
+                            }
+                        results += CommandResult.Done(null, aimed = Aimed(point, command.length, meets = endsAt(point)))
+                    }
+
+                    command is EngineCommand.SetWallLength -> {
+                        // The wall's end moves, with the ends of other walls that meet it there.
+                        val wall = elements.getValue(command.wall) as Wall
+                        val to =
+                            along(
+                                wall.start,
+                                (wall.end.x - wall.start.x).value.sign,
+                                (wall.end.y - wall.start.y).value.sign,
+                                command.length.value,
+                            )
+                        val before = elements.filterValues { it is Wall && (it.end == wall.end || it.start == wall.end) }
+                        for ((id, element) in before) {
+                            val joined = element as Wall
+                            val moved =
+                                joined.copy(
+                                    start = if (joined.start == wall.end) to else joined.start,
+                                    end = if (joined.end == wall.end) to else joined.end,
+                                )
+                            elements[id] = moved
+                            changes += ElementChange(id, moved)
+                        }
+                        steps.addLast {
+                            elements += before
+                            before.map { (id, element) -> ElementChange(id, element) }
+                        }
+                        results += CommandResult.Done(null)
                     }
 
                     command is EngineCommand.MoveWallEnd -> {
@@ -217,10 +296,8 @@ class EditorViewModelTest {
                     }
 
                     command is EngineCommand.Undo && steps.isNotEmpty() -> {
-                        val id = steps.removeLast()
-                        elements.remove(id)
+                        changes += steps.removeLast()()
                         results += CommandResult.Done(null)
-                        changes += ElementChange(id, null)
                         undone = true
                     }
 
@@ -377,14 +454,20 @@ class EditorViewModelTest {
     }
 
     @Test
-    fun twoTapsBuildAWallAlongAnAxisAndStartTheNextAtItsEnd() {
+    fun twoTapsBuildAWallWhereTheEngineAimsAndStartTheNextAtItsEnd() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.selectThickness(250.mm)
 
-        viewModel.tap(PointMm(30.mm, (-40).mm), reach)
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
         assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
+        engine.aimNext = Aimed(PointMm(6_400.mm, 0.mm), length = 6_400.mm)
         viewModel.tap(PointMm(6_420.mm, 260.mm), reach)
 
+        assertThat(engine.sent.flatten().filterIsInstance<EngineCommand.Aim>())
+            .containsExactly(
+                EngineCommand.Aim(level, from = null, at = PointMm(0.mm, 0.mm), reach = reach, grid = 100.mm, square = true),
+                EngineCommand.Aim(level, PointMm(0.mm, 0.mm), PointMm(6_420.mm, 260.mm), reach, grid = 100.mm, square = true),
+            ).inOrder()
         val add = engine.sent.last().single() as EngineCommand.AddWall
         assertThat(add.wall.level).isEqualTo(level)
         assertThat(add.wall.start).isEqualTo(PointMm(0.mm, 0.mm))
@@ -412,55 +495,44 @@ class EditorViewModelTest {
     }
 
     @Test
-    fun aTapNearAWallEndLandsOnIt() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
-        viewModel.tap(PointMm(0.mm, 0.mm), reach)
-        viewModel.tap(PointMm(6_437.mm, 0.mm), reach)
-        viewModel.finishWall()
-
-        viewModel.tap(PointMm(6_250.mm, 180.mm), reach)
-
-        assertThat(
-            viewModel.uiState.value.draft
-                ?.start,
-        ).isEqualTo(PointMm(6_400.mm, 0.mm))
-    }
-
-    @Test
-    fun withoutTheLockAWallGoesAtAnyAngleUnlessItIsNearlyAlongAnAxis() {
+    fun theWallBeingAimedIsShownAsTheEngineSeesIt() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.toggleOrtho()
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        val corner = PointMm(4_000.mm, 3_000.mm)
+        val aimed = Aimed(corner, length = 5_000.mm, guides = listOf(Guide(PointMm(4_000.mm, 0.mm), corner)))
+        engine.aimNext = aimed
 
         viewModel.aim(PointMm(4_020.mm, 2_980.mm), reach)
-        assertThat(
-            viewModel.uiState.value.draft
-                ?.end,
-        ).isEqualTo(PointMm(4_000.mm, 3_000.mm))
-        assertThat(
-            viewModel.uiState.value.draft
-                ?.length,
-        ).isEqualTo(5_000.mm)
 
-        viewModel.aim(PointMm(4_020.mm, 280.mm), reach)
-        assertThat(
-            viewModel.uiState.value.draft
-                ?.end,
-        ).isEqualTo(PointMm(4_000.mm, 0.mm))
+        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm), aimed))
+        // Without the 90° lock the engine is asked for a wall at any angle.
+        assertThat((engine.sent.last().single() as EngineCommand.Aim).square).isFalse()
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
     }
 
     @Test
-    fun aPointLinesUpWithAnotherWallEnd() {
+    fun aMovingFingerAsksOnlyForWhereItIsNow() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
-        viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
-        viewModel.tap(PointMm(6_000.mm, 4_000.mm), reach)
+        val busy = CompletableDeferred<Unit>()
+        engine.hold = busy
 
-        viewModel.aim(PointMm(130.mm, 4_150.mm), reach)
+        viewModel.aim(PointMm(1_000.mm, 0.mm), reach)
+        viewModel.aim(PointMm(2_000.mm, 0.mm), reach)
+        viewModel.aim(PointMm(3_000.mm, 0.mm), reach)
+        viewModel.commit()
+        busy.complete(Unit)
 
-        val draft = viewModel.uiState.value.draft
-        assertThat(draft?.end).isEqualTo(PointMm(0.mm, 4_000.mm))
-        assertThat(draft?.guides).containsExactly(Guide(PointMm(0.mm, 0.mm), PointMm(0.mm, 4_000.mm)))
+        // The first was already on its way; the second waited while the finger moved on.
+        assertThat(
+            engine.sent
+                .flatten()
+                .filterIsInstance<EngineCommand.Aim>()
+                .map { it.at.x },
+        ).containsExactly(0.mm, 1_000.mm, 3_000.mm)
+            .inOrder()
+        assertThat((engine.sent.last().single() as EngineCommand.AddWall).wall.end).isEqualTo(PointMm(3_000.mm, 0.mm))
     }
 
     @Test
@@ -471,7 +543,7 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(6_000.mm, 4_000.mm), reach)
         viewModel.tap(PointMm(0.mm, 4_000.mm), reach)
 
-        viewModel.tap(PointMm(60.mm, 90.mm), reach)
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
         val state = viewModel.uiState.value
         assertThat(state.outlines).hasSize(4)
@@ -480,34 +552,19 @@ class EditorViewModelTest {
     }
 
     @Test
-    fun aPartitionMeetsTheWallAlongItsLengthAndEndsTheRun() {
+    fun aWallThatMeetsThePlanEndsTheRun() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.finishWall()
 
-        // Starts on the wall, 3 m along it, though the finger is 180 mm off.
-        viewModel.tap(PointMm(3_020.mm, 180.mm), reach)
-        assertThat(
-            viewModel.uiState.value.draft
-                ?.start,
-        ).isEqualTo(PointMm(3_000.mm, 0.mm))
-        viewModel.tap(PointMm(3_100.mm, 2_530.mm), reach)
-        assertThat((engine.sent.last().single() as EngineCommand.AddWall).wall.end).isEqualTo(PointMm(3_000.mm, 2_500.mm))
-
-        // Back down onto the first wall: the 90° lock keeps x, the wall gives y.
-        viewModel.finishWall()
+        // A partition down onto the first wall: the engine puts its end on that wall's line.
         viewModel.tap(PointMm(5_000.mm, 2_000.mm), reach)
-        viewModel.aim(PointMm(5_060.mm, 450.mm), reach)
-        assertThat(
-            viewModel.uiState.value.draft
-                ?.end,
-        ).isEqualTo(PointMm(5_000.mm, 0.mm))
-        assertThat(
-            viewModel.uiState.value.draft
-                ?.meets,
-        ).isTrue()
-        viewModel.commit()
+        engine.aimNext = Aimed(PointMm(5_000.mm, 0.mm), length = 2_000.mm, meets = true)
+        viewModel.tap(PointMm(5_060.mm, 450.mm), reach)
+
+        assertThat((engine.sent.last().single() as EngineCommand.AddWall).wall.end).isEqualTo(PointMm(5_000.mm, 0.mm))
+        assertThat(viewModel.uiState.value.outlines).hasSize(2)
         assertThat(viewModel.uiState.value.draft).isNull()
     }
 
@@ -519,7 +576,8 @@ class EditorViewModelTest {
 
         // 6 400 to the right, then left turns: 4 000 up and 6 400 back.
         listOf(6, 4, 0, 0).forEach(viewModel::typeDigit)
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm), PointMm(6_400.mm, 0.mm)))
+        assertThat(viewModel.uiState.value.draft)
+            .isEqualTo(Draft(PointMm(0.mm, 0.mm), Aimed(PointMm(6_400.mm, 0.mm), length = 6_400.mm)))
         viewModel.nextMeasured()
         viewModel.setTurn(Turn.LEFT)
         listOf(4, 0, 0, 1).forEach(viewModel::typeDigit)
@@ -529,9 +587,15 @@ class EditorViewModelTest {
         assertThat(viewModel.uiState.value.measure).isEqualTo(Measure(turn = Turn.LEFT))
         assertThat(viewModel.uiState.value.canCloseRun).isTrue()
         listOf(6, 4, 0, 0).forEach(viewModel::typeDigit)
+        // The engine is told where the wall before started, so it knows which way is left.
+        assertThat(engine.sent.last())
+            .containsExactly(
+                EngineCommand.AimMeasured(level, PointMm(6_400.mm, 4_000.mm), before = PointMm(6_400.mm, 0.mm), Turn.LEFT, 6_400.mm),
+            )
         assertThat(
             viewModel.uiState.value.draft
-                ?.end,
+                ?.to
+                ?.point,
         ).isEqualTo(PointMm(0.mm, 4_000.mm))
         viewModel.nextMeasured()
 
@@ -555,6 +619,10 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
         assertThat(viewModel.uiState.value.outlines).isEmpty()
         viewModel.nextMeasured()
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        // Nor does a touch build the wall whose length is typed.
+        viewModel.typeDigit(3)
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
         assertThat(viewModel.uiState.value.outlines).isEmpty()
 
         viewModel.stopMeasure()
@@ -602,7 +670,7 @@ class EditorViewModelTest {
     }
 
     @Test
-    fun aTypedLengthMovesTheWallEndAndTheWallsThatMeetIt() {
+    fun aTypedLengthIsLeftToTheEngine() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
@@ -611,10 +679,6 @@ class EditorViewModelTest {
             viewModel.uiState.value.outlines
                 .first()
                 .wall
-        val second =
-            viewModel.uiState.value.outlines
-                .last()
-                .wall
 
         viewModel.editLength(first)
         assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(first, was = 6_000.mm))
@@ -622,15 +686,34 @@ class EditorViewModelTest {
         viewModel.eraseDigit()
         viewModel.confirmLength()
 
-        assertThat(engine.sent.last())
-            .containsExactly(
-                EngineCommand.BeginGesture,
-                EngineCommand.MoveWallEnd(first, WallEnd.END, PointMm(6_437.mm, 0.mm)),
-                EngineCommand.MoveWallEnd(second, WallEnd.START, PointMm(6_437.mm, 0.mm)),
-                EngineCommand.EndGesture,
-            ).inOrder()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(first, 6_437.mm))
         assertThat(viewModel.uiState.value.entry).isNull()
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(6_000.mm, 4_000.mm)))
+    }
+
+    @Test
+    fun undoingATypedLengthLeavesTheRunOnItsWall() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.tap(PointMm(6_400.mm, 0.mm), reach)
+        viewModel.editLength(viewModel.uiState.value.drawn!!)
+        listOf(6, 4, 3, 7).forEach(viewModel::typeDigit)
+        viewModel.confirmLength()
+
+        viewModel.undo()
+
+        assertThat(viewModel.uiState.value.outlines).hasSize(1)
+        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(6_400.mm, 0.mm)))
+    }
+
+    @Test
+    fun aTouchWhileASizeIsTypedDrawsNothing() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.startSize()
+
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+
+        assertThat(viewModel.uiState.value.draft).isNull()
+        assertThat(engine.sent.flatten().filterIsInstance<EngineCommand.Aim>()).isEmpty()
     }
 
     @Test
@@ -740,21 +823,6 @@ class EditorViewModelTest {
         assertThat(viewModel.uiState.value.levels).containsExactly(level)
         assertThat(viewModel.uiState.value.level).isEqualTo(level)
         assertThat(viewModel.uiState.value.canUndo).isFalse()
-    }
-
-    @Test
-    fun aWallEndOnTheStoreyBelowCatchesTaps() {
-        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
-        viewModel.tap(PointMm(0.mm, 0.mm), reach)
-        viewModel.tap(PointMm(6_437.mm, 0.mm), reach)
-        viewModel.addLevel()
-
-        viewModel.tap(PointMm(6_250.mm, 180.mm), reach)
-
-        assertThat(
-            viewModel.uiState.value.draft
-                ?.start,
-        ).isEqualTo(PointMm(6_400.mm, 0.mm))
     }
 
     // A 6 m wall on the ground floor; returns its id.
@@ -916,6 +984,24 @@ class EditorViewModelTest {
                 EngineCommand.EndGesture,
             ).inOrder()
         assertThat((viewModel.uiState.value.selected as Selected.WallPart).wall.unit).isEqualTo(block)
+        // The builder has chosen nothing for new walls yet, so they go on as this one.
+        assertThat(viewModel.uiState.value.material).isEqualTo(block)
+    }
+
+    @Test
+    fun aChoiceForOneWallLeavesWhatNewWallsAreLaidFrom() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.chooseMaterial(catalog.units[0])
+        val wall = viewModel.buildWall()
+        viewModel.selectTool(Tool.SELECT)
+        engine.pickNext = wall
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+
+        viewModel.chooseMaterial(catalog.units[1])
+
+        assertThat((viewModel.uiState.value.selected as Selected.WallPart).wall.unit).isEqualTo(block)
+        assertThat(viewModel.uiState.value.material).isEqualTo(brick)
+        assertThat(viewModel.uiState.value.thickness).isEqualTo(380.mm)
     }
 
     @Test
@@ -1088,9 +1174,12 @@ class EditorViewModelTest {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
+        viewModel.aim(PointMm(4_000.mm, 0.mm), reach)
         engine.refuseNext = EngineError.OFF_PLAN
-        viewModel.tap(PointMm(4_000.mm, 0.mm), reach)
+        viewModel.commit()
         assertThat(viewModel.uiState.value.refused).isEqualTo(EngineError.OFF_PLAN)
+        // The wall was not built, so the next one still starts where this one did.
+        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
 
         engine.refuseNext = EngineError.RULE_FAILED
         viewModel.undo()

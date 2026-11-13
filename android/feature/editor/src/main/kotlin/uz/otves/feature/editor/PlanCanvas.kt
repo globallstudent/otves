@@ -177,9 +177,10 @@ internal fun PlanCanvas(
         }
         if (draft != null) {
             val start = view.toScreen(draft.start)
-            val end = draft.end?.let(view::toScreen)
-            if (end != null) {
-                for (guide in draft.guides) {
+            val aimed = draft.to
+            if (aimed != null) {
+                val end = view.toScreen(aimed.point)
+                for (guide in aimed.guides) {
                     drawLine(
                         colors.selection,
                         view.toScreen(guide.from),
@@ -191,12 +192,9 @@ internal fun PlanCanvas(
                 val width = (draftThickness.value / MM_PER_METRE * view.scale).toFloat()
                 drawLine(colors.selection.copy(alpha = SELECTION_FILL), start, end, strokeWidth = width, cap = StrokeCap.Butt)
                 drawLine(colors.selection, start, end, strokeWidth = selectionStroke)
-                draft.length?.let { length ->
-                    // Above the finger, where it stays readable.
-                    val label = measurer.measure(length.value.toString(), draftStyle)
-                    val at = end - Offset(label.size.width / 2f, label.size.height + touchReach * LABEL_LIFT)
-                    drawText(label, topLeft = at)
-                }
+                // Above the finger, where it stays readable.
+                val label = measurer.measure(aimed.length.value.toString(), draftStyle)
+                drawText(label, topLeft = end - Offset(label.size.width / 2f, label.size.height + touchReach * LABEL_LIFT))
                 drawCircle(colors.selection, radius = markRadius, center = end)
             }
             drawCircle(colors.selection, radius = markRadius, center = start)

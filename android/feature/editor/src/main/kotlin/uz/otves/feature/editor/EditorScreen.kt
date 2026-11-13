@@ -70,6 +70,7 @@ import uz.otves.core.model.Money
 import uz.otves.core.model.mm
 import uz.otves.data.catalog.Prices
 import uz.otves.data.project.JobStore
+import uz.otves.engine.Aimed
 import uz.otves.engine.Catalog
 import uz.otves.engine.Condition
 import uz.otves.engine.Engine
@@ -82,6 +83,7 @@ import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
+import uz.otves.engine.Turn
 import uz.otves.engine.Wall
 import uz.otves.engine.WallOutline
 import java.util.Locale
@@ -234,13 +236,13 @@ internal fun EditorScreen(
                 unchosen = state.unchosen,
                 draft = state.draft,
                 draftThickness = state.thickness,
-                drawing = state.tool == Tool.WALL && state.entry == null && state.measure == null && !listOpen,
+                drawing = state.tool == Tool.WALL && !state.typing && !listOpen,
                 fit = fit,
                 // The measured wall stays in view above the number pad.
                 focus =
                     state.draft
                         ?.takeIf { state.measure != null }
-                        ?.let { listOfNotNull(it.start, it.end) }
+                        ?.let { listOfNotNull(it.start, it.to?.point) }
                         .orEmpty(),
                 onTap = actions.onTap,
                 onAim = actions.onAim,
@@ -653,7 +655,7 @@ private fun MeasurePad(
             onSelect = { actions.onTurn(Turn.entries[it]) },
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         )
-        NumberKeys(actions, stringResource(R.string.measure_next), actions.onNextMeasured, enabled = state.draft?.end != null)
+        NumberKeys(actions, stringResource(R.string.measure_next), actions.onNextMeasured, enabled = state.draft?.to != null)
     }
 }
 
@@ -1279,6 +1281,7 @@ private fun refusalText(error: EngineError): String =
         EngineError.OFF_PLAN -> stringResource(R.string.refused_off_plan)
         EngineError.NO_WALL -> stringResource(R.string.refused_no_wall)
         EngineError.DOES_NOT_FIT -> stringResource(R.string.refused_does_not_fit)
+        EngineError.BREAKS_JOIN -> stringResource(R.string.refused_breaks_join)
         else -> stringResource(R.string.refused_other)
     }
 
@@ -1315,7 +1318,7 @@ private fun EditorScreenPreview() {
                                 listOf(PointM(2.25, -0.19), PointM(3.75, -0.19), PointM(3.75, 0.19), PointM(2.25, 0.19)),
                             ),
                         ),
-                    draft = Draft(PointMm(6_400.mm, 0.mm), PointMm(6_400.mm, 4_200.mm)),
+                    draft = Draft(PointMm(6_400.mm, 0.mm), Aimed(PointMm(6_400.mm, 4_200.mm), length = 4_200.mm)),
                     drawn = wall,
                     canUndo = true,
                 ),

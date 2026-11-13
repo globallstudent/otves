@@ -29,6 +29,7 @@
     <string name="editor_hint_door">Эшик қўйиш учун деворга босинг</string>
     <string name="refused_no_wall">Бу ерда девор йўқ</string>
     <string name="refused_does_not_fit">Тешик девордан кенг</string>
+    <string name="refused_breaks_join">Бу узунлик сиғмайди: туташ девор халақит беради</string>
     <string name="level_name">%1$d-қават</string>
     <string name="level_add">Қават қўшиш</string>
     <string name="tool_select">Танлаш</string>

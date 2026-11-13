@@ -29,6 +29,7 @@
     <string name="editor_hint_door">Eshik qo‘yish uchun devorga bosing</string>
     <string name="refused_no_wall">Bu yerda devor yo‘q</string>
     <string name="refused_does_not_fit">Teshik devordan keng</string>
+    <string name="refused_breaks_join">Bu uzunlik sig‘maydi: tutash devor xalaqit beradi</string>
     <string name="level_name">%1$d-qavat</string>
     <string name="level_add">Qavat qo‘shish</string>
     <string name="tool_select">Tanlash</string>
