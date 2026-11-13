@@ -7,12 +7,12 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/geom/faces.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
 #include "axis.h"
-#include "faces.h"
 
 namespace otves::geom {
 namespace {

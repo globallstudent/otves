@@ -1,9 +1,8 @@
 #pragma once
 
 #include <otves/core/wall.h>
+#include <otves/geom/faces.h>
 #include <otves/geom/vec2.h>
-
-#include "faces.h"
 
 namespace otves::geom {
 

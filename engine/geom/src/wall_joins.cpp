@@ -12,11 +12,11 @@
 #include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/core/wall.h>
+#include <otves/geom/faces.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
 #include "axis.h"
-#include "faces.h"
 #include "step.h"
 
 namespace otves::geom {
