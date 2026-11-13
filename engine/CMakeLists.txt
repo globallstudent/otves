@@ -31,5 +31,6 @@ endif()
 
 add_subdirectory(core)
 add_subdirectory(geom)
+add_subdirectory(drafting)
 add_subdirectory(takeoff)
 add_subdirectory(bridge)

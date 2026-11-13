@@ -201,6 +201,19 @@ struct Session::Impl {
                                        result);
   }
 
+  // A drawing reads the model and answers with a level as a display list.
+  flatbuffers::Offset<schema::CommandResult> drawn(const schema::CommandEntry& entry) {
+    const auto drawing = decode(entry.command_as_Draw()).and_then([this](const View& view) {
+      return draw(document.model(), view);
+    });
+    if (!drawing) {
+      return error(drawing.error().code, drawing.error().message);
+    }
+    const auto list = encode_drawing(builder, *drawing);
+    return schema::CreateCommandResult(builder, schema::ErrorCode::None, 0, nullptr, nullptr, 0,
+                                       list);
+  }
+
   // A query changes nothing; every other entry is a command.
   flatbuffers::Offset<schema::CommandResult> answer(const schema::CommandEntry& entry) {
     switch (entry.command_type()) {
@@ -209,6 +222,8 @@ struct Session::Impl {
       case schema::Command::Aim:
       case schema::Command::AimMeasured:
         return aimed(entry);
+      case schema::Command::Draw:
+        return drawn(entry);
       default:
         return result(execute(entry));
     }

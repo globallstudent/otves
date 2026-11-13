@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <expected>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <set>
@@ -19,6 +20,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/drafting/plan.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
@@ -89,6 +91,36 @@ schema::IssueKind issue_code(geom::JoinIssueKind kind) {
       return schema::IssueKind::SharpAngle;
   }
   return schema::IssueKind::WallOverlap;
+}
+
+schema::Fill fill_code(drafting::Fill fill) {
+  switch (fill) {
+    case drafting::Fill::kNone:
+      return schema::Fill::None;
+    case drafting::Fill::kWall:
+      return schema::Fill::Wall;
+    case drafting::Fill::kUnchosen:
+      return schema::Fill::Unchosen;
+    case drafting::Fill::kGap:
+      return schema::Fill::Gap;
+  }
+  return schema::Fill::None;
+}
+
+schema::Stroke stroke_code(drafting::Stroke stroke) {
+  switch (stroke) {
+    case drafting::Stroke::kNone:
+      return schema::Stroke::None;
+    case drafting::Stroke::kWallEdge:
+      return schema::Stroke::WallEdge;
+    case drafting::Stroke::kBelow:
+      return schema::Stroke::Below;
+    case drafting::Stroke::kFrame:
+      return schema::Stroke::Frame;
+    case drafting::Stroke::kLeaf:
+      return schema::Stroke::Leaf;
+  }
+  return schema::Stroke::None;
 }
 
 TakeoffOffsets failure(flatbuffers::FlatBufferBuilder& builder, const Error& error) {
@@ -260,6 +292,58 @@ OpeningOutlinesOffset encode_openings(flatbuffers::FlatBufferBuilder& builder, c
                                                     builder.CreateVectorOfStructs(points)));
   }
   return builder.CreateVector(outlines);
+}
+
+flatbuffers::Offset<schema::Drawing> encode_drawing(flatbuffers::FlatBufferBuilder& builder,
+                                                    const drafting::Drawing& drawing) {
+  const auto point = [](geom::Vec2 at) { return schema::PointM{at.x, at.y}; };
+  // A primitive that draws no element carries no id.
+  const auto key = [](ElementId id, schema::Uuid& out) -> const schema::Uuid* {
+    out = to_schema(id);
+    return id.is_nil() ? nullptr : &out;
+  };
+  schema::Uuid id;
+  std::vector<flatbuffers::Offset<schema::DrawnPolygon>> polygons;
+  polygons.reserve(drawing.polygons.size());
+  for (const drafting::Polygon& polygon : drawing.polygons) {
+    std::vector<schema::PointM> points;
+    points.reserve(polygon.points.size());
+    std::ranges::transform(polygon.points, std::back_inserter(points), point);
+    const auto outline = builder.CreateVectorOfStructs(points);
+    polygons.push_back(schema::CreateDrawnPolygon(builder, key(polygon.element, id),
+                                                  fill_code(polygon.fill),
+                                                  stroke_code(polygon.stroke), outline));
+  }
+  std::vector<flatbuffers::Offset<schema::DrawnLine>> lines;
+  lines.reserve(drawing.lines.size());
+  for (const drafting::Line& line : drawing.lines) {
+    const schema::PointM from = point(line.from);
+    const schema::PointM to = point(line.to);
+    lines.push_back(schema::CreateDrawnLine(builder, key(line.element, id),
+                                            stroke_code(line.stroke), &from, &to));
+  }
+  std::vector<flatbuffers::Offset<schema::DrawnArc>> arcs;
+  arcs.reserve(drawing.arcs.size());
+  for (const drafting::Arc& arc : drawing.arcs) {
+    const schema::PointM centre = point(arc.centre);
+    const schema::PointM from = point(arc.from);
+    const schema::PointM to = point(arc.to);
+    arcs.push_back(schema::CreateDrawnArc(builder, key(arc.element, id), stroke_code(arc.stroke),
+                                          &centre, &from, &to));
+  }
+  std::vector<flatbuffers::Offset<schema::DrawnText>> texts;
+  texts.reserve(drawing.texts.size());
+  for (const drafting::Text& text : drawing.texts) {
+    const schema::PointM at = point(text.at);
+    const schema::PointM along = point(text.along);
+    const schema::TextKind kind = text.kind == drafting::TextKind::kAboutLength
+                                      ? schema::TextKind::AboutLength
+                                      : schema::TextKind::Length;
+    texts.push_back(schema::CreateDrawnText(builder, key(text.element, id), kind,
+                                            text.value.value(), &at, &along));
+  }
+  return schema::CreateDrawing(builder, builder.CreateVector(polygons), builder.CreateVector(lines),
+                               builder.CreateVector(arcs), builder.CreateVector(texts));
 }
 
 TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Model& model,

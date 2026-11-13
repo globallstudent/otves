@@ -85,6 +85,12 @@ class Request {
                schema::CreateAddSketch(builder_, wall, path, 300, 100, true).Union());
   }
 
+  // The drawing of a level with label text 300 mm high on the plan and digits 150 mm wide.
+  Request& draw(ElementId level) {
+    const schema::Uuid on = key(level);
+    return add(Command::Draw, schema::CreateDraw(builder_, &on, 300, 150).Union());
+  }
+
   // A wall up from the origin, meeting add_wall's at a corner.
   Request& add_wall_up(ElementId level, std::int64_t length) {
     const schema::Uuid on = key(level);
@@ -842,6 +848,76 @@ TEST(Session, ASketchThatGivesNoWallChangesNothing) {
   EXPECT_EQ(refused.results()->Get(5)->error(), schema::ErrorCode::CorruptData);
   EXPECT_EQ(refused.changes()->size(), 0U);
   EXPECT_EQ(refused.log()->size(), 0U);
+}
+
+TEST(Session, ADrawingIsTheLevelAsADisplayListAndChangesNothing) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const std::vector<ElementId> room = add_room(session, level);
+  respond(session, Request{}.place(level, {3000, 0}).bytes());
+
+  const auto& asked = respond(
+      session, Request{}.draw(level).draw(ElementId{Uuid{7, 7}}).empty(Command::Draw).bytes());
+
+  ASSERT_EQ(asked.results()->size(), 3U);
+  const schema::Drawing* drawing = asked.results()->Get(0)->drawing();
+  ASSERT_NE(drawing, nullptr);
+  // Four walls with no material yet and the window's gap; its jambs, faces and glazing; a
+  // length by each wall.
+  ASSERT_EQ(drawing->polygons()->size(), 5U);
+  EXPECT_EQ(to_id(drawing->polygons()->Get(0)->element()), room[0]);
+  EXPECT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Unchosen);
+  EXPECT_EQ(drawing->polygons()->Get(0)->stroke(), schema::Stroke::WallEdge);
+  EXPECT_EQ(drawing->polygons()->Get(4)->fill(), schema::Fill::Gap);
+  EXPECT_EQ(drawing->lines()->size(), 5U);
+  EXPECT_EQ(drawing->arcs()->size(), 0U);
+  ASSERT_EQ(drawing->texts()->size(), 4U);
+  EXPECT_EQ(to_id(drawing->texts()->Get(0)->element()), room[0]);
+  EXPECT_EQ(drawing->texts()->Get(0)->kind(), schema::TextKind::Length);
+  EXPECT_EQ(drawing->texts()->Get(0)->value(), 6000);
+  EXPECT_DOUBLE_EQ(drawing->texts()->Get(0)->at()->x(), 3.0);
+  EXPECT_DOUBLE_EQ(drawing->texts()->Get(0)->along()->x(), 1.0);
+
+  EXPECT_EQ(asked.results()->Get(1)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(asked.results()->Get(2)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(asked.changes()->size(), 0U);
+  EXPECT_EQ(asked.log()->size(), 0U);
+}
+
+TEST(Session, ADrawingSeesWhatTheCommandsBeforeItInTheRequestDid) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+
+  const auto& built = respond(session, Request{}.add_wall(level, 6400).draw(level).bytes());
+
+  ASSERT_EQ(built.results()->size(), 2U);
+  const schema::Drawing* drawing = built.results()->Get(1)->drawing();
+  ASSERT_NE(drawing, nullptr);
+  ASSERT_EQ(drawing->polygons()->size(), 1U);
+  EXPECT_EQ(to_id(drawing->polygons()->Get(0)->element()),
+            to_id(built.results()->Get(0)->created()));
+  ASSERT_EQ(drawing->texts()->size(), 1U);
+  EXPECT_EQ(drawing->texts()->Get(0)->value(), 6400);
+}
+
+TEST(Session, TheStoreyBelowIsDrawnInOutlineUnderTheWalls) {
+  Session session{kDevice};
+  const ElementId ground = add_level(session);
+  add_room(session, ground);
+  const ElementId upper =
+      to_id(respond(session, Request{}.add_level(3000, 3000).bytes()).results()->Get(0)->created());
+
+  const auto& asked =
+      respond(session, Request{}.add_wall(upper, {0, 0}, {6000, 0}).draw(upper).bytes());
+
+  const schema::Drawing* drawing = asked.results()->Get(1)->drawing();
+  ASSERT_NE(drawing, nullptr);
+  ASSERT_EQ(drawing->polygons()->size(), 5U);
+  // The four walls under it carry no element: they cannot be picked from up here.
+  EXPECT_EQ(drawing->polygons()->Get(0)->stroke(), schema::Stroke::Below);
+  EXPECT_EQ(drawing->polygons()->Get(0)->element(), nullptr);
+  EXPECT_EQ(drawing->polygons()->Get(4)->stroke(), schema::Stroke::WallEdge);
+  EXPECT_EQ(drawing->texts()->size(), 1U);
 }
 
 TEST(Session, OpeningASavedJobReplacesTheModel) {

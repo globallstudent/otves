@@ -33,13 +33,13 @@ sequenceDiagram
 
 | Field | Content |
 |---|---|
-| `results` | One per command, in order: `ErrorCode`, an English message for logs, the created element's id, the element a `Pick` found, where an `Aim` or `AimMeasured` says a wall would end |
+| `results` | One per command, in order: `ErrorCode`, an English message for logs, the created element's id, the element a `Pick` found, where an `Aim` or `AimMeasured` says a wall would end, the `Drawing` a `Draw` asked for |
 | `changes` | Each changed level, wall or opening with its full value, or with no value when deleted; sorted by id |
 | `can_undo`, `can_redo` | For the toolbar |
 | `outlines` | Every wall's joined plan outline in metres, level by level; only when the model or the content changed |
 | `takeoff`, `takeoff_error` | Material lines from the loaded rules, or why they could not run; absent until `LoadContent` |
 
-`Pick`, `Aim` and `AimMeasured` are questions: they read the model and change nothing. `SetWallLength` asks `geom::resize_wall` what moves and runs it as `MoveWallEnd` commands in one undo step ([ADR 0011](../../docs/adr/0011-plan-editing-in-the-engine.md)); it also makes the wall exact.
+`Pick`, `Aim`, `AimMeasured` and `Draw` are questions: they read the model and change nothing. `Draw` answers with one level as a display list from `drafting::draft` ([ADR 0013](../../docs/adr/0013-the-engine-drafts-the-plan.md)); sent after the commands of a request, it shows what they did. `SetWallLength` asks `geom::resize_wall` what moves and runs it as `MoveWallEnd` commands in one undo step ([ADR 0011](../../docs/adr/0011-plan-editing-in-the-engine.md)); it also makes the wall exact.
 
 `AddSketch` asks `geom::straighten` what walls a stroke means and runs them as `AddWall` commands in one undo step, each wall not exact ([ADR 0012](../../docs/adr/0012-a-sketch-becomes-walls-in-the-engine.md)). Both check every command before running the first, so a refusal changes nothing.
 

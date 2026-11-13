@@ -6,6 +6,7 @@
 #include <flatbuffers/flatbuffers.h>
 
 #include <otves/core/model.h>
+#include <otves/drafting/plan.h>
 #include <otves/takeoff/rules.h>
 
 #include "engine_generated.h"
@@ -32,6 +33,10 @@ using OpeningOutlinesOffset =
 // Every opening whose wall exists, cut face to face through it, sorted by id.
 [[nodiscard]] OpeningOutlinesOffset encode_openings(flatbuffers::FlatBufferBuilder& builder,
                                                     const Model& model);
+
+// A level's display list, as the answer to a Draw.
+[[nodiscard]] flatbuffers::Offset<schema::Drawing> encode_drawing(
+    flatbuffers::FlatBufferBuilder& builder, const drafting::Drawing& drawing);
 
 struct TakeoffOffsets {
   LinesOffset lines;  // null when no content is loaded

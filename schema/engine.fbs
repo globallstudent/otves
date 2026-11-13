@@ -191,6 +191,16 @@ table AddSketch {
   square:bool;
 }
 
+// The drawing of `level` (docs/adr/0013). Changes nothing; the result's `drawing` holds it.
+// `text_height` and `digit_width` say how big the app's label text is on the plan at its zoom:
+// the height of a line and the width of a digit, in millimetres. The engine places labels with
+// them and leaves out the ones that do not fit.
+table Draw {
+  level:Uuid;
+  text_height:long;
+  digit_width:long;
+}
+
 // Replaces the open model with a saved job's elements (docs/adr/0007) and starts an empty log
 // with no undo or redo. `clock` is the newest stamp in the job's log; later stamps sort after it.
 // Fails with CorruptData, changing nothing, when an element is invalid, an id repeats, or a wall
@@ -240,6 +250,7 @@ union Command {
   AimMeasured,
   SetWallLength,
   AddSketch,
+  Draw,
 }
 
 table CommandEntry {
@@ -294,12 +305,84 @@ table Aimed {
   meets:bool;      // the point is a wall end or lies in a wall, so a wall ending here joins the plan
 }
 
+// A point of derived geometry, in metres.
+struct PointM {
+  x:double;
+  y:double;
+}
+
+// What a polygon of a drawing is filled as and a line is drawn as (engine/drafting/plan.h). The
+// app maps each to a paint; one it does not know is not painted.
+enum Fill:ubyte {
+  None = 0,
+  Wall = 1,      // masonry
+  Unchosen = 2,  // a wall with no material yet
+  Gap = 3,       // what an opening leaves of its wall
+}
+
+enum Stroke:ubyte {
+  None = 0,
+  WallEdge = 1,
+  Below = 2,  // a wall of the level below
+  Frame = 3,  // a window's faces and glazing
+  Leaf = 4,   // a door's leaf and swing
+}
+
+enum TextKind:ubyte {
+  Length = 0,       // a wall's length
+  AboutLength = 1,  // one that nobody has typed or measured
+}
+
+// Every primitive names the element it draws; absent for what cannot be picked.
+table DrawnPolygon {
+  element:Uuid;
+  fill:Fill = None;
+  stroke:Stroke = None;  // of its outline
+  points:[PointM];
+}
+
+table DrawnLine {
+  element:Uuid;
+  stroke:Stroke = None;
+  from:PointM;
+  to:PointM;
+}
+
+// Around `centre` from `from` to `to`, counter-clockwise; both lie at one radius.
+table DrawnArc {
+  element:Uuid;
+  stroke:Stroke = None;
+  centre:PointM;
+  from:PointM;
+  to:PointM;
+}
+
+// A number in millimetres written with its middle at `at`, along the unit direction `along`,
+// which never points to the left or straight down.
+table DrawnText {
+  element:Uuid;
+  kind:TextKind = Length;
+  value:long;
+  at:PointM;
+  along:PointM;
+}
+
+// One level as a display list (docs/adr/0013), in plan metres: painted in this order, each list
+// in the order given.
+table Drawing {
+  polygons:[DrawnPolygon];
+  lines:[DrawnLine];
+  arcs:[DrawnArc];
+  texts:[DrawnText];
+}
+
 table CommandResult {
   error:ErrorCode = None;
   message:string;  // English context for logs; the app shows translated text for `error`
   created:Uuid;    // the element the command created, if any
   picked:Uuid;     // the element a Pick found, if any
   aimed:Aimed;     // the answer to an Aim or AimMeasured
+  drawing:Drawing;  // the answer to a Draw
 }
 
 union Element { Level, Wall, Opening, Conditions }
@@ -406,12 +489,6 @@ table LogEntry {
   device:Uuid;
   origin:Uuid;
   ops:[ubyte] (nested_flatbuffer: "OpGroup", force_align: 8);
-}
-
-// A point of derived geometry, in metres.
-struct PointM {
-  x:double;
-  y:double;
 }
 
 // A wall's plan outline after joining, counter-clockwise (engine/geom).

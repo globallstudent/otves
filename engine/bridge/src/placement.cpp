@@ -19,6 +19,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/drafting/plan.h>
 #include <otves/geom/editing.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/sketch.h>
@@ -68,6 +69,18 @@ std::optional<ElementId> level_below(const Model& model, ElementId level) {
     return std::nullopt;
   }
   return std::prev(found)->second;
+}
+
+// The openings in the walls of `level`, each with its wall.
+std::vector<geom::PlacedOpening> openings_on(const Model& model, ElementId level) {
+  std::vector<geom::PlacedOpening> openings;
+  model.for_each<Opening>([&](ElementId id, const Opening& opening) {
+    const Wall* wall = model.find<Wall>(opening.wall);
+    if (wall != nullptr && wall->level == level) {
+      openings.push_back({.id = id, .wall = *wall, .opening = opening});
+    }
+  });
+  return openings;
 }
 
 // The wall ends of the level under `level`, so walls stand on walls.
@@ -149,18 +162,25 @@ Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke) {
       });
 }
 
+Result<drafting::Drawing> draw(const Model& model, const View& view) {
+  if (model.find<Level>(view.level) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "level not found");
+  }
+  const std::vector<geom::WallInput> walls = walls_on(model, view.level);
+  const std::vector<geom::PlacedOpening> openings = openings_on(model, view.level);
+  std::vector<geom::WallInput> below;
+  if (const std::optional<ElementId> under = level_below(model, view.level)) {
+    below = walls_on(model, *under);
+  }
+  return drafting::draft({.walls = walls, .openings = openings, .below = below}, view.text);
+}
+
 Result<std::optional<ElementId>> pick(const Model& model, const Tap& tap) {
   if (model.find<Level>(tap.level) == nullptr) {
     return make_error(ErrorCode::kNotFound, "level not found");
   }
   const std::vector<geom::WallInput> walls = walls_on(model, tap.level);
-  std::vector<geom::PlacedOpening> openings;
-  model.for_each<Opening>([&](ElementId id, const Opening& opening) {
-    const Wall* wall = model.find<Wall>(opening.wall);
-    if (wall != nullptr && wall->level == tap.level) {
-      openings.push_back({.id = id, .wall = *wall, .opening = opening});
-    }
-  });
+  const std::vector<geom::PlacedOpening> openings = openings_on(model, tap.level);
   const geom::Vec2 at = geom::to_vec2(tap.at);
   const double reach = to_metres(std::max(tap.reach, Mm{0}));
   // Under the finger first, so a wall beside an opening stays easy to pick.

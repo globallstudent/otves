@@ -17,6 +17,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/drafting/plan.h>
 #include <otves/geom/editing.h>
 
 #include "engine_generated.h"
@@ -101,6 +102,15 @@ struct Stroke {
 
 // kCorruptData when the wall is missing or its location line is unknown.
 [[nodiscard]] std::expected<Stroke, Error> decode(const schema::AddSketch* sketch);
+
+// A level to draw and how big the app's label text is on its plan (schema Draw).
+struct View {
+  ElementId level;
+  drafting::TextSize text;
+};
+
+// kCorruptData when the query is missing.
+[[nodiscard]] std::expected<View, Error> decode(const schema::Draw* draw);
 
 // A schema element as a union member: its type and its table.
 struct EncodedElement {

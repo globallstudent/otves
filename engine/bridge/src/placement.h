@@ -7,6 +7,7 @@
 #include <otves/core/error.h>
 #include <otves/core/model.h>
 #include <otves/core/uuid.h>
+#include <otves/drafting/plan.h>
 #include <otves/geom/editing.h>
 
 #include "convert.h"
@@ -31,6 +32,10 @@ namespace otves::bridge {
 // The walls a stroke means on its level (geom::straighten), each checked to be buildable and
 // not exact. kNotFound when the level does not exist.
 [[nodiscard]] Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke);
+
+// The level as a display list (drafting::draft): its walls and openings, over the walls of the
+// level under it. kNotFound when the level does not exist.
+[[nodiscard]] Result<drafting::Drawing> draw(const Model& model, const View& view);
 
 // The element a tap picks on its level: an opening or wall under the point, else the nearest
 // opening, else the nearest wall within reach. kNotFound when the level does not exist.

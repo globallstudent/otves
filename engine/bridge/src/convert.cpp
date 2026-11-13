@@ -1,5 +1,7 @@
 #include "convert.h"
 
+#include <algorithm>
+#include <cstdint>
 #include <expected>
 #include <optional>
 #include <string>
@@ -488,6 +490,18 @@ std::expected<Stroke, Error> decode(const schema::AddSketch* sketch) {
     }
     return stroke;
   });
+}
+
+std::expected<View, Error> decode(const schema::Draw* draw) {
+  if (draw == nullptr) {
+    return corrupt("draw is missing");
+  }
+  // A size is never negative and never larger than the plan.
+  const auto size = [](std::int64_t millimetres) {
+    return to_metres(std::clamp(Mm{millimetres}, Mm{0}, kMaxCoordinate));
+  };
+  return View{.level = to_id(draw->level()),
+              .text = {.height = size(draw->text_height()), .digit = size(draw->digit_width())}};
 }
 
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Level& level) {

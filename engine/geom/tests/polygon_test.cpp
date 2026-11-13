@@ -20,5 +20,17 @@ TEST(Polygon, AreaIsNegativeClockwise) {
 
 TEST(Polygon, EmptyOutlineHasNoArea) { EXPECT_DOUBLE_EQ(signed_area({}), 0.0); }
 
+TEST(Polygon, ContainsWhatLiesInsideAnLShape) {
+  const std::vector<Vec2> shape{{0, 0}, {4, 0}, {4, 2}, {2, 2}, {2, 4}, {0, 4}};
+  EXPECT_TRUE(contains(shape, {.x = 1, .y = 1}));
+  EXPECT_TRUE(contains(shape, {.x = 1, .y = 3}));
+  EXPECT_TRUE(contains(shape, {.x = 3, .y = 1}));
+  // The notch, and beside the shape.
+  EXPECT_FALSE(contains(shape, {.x = 3, .y = 3}));
+  EXPECT_FALSE(contains(shape, {.x = -1, .y = 1}));
+  EXPECT_FALSE(contains(shape, {.x = 5, .y = 1}));
+  EXPECT_FALSE(contains({}, {.x = 0, .y = 0}));
+}
+
 }  // namespace
 }  // namespace otves::geom
