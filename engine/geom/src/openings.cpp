@@ -11,26 +11,11 @@
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
+#include "axis.h"
 #include "faces.h"
 
 namespace otves::geom {
 namespace {
-
-// A wall's location line as an origin and unit directions along and to the left of it.
-struct Axis {
-  Vec2 start;
-  Vec2 dir;
-  Vec2 left;
-  double length = 0.0;
-};
-
-Axis axis(const Wall& wall) {
-  const Vec2 start = to_vec2(wall.start);
-  const Vec2 run = to_vec2(wall.end) - start;
-  const double run_length = length(run);
-  const Vec2 dir = run * (1.0 / run_length);
-  return {.start = start, .dir = dir, .left = perp(dir), .length = run_length};
-}
 
 // How far `at` lies from the part of a wall between `from` and `to` along its location line,
 // face to face, and where along the line it falls.

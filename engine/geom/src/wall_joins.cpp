@@ -15,31 +15,12 @@
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
+#include "axis.h"
 #include "faces.h"
+#include "step.h"
 
 namespace otves::geom {
 namespace {
-
-// Inputs sit on a 1 mm grid, so distances below 1 µm are rounding noise.
-constexpr double kEpsilon = 1e-6;
-
-// A wall direction in whole millimetres. Directions are sorted and tested for parallelism on these
-// exactly, so the joins never depend on how a platform rounds floating point.
-struct StepMm {
-  std::int64_t x = 0;
-  std::int64_t y = 0;
-};
-
-constexpr StepMm step(PointMm from, PointMm to) {
-  return {.x = (to.x - from.x).value(), .y = (to.y - from.y).value()};
-}
-constexpr StepMm reversed(StepMm step) { return {.x = -step.x, .y = -step.y}; }
-// Coordinates stay within kMaxCoordinate, so these products fit in int64.
-constexpr std::int64_t cross(StepMm lhs, StepMm rhs) { return (lhs.x * rhs.y) - (lhs.y * rhs.x); }
-constexpr std::int64_t dot(StepMm lhs, StepMm rhs) { return (lhs.x * rhs.x) + (lhs.y * rhs.y); }
-constexpr int sign(std::int64_t value) {
-  return static_cast<int>(value > 0) - static_cast<int>(value < 0);
-}
 
 // a and b lie strictly on opposite sides of the wall's location line.
 constexpr bool straddles(const Wall& wall, PointMm a, PointMm b) {
@@ -325,10 +306,9 @@ class Joiner {
 
   [[nodiscard]] bool inside(std::size_t wall, Vec2 point) const {
     const Frame& frame = frames_[wall];
-    const double along = dot(point - frame.start, frame.dir);
-    const double across = dot(point - frame.start, frame.left);
-    return along > kEpsilon && along < frame.length - kEpsilon &&
-           across <= frame.left_offset + kEpsilon && across >= -frame.right_offset - kEpsilon;
+    const Axis line{
+        .start = frame.start, .dir = frame.dir, .left = frame.left, .length = frame.length};
+    return holds(line, {.left = frame.left_offset, .right = frame.right_offset}, point);
   }
 
   [[nodiscard]] bool has_end_inside(std::size_t wall, std::size_t host) const {
