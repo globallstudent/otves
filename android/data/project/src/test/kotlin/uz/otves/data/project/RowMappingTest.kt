@@ -42,6 +42,14 @@ class RowMappingTest {
         assertThat(masonry.row(wall).levelId).isEqualTo("019a5f00-0000-7000-8000-000000000001")
     }
 
+    @Test
+    fun aSketchedWallStaysNotExact() {
+        val sketched = Wall(level, PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), 380.mm, 2800.mm, exact = false)
+
+        assertThat(sketched.row(wall).exact).isFalse()
+        assertThat(sketched.row(wall).element()).isEqualTo(wall to sketched)
+    }
+
     @Test(expected = CorruptJobException::class)
     fun unknownCodeIsACorruptJob() {
         Opening(wall, 0.mm, 900.mm, 2100.mm, 0.mm).row(opening).copy(kind = 7).element()

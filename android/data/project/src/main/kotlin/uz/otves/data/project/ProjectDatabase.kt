@@ -12,12 +12,18 @@ import androidx.room.Upsert
 /** One job file (docs/adr/0007). */
 @Database(
     entities = [JobRow::class, LevelRow::class, WallRow::class, OpeningRow::class, ConditionsRow::class, OpGroupRow::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
     // Version 2 adds what the builder chose (docs/adr/0008): new columns, zero in old jobs.
     // Version 3 adds the conditions table (docs/adr/0009), empty in old jobs.
     // Version 4 adds the footing's section to level (docs/adr/0010), zero in old jobs.
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
+    // Version 5 adds whether a wall's length is exact (docs/adr/0012), true in old jobs.
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2),
+        AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5),
+    ],
 )
 internal abstract class ProjectDatabase : RoomDatabase() {
     abstract fun jobs(): JobDao

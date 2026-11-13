@@ -5,8 +5,8 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// Tables of a job file, schema version 4 (docs/adr/0007 to 0010). Ids are canonical UUID text, lengths
-// whole millimetres, enums the codes of schema/engine.fbs.
+// Tables of a job file, schema version 5 (docs/adr/0007 to 0010 and 0012). Ids are canonical UUID
+// text, lengths whole millimetres, enums the codes of schema/engine.fbs.
 
 @Entity(tableName = "job")
 internal data class JobRow(
@@ -43,6 +43,8 @@ internal data class WallRow(
     @ColumnInfo(name = "unit_length", defaultValue = "0") val unitLength: Long,
     @ColumnInfo(name = "unit_width", defaultValue = "0") val unitWidth: Long,
     @ColumnInfo(name = "unit_height", defaultValue = "0") val unitHeight: Long,
+    // Whether the length was typed or measured; a sketched wall is not until it gets one.
+    @ColumnInfo(defaultValue = "1") val exact: Boolean,
 )
 
 @Entity(tableName = "opening", indices = [Index("wall_id")])

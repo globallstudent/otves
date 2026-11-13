@@ -29,7 +29,7 @@ class MigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(4).use { connection ->
+        helper.runMigrationsAndValidate(5).use { connection ->
             // docs/adr/0010: no footing until the builder gives one.
             connection.prepare("SELECT footing_width, footing_depth FROM level").use { level ->
                 assertThat(level.step()).isTrue()
@@ -40,9 +40,10 @@ class MigrationTest {
                 assertThat(conditions.step()).isTrue()
                 assertThat(conditions.getLong(0)).isEqualTo(0L)
             }
-            connection.prepare("SELECT thickness, unit_length, unit_width, unit_height FROM wall").use { wall ->
+            // docs/adr/0012: a wall drawn before sketches has a length that was given.
+            connection.prepare("SELECT thickness, unit_length, unit_width, unit_height, exact FROM wall").use { wall ->
                 assertThat(wall.step()).isTrue()
-                assertThat((0..3).map(wall::getLong)).containsExactly(380L, 0L, 0L, 0L).inOrder()
+                assertThat((0..4).map(wall::getLong)).containsExactly(380L, 0L, 0L, 0L, 1L).inOrder()
             }
             connection.prepare("SELECT ring_beam, junction_meshes FROM level").use { level ->
                 assertThat(level.step()).isTrue()

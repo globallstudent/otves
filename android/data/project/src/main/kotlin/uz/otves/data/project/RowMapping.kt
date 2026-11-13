@@ -59,6 +59,7 @@ internal fun Wall.row(id: ElementId): WallRow =
         unitLength = unit?.length?.value ?: 0,
         unitWidth = unit?.width?.value ?: 0,
         unitHeight = unit?.height?.value ?: 0,
+        exact = exact,
     )
 
 internal fun Opening.row(id: ElementId): OpeningRow =
@@ -109,6 +110,7 @@ internal fun WallRow.element(): Pair<ElementId, EngineElement> =
                     else -> throw CorruptJobException("wall $id has location line $locationLine")
                 },
             unit = if (unitLength > 0) UnitSize(Mm(unitLength), Mm(unitWidth), Mm(unitHeight)) else null,
+            exact = exact,
         )
 
 internal fun OpeningRow.element(): Pair<ElementId, EngineElement> =
