@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.designsystem.SegmentedControl
 import uz.otves.core.model.ElementId
+import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
 import uz.otves.engine.Turn
 import kotlin.uuid.Uuid
@@ -31,18 +32,28 @@ internal fun LengthPad(
     entry: LengthEntry,
     actions: EditorActions,
 ) {
+    // In a pass over sketched walls the length the sketch gave stands until another is typed.
+    val refining = entry.refining
+    val was = if (refining) "${stringResource(R.string.length_about_mark)} ${grouped(entry.was)}" else grouped(entry.was)
     Panel {
-        PanelHeader(stringResource(R.string.length_title)) {
-            PanelAction(stringResource(R.string.length_cancel), actions.onCancelLength)
+        PanelHeader(
+            if (refining) stringResource(R.string.sketch_wall_of, entry.step, entry.of) else stringResource(R.string.length_title),
+        ) {
+            PanelAction(stringResource(if (refining) R.string.takeoff_close else R.string.length_cancel), actions.onCancelLength)
         }
-        TypedLength(entry.digits) {
+        TypedLength(entry.digits, standing = entry.was.takeIf { refining }) {
             Text(
-                stringResource(R.string.length_was, grouped(entry.was)),
+                stringResource(R.string.length_was, was),
                 style = MaterialTheme.typography.bodyLarge,
                 color = OtvesTheme.colors.inkSecondary,
             )
         }
-        NumberKeys(actions, stringResource(R.string.inspector_done), actions.onConfirmLength, enabled = entry.digits.isNotEmpty())
+        NumberKeys(
+            actions,
+            stringResource(if (refining) R.string.measure_next else R.string.inspector_done),
+            actions.onConfirmLength,
+            enabled = refining || entry.digits.isNotEmpty(),
+        )
     }
 }
 
@@ -72,15 +83,17 @@ internal fun MeasurePad(
     }
 }
 
+// The length typed so far; before a digit, the length that stands if none is typed, or zero.
 @Composable
 private fun TypedLength(
     digits: String,
+    standing: Mm? = null,
     trailing: @Composable () -> Unit,
 ) {
     val colors = OtvesTheme.colors
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = stringResource(R.string.length_value, digits.toLongOrNull()?.let(::grouped) ?: "0"),
+            text = stringResource(R.string.length_value, grouped(digits.toLongOrNull() ?: standing?.value ?: 0)),
             style = MaterialTheme.typography.displaySmall,
             color = if (digits.isEmpty()) colors.inkTertiary else colors.ink,
             modifier = Modifier.weight(1f),

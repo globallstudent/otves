@@ -10,6 +10,8 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | level | этаж | qavat | Storey, including basement (подвал) and foundation; walls stand on one, heights measured from its floor |
 | wall | стена | devor | Masonry or block wall with thickness in bricks; its height is the masonry, below the ring beam |
 | location line | линия привязки | bog‘lash chizig‘i | The wall line whose points are stored: centre, left or right face |
+| sketch | набросок | qoralama | A stroke drawn with a finger and read as walls (ADR 0012) |
+| exact length | точный размер | aniq o‘lcham | A wall length that was typed or measured; a sketched wall's is written with «≈» until then |
 | wall join | сопряжение стен | devorlar tutashuvi | How wall ends meet: a mitre at a corner, slices around a shared point |
 | butt joint | примыкание | tirab ulash | A wall ending against the face of another wall |
 | masonry unit | кирпич, блок | g‘isht, blok | A brick or block as laid: length along the wall, width across, course height |

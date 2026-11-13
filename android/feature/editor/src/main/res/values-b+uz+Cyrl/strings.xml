@@ -121,4 +121,10 @@
     <string name="tool_options">Асбоб параметрлари</string>
     <string name="tool_options_open">Параметрлар очиқ</string>
     <string name="options_ortho">Фақат тўғри бурчаклар</string>
+    <string name="tool_pencil">Қалам</string>
+    <string name="editor_hint_pencil">Деворларни бармоқ билан чизинг: чизиқлар ўзи тўғриланади</string>
+    <string name="sketch_rough">Ўлчамлар ҳозирча тахминий</string>
+    <string name="sketch_too_short">Чизиқ девор учун жуда қисқа</string>
+    <string name="sketch_refine">Ўлчамларни аниқлаш · %1$d</string>
+    <string name="sketch_wall_of">Девор %1$d / %2$d</string>
 </resources>

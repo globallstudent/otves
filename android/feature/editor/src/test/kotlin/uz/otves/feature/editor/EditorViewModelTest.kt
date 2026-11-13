@@ -82,8 +82,8 @@ class EditorViewModelTest {
      * A small engine: keeps the elements, reports changes, outlines and one log group per request
      * that changed the model, and undoes its last step. Picks what the test chose. It knows no
      * geometry (engine/geom has the real thing and its tests): an aim answers the finger's own
-     * point unless the test says otherwise, and measured walls and typed lengths run along the
-     * axes only.
+     * point unless the test says otherwise, measured walls and typed lengths run along the axes
+     * only, and a sketch is a wall between each two of its points.
      */
     private class FakeEngine(
         private val ground: ElementId,
@@ -177,6 +177,24 @@ class EditorViewModelTest {
                         create(command.wall)
                     }
 
+                    command is EngineCommand.AddSketch -> {
+                        val made =
+                            command.points.zipWithNext { from, to ->
+                                val id = ElementId(Uuid.fromLongs(++next, 0))
+                                val wall =
+                                    Wall(command.level, from, to, command.thickness, command.height, unit = command.unit, exact = false)
+                                elements[id] = wall
+                                changes += ElementChange(id, wall)
+                                id
+                            }
+                        steps.addLast {
+                            made.forEach(elements::remove)
+                            made.map { ElementChange(it, null) }
+                        }
+                        results +=
+                            if (made.isEmpty()) CommandResult.Failed(EngineError.ZERO_LENGTH, "no wall") else CommandResult.Done(null)
+                    }
+
                     command is EngineCommand.PlaceOpening -> {
                         val wall = elements.entries.firstOrNull { (it.value as? Wall)?.level == command.level }?.key
                         if (wall == null) {
@@ -227,6 +245,8 @@ class EditorViewModelTest {
                                 joined.copy(
                                     start = if (joined.start == wall.end) to else joined.start,
                                     end = if (joined.end == wall.end) to else joined.end,
+                                    // A typed length is a measured one.
+                                    exact = joined.exact || id == command.wall,
                                 )
                             elements[id] = moved
                             changes += ElementChange(id, moved)
@@ -688,6 +708,89 @@ class EditorViewModelTest {
 
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(first, 6_437.mm))
         assertThat(viewModel.uiState.value.entry).isNull()
+    }
+
+    @Test
+    fun aStrokeOfThePencilGoesToTheEngineAsDrawn() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.selectTool(Tool.PENCIL)
+        val stroke = listOf(PointMm(40.mm, (-30).mm), PointMm(3_000.mm, 20.mm), PointMm(5_960.mm, 50.mm))
+
+        viewModel.sketch(stroke, 600.mm)
+
+        val sent = engine.sent.last().single() as EngineCommand.AddSketch
+        assertThat(sent.level).isEqualTo(level)
+        assertThat(sent.points).isEqualTo(stroke)
+        assertThat(sent.reach).isEqualTo(600.mm)
+        assertThat(sent.square).isTrue()
+        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.thickness)
+        // What the engine read is written to the job and drawn as walls of about that length.
+        assertThat(store.recorded.last().changes).hasSize(2)
+        assertThat(viewModel.uiState.value.rough).hasSize(2)
+        assertThat(viewModel.uiState.value.canUndo).isTrue()
+
+        viewModel.undo()
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
+    }
+
+    @Test
+    fun aStrokeDrawsNothingWithAnotherToolOrWhileANumberIsTyped() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        val stroke = listOf(PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm))
+        val before = engine.sent.size
+
+        viewModel.sketch(stroke, reach)
+        viewModel.selectTool(Tool.PENCIL)
+        viewModel.startSize()
+        viewModel.sketch(stroke, reach)
+
+        assertThat(engine.sent).hasSize(before)
+    }
+
+    @Test
+    fun sketchedWallsGetTheirLengthsOneAfterAnother() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.selectTool(Tool.PENCIL)
+        viewModel.sketch(listOf(PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm), PointMm(10_000.mm, 0.mm)), reach)
+        val (first, second) = viewModel.uiState.value.rough
+
+        viewModel.refine()
+        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(first, was = 6_000.mm, step = 1, of = 2))
+        listOf(6, 4, 0, 0).forEach(viewModel::typeDigit)
+        viewModel.confirmLength()
+
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(first, 6_400.mm))
+        // The second wall starts where the first one now ends.
+        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(second, was = 3_600.mm, step = 2, of = 2))
+
+        // No digits keep the length the sketch gave, and the wall is measured all the same.
+        viewModel.confirmLength()
+
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(second, 3_600.mm))
+        assertThat(viewModel.uiState.value.entry).isNull()
+        assertThat(viewModel.uiState.value.rough).isEmpty()
+    }
+
+    @Test
+    fun aSketchedWallTheEngineWillNotSizeIsAskedOnce() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.selectTool(Tool.PENCIL)
+        viewModel.sketch(listOf(PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm), PointMm(10_000.mm, 0.mm)), reach)
+        val (first, second) = viewModel.uiState.value.rough
+
+        viewModel.refine()
+        viewModel.typeDigit(1)
+        engine.refuseNext = EngineError.BREAKS_JOIN
+        viewModel.confirmLength()
+
+        assertThat(viewModel.uiState.value.refused).isEqualTo(EngineError.BREAKS_JOIN)
+        assertThat(
+            viewModel.uiState.value.entry
+                ?.wall,
+        ).isEqualTo(second)
+        viewModel.cancelLength()
+        assertThat(viewModel.uiState.value.entry).isNull()
+        assertThat(viewModel.uiState.value.rough).containsExactly(first, second).inOrder()
     }
 
     @Test

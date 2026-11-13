@@ -130,4 +130,11 @@
     <string name="tool_options">Параметры инструмента</string>
     <string name="tool_options_open">Параметры открыты</string>
     <string name="options_ortho">Только прямые углы</string>
+    <string name="tool_pencil">Карандаш</string>
+    <string name="editor_hint_pencil">Рисуйте стены пальцем: линии выровняются сами</string>
+    <string name="sketch_rough">Размеры пока примерные</string>
+    <string name="sketch_too_short">Линия слишком короткая для стены</string>
+    <string name="sketch_refine">Уточнить размеры · %1$d</string>
+    <string name="sketch_wall_of">Стена %1$d из %2$d</string>
+    <string name="length_about_mark" translatable="false">≈</string>
 </resources>

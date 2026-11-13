@@ -182,7 +182,9 @@ internal class EstimatePdf(
             val end = at(wall.end.x.value / MM_PER_METRE, wall.end.y.value / MM_PER_METRE)
             val run = end - start
             val long = run.getDistance()
-            val label = dimension.length.value.toString()
+            // A length nobody has given yet is written as about that much.
+            val length = dimension.length.value.toString()
+            val label = if (wall.exact) length else "${resources.getString(R.string.length_about_mark)} $length"
             val width = small.measureText(label)
             if (long == 0f || width > long) return
             val along = run / long

@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -31,6 +33,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -53,9 +56,10 @@ import kotlin.math.roundToLong
 /**
  * The plan as the engine derived it: wall and opening outlines in metres, drawn with y up, over
  * the storey below in outline. Two fingers always move and zoom the plan. One finger moves it
- * too, except while [drawing]: then it aims the wall's next point and lifting it places the point.
- * Touches go out in plan millimetres, with how far around the finger still counts as touched at
- * the current zoom.
+ * too, except while [drawing]: then it aims the wall's next point and lifting it places the point;
+ * and while [sketching]: then it draws a stroke, which goes out when the finger lifts and stays on
+ * the plan, faintly, until the next one. Touches go out in plan millimetres, with how far around
+ * the finger still counts as touched at the current zoom.
  */
 @Composable
 internal fun PlanCanvas(
@@ -69,12 +73,14 @@ internal fun PlanCanvas(
     draft: Draft?,
     draftThickness: Mm,
     drawing: Boolean,
+    sketching: Boolean,
     focus: List<PointMm>,
     fit: Int,
     onTap: (at: PointMm, reach: Mm) -> Unit,
     onAim: (at: PointMm, reach: Mm) -> Unit,
     onAimCancel: () -> Unit,
     onCommit: () -> Unit,
+    onSketch: (points: List<PointMm>, reach: Mm) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -83,19 +89,30 @@ internal fun PlanCanvas(
     val aim by rememberUpdatedState(onAim)
     val aimCancel by rememberUpdatedState(onAimCancel)
     val commit by rememberUpdatedState(onCommit)
+    val sketch by rememberUpdatedState(onSketch)
     val draws by rememberUpdatedState(drawing)
+    val sketches by rememberUpdatedState(sketching)
+    // The stroke under the finger, in plan millimetres so it stays put when the plan moves; once
+    // the finger lifts it is the trace of what was drawn.
+    val stroke = remember { mutableStateListOf<PointMm>() }
+    var lifted by remember { mutableStateOf(false) }
+    LaunchedEffect(sketching) { if (!sketching) stroke.clear() }
     val slop = LocalViewConfiguration.current.touchSlop
     val colors = OtvesTheme.colors
     val wallStroke = with(density) { 1.dp.toPx() }
     val markRadius = with(density) { 6.dp.toPx() }
     val selectionStroke = with(density) { 2.dp.toPx() }
     val touchReach = with(density) { TOUCH_REACH.dp.toPx() }
+    val sketchReach = with(density) { SKETCH_REACH.dp.toPx() }
+    val strokeStep = with(density) { STROKE_STEP.dp.toPx() }
+    val strokeWidth = with(density) { STROKE_WIDTH.dp.toPx() }
     val labelGap = with(density) { LABEL_GAP.dp.toPx() }
     val measurer = rememberTextMeasurer()
     LaunchedEffect(focus) { view.reveal(focus) }
     val shown by rememberUpdatedState(outlines)
     LaunchedEffect(fit) { if (fit > 0) view.fit(shown.flatMap { it.points }) }
     val labelStyle = MaterialTheme.typography.labelMedium.copy(color = colors.inkSecondary)
+    val about = stringResource(R.string.length_about_mark)
     val draftStyle = MaterialTheme.typography.titleMedium.copy(color = colors.selection)
     val dash = with(density) { 6.dp.toPx() }
 
@@ -108,9 +125,16 @@ internal fun PlanCanvas(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val aiming = draws
+                        val sketched = sketches
                         var moving = false
                         var travelled = 0f
+                        var last = down.position
                         if (aiming) aim(view.toPlan(down.position), view.toPlanLength(touchReach))
+                        if (sketched) {
+                            stroke.clear()
+                            lifted = false
+                            stroke += view.toPlan(down.position)
+                        }
                         while (true) {
                             val event = awaitPointerEvent()
                             val pressed = event.changes.filter { it.pressed }
@@ -118,9 +142,19 @@ internal fun PlanCanvas(
                             if (pressed.size > 1 && !moving) {
                                 moving = true
                                 if (aiming) aimCancel()
+                                if (sketched) stroke.clear()
                             }
                             if (aiming && !moving) {
                                 aim(view.toPlan(pressed.first().position), view.toPlanLength(touchReach))
+                            } else if (sketched && !moving) {
+                                // A point every few pixels is all a finger can tell apart.
+                                val at = pressed.first().position
+                                val step = (at - last).getDistance()
+                                if (step >= strokeStep) {
+                                    travelled += step
+                                    last = at
+                                    stroke += view.toPlan(at)
+                                }
                             } else {
                                 val pan = event.calculatePan()
                                 travelled += pan.getDistance()
@@ -130,9 +164,27 @@ internal fun PlanCanvas(
                             event.changes.forEach { it.consume() }
                         }
                         when {
-                            moving -> Unit
-                            aiming -> commit()
-                            else -> tap(view.toPlan(down.position), view.toPlanLength(touchReach))
+                            moving -> {
+                                // The plan moved; nothing is placed.
+                            }
+
+                            aiming -> {
+                                commit()
+                            }
+
+                            // A touch that went nowhere draws nothing.
+                            sketched && travelled > slop -> {
+                                lifted = true
+                                sketch(stroke.toList(), view.toPlanLength(sketchReach))
+                            }
+
+                            sketched -> {
+                                stroke.clear()
+                            }
+
+                            else -> {
+                                tap(view.toPlan(down.position), view.toPlanLength(touchReach))
+                            }
                         }
                     }
                 },
@@ -151,7 +203,10 @@ internal fun PlanCanvas(
         val written = mutableListOf<Offset>()
         for (dimension in dimensions) {
             val others = bodies.filter { it.first != dimension.id }.map { it.second }
-            dimension(view, dimension, measurer.measure(dimension.length.value.toString(), labelStyle), labelGap, others, written)
+            // A length nobody has given yet is written as about that much.
+            val length = dimension.length.value.toString()
+            val text = if (dimension.wall.exact) length else "$about $length"
+            dimension(view, dimension, measurer.measure(text, labelStyle), labelGap, others, written)
         }
         // The selection in the plan's only accent colour; openings stay cut out of a selected wall.
         outlines.find { it.wall == selected }?.let { outline ->
@@ -198,6 +253,20 @@ internal fun PlanCanvas(
                 drawCircle(colors.selection, radius = markRadius, center = end)
             }
             drawCircle(colors.selection, radius = markRadius, center = start)
+        }
+        if (stroke.size > 1) {
+            val drawn =
+                Path().apply {
+                    stroke.forEachIndexed { index, point ->
+                        val at = view.toScreen(point)
+                        if (index == 0) moveTo(at.x, at.y) else lineTo(at.x, at.y)
+                    }
+                }
+            drawPath(
+                drawn,
+                if (lifted) colors.selection else colors.ink,
+                style = Stroke(width = if (lifted) wallStroke else strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round),
+            )
         }
     }
 }
@@ -453,6 +522,12 @@ private const val MAX_SCALE = 2_000f
 private const val START_LEFT = 0.15f
 private const val START_BOTTOM = 0.8f
 private const val TOUCH_REACH = 12f
+
+// A stroke is read more loosely than a tap: a finger drawing a line strays further than one
+// putting down a point.
+private const val SKETCH_REACH = 24f
+private const val STROKE_STEP = 3f
+private const val STROKE_WIDTH = 3f
 private const val SELECTION_FILL = 0.25f
 private const val OUTLINE_CORNERS = 4
 private const val QUARTER_TURN = 90f
@@ -472,4 +547,4 @@ private const val FIT_BOTTOM = 0.72f
 private const val MIN_EXTENT = 4.0
 private const val REVEAL_SIDE = 0.15f
 private const val REVEAL_TOP = 0.2f
-private const val REVEAL_BOTTOM = 0.38f
+private const val REVEAL_BOTTOM = 0.46f

@@ -16,6 +16,7 @@ public object OtvesIcons {
     public val Undo: ImageVector = icon("Undo", "M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11")
     public val Redo: ImageVector = icon("Redo", "M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13")
     public val Select: ImageVector = icon("Select", "M5 3l6.5 17 2.3-7.2L21 10.5z")
+    public val Pencil: ImageVector = icon("Pencil", "M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1zM14.5 6.5l3 3")
     public val Wall: ImageVector = icon("Wall", "M3 8h18v8H3zM8 16l4-8M14 16l4-8")
     public val Window: ImageVector = icon("Window", "M4 5h16v14H4zM12 5v14M4 12h16")
     public val Door: ImageVector = icon("Door", "M3 20h18M6 20V6M6 6a14 14 0 0 1 14 14")

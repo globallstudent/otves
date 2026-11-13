@@ -121,4 +121,10 @@
     <string name="tool_options">Asbob parametrlari</string>
     <string name="tool_options_open">Parametrlar ochiq</string>
     <string name="options_ortho">Faqat to‘g‘ri burchaklar</string>
+    <string name="tool_pencil">Qalam</string>
+    <string name="editor_hint_pencil">Devorlarni barmoq bilan chizing: chiziqlar o‘zi to‘g‘rilanadi</string>
+    <string name="sketch_rough">O‘lchamlar hozircha taxminiy</string>
+    <string name="sketch_too_short">Chiziq devor uchun juda qisqa</string>
+    <string name="sketch_refine">O‘lchamlarni aniqlash · %1$d</string>
+    <string name="sketch_wall_of">Devor %1$d / %2$d</string>
 </resources>

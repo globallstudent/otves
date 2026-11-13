@@ -51,6 +51,7 @@ import uz.otves.engine.Catalog
 import uz.otves.engine.Condition
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
+import uz.otves.engine.EngineError
 import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.OpeningOutline
@@ -88,6 +89,8 @@ fun EditorRoute(
                 onAim = viewModel::aim,
                 onAimCancel = viewModel::cancelAim,
                 onCommit = viewModel::commit,
+                onSketch = viewModel::sketch,
+                onRefine = viewModel::refine,
                 onFinishWall = viewModel::finishWall,
                 onOrtho = viewModel::toggleOrtho,
                 onTool = viewModel::selectTool,
@@ -141,6 +144,8 @@ internal data class EditorActions(
     val onAim: (at: PointMm, reach: Mm) -> Unit = { _, _ -> },
     val onAimCancel: () -> Unit = {},
     val onCommit: () -> Unit = {},
+    val onSketch: (points: List<PointMm>, reach: Mm) -> Unit = { _, _ -> },
+    val onRefine: () -> Unit = {},
     val onFinishWall: () -> Unit = {},
     val onOrtho: () -> Unit = {},
     val onTool: (Tool) -> Unit = {},
@@ -192,35 +197,42 @@ internal fun EditorScreen(
     actions: EditorActions,
     modifier: Modifier = Modifier,
 ) {
-    // Counts requests to show the whole plan: the button, a job opening, a measured run ending.
+    // Counts requests to show the whole plan: the button, a job opening, the end of a measured run
+    // or of a pass over sketched walls, which both move the plan to keep a wall above the keys.
     var fit by remember { mutableIntStateOf(0) }
     val measuring = state.measure != null
-    LaunchedEffect(measuring, state.ready) { if (!measuring && state.ready) fit++ }
+    val refining = state.entry?.refining == true
+    LaunchedEffect(measuring, refining, state.ready) { if (!measuring && !refining && state.ready) fit++ }
     val listOpen = state.takeoffOpen || state.materialOpen
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
         Box(modifier = Modifier.safeDrawingPadding()) {
+            // The wall whose length is typed is marked as a selected one is.
+            val sized = state.dimensions.find { it.id == state.entry?.wall }
             PlanCanvas(
                 outlines = state.outlines,
                 openings = state.openings,
                 below = state.below,
-                selected = state.selected?.id,
+                selected = sized?.id ?: state.selected?.id,
                 issues = state.issues,
                 dimensions = state.dimensions,
                 unchosen = state.unchosen,
                 draft = state.draft,
                 draftThickness = state.thickness,
                 drawing = state.tool == Tool.WALL && !state.typing && !listOpen,
+                sketching = state.tool == Tool.PENCIL && !state.typing && !listOpen,
                 fit = fit,
-                // The measured wall stays in view above the number pad.
+                // The wall being measured or sized stays in view above the number pad.
                 focus =
-                    state.draft
-                        ?.takeIf { state.measure != null }
-                        ?.let { listOfNotNull(it.start, it.to?.point) }
-                        .orEmpty(),
+                    sized?.let { listOf(it.wall.start, it.wall.end) }
+                        ?: state.draft
+                            ?.takeIf { state.measure != null }
+                            ?.let { listOfNotNull(it.start, it.to?.point) }
+                            .orEmpty(),
                 onTap = actions.onTap,
                 onAim = actions.onAim,
                 onAimCancel = actions.onAimCancel,
                 onCommit = actions.onCommit,
+                onSketch = actions.onSketch,
                 modifier = Modifier.fillMaxSize(),
             )
             Column(
@@ -272,6 +284,9 @@ private fun Notice(state: EditorUiState) {
         when {
             !state.ready -> stringResource(R.string.editor_loading)
 
+            // A stroke too short to be a wall is not a wall whose ends coincide.
+            state.refused == EngineError.ZERO_LENGTH && state.tool == Tool.PENCIL -> stringResource(R.string.sketch_too_short)
+
             state.refused != null -> refusalText(state.refused)
 
             // The number pad says what is being entered.
@@ -282,6 +297,10 @@ private fun Notice(state: EditorUiState) {
             joinIssue != null -> issueText(joinIssue.kind)
 
             state.tool == Tool.SELECT && state.selected == null -> stringResource(R.string.editor_hint_select)
+
+            state.tool == Tool.PENCIL && state.rough.isNotEmpty() -> stringResource(R.string.sketch_rough)
+
+            state.tool == Tool.PENCIL -> stringResource(R.string.editor_hint_pencil)
 
             state.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
 

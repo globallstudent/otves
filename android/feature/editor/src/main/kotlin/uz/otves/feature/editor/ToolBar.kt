@@ -92,19 +92,24 @@ private fun ToolPill(
     }
 }
 
-// What a run of walls offers while it is drawn. The tool's settings are behind the options button.
+// What a run of walls, or a sketch, offers next. The tool's settings are behind the options button.
 @Composable
 private fun RunActions(
     state: EditorUiState,
     actions: EditorActions,
 ) {
-    if (state.tool != Tool.WALL) return
+    if (state.tool != Tool.WALL && state.tool != Tool.PENCIL) return
     // Wraps, so no command hides past the edge of the screen.
     FlowRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = OtvesDimens.gutter),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // Sketched walls have lengths nobody gave: this asks them one after another.
+        val rough = state.rough.size
+        if (state.tool == Tool.PENCIL && rough > 0) {
+            Pill(stringResource(R.string.sketch_refine, rough), false, actions.onRefine)
+        }
         // The wall just drawn: its length is typed here, as read off the tape.
         state.dimensions.find { it.id == state.drawn }?.let { drawn ->
             Pill(stringResource(R.string.length_value, grouped(drawn.length)), false, { actions.onEditLength(drawn.id) })

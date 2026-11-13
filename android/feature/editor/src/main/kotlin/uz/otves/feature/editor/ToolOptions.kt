@@ -152,7 +152,8 @@ internal fun ToolOptionsButton(
                 }
             }
             // A wall drawn without a material is left out of the take-off; the dot says where to choose one.
-            if (state.tool == Tool.WALL && state.material == null && !open) {
+            val builds = state.tool == Tool.WALL || state.tool == Tool.PENCIL
+            if (builds && state.material == null && !open) {
                 Box(Modifier.align(Alignment.TopEnd).size(12.dp).background(colors.warning, CircleShape))
             }
             if (open) {
@@ -234,63 +235,8 @@ private fun OptionsPanel(
                     // Nothing to choose before something is picked.
                 }
 
-                Tool.WALL -> {
-                    val material = state.material
-                    OptionRow(
-                        label = stringResource(R.string.inspector_material),
-                        onClick = {
-                            onClose()
-                            actions.onMaterials(true)
-                        },
-                    ) {
-                        Text(
-                            if (material == null) stringResource(R.string.material_choose) else unitTitle(material, state.catalog.units),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (material == null) colors.warning else colors.ink,
-                            maxLines = 1,
-                        )
-                        Icon(OtvesIcons.ChevronRight, contentDescription = null, tint = colors.inkTertiary, modifier = Modifier.size(18.dp))
-                    }
-                    HorizontalDivider(color = colors.divider)
-                    val thicknesses = state.thicknessesOf(material)
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                        Text(
-                            stringResource(R.string.inspector_thickness),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = colors.inkSecondary,
-                        )
-                        SegmentedControl(
-                            options = thicknesses.map { grouped(it) },
-                            selected = thicknesses.indexOf(state.thickness),
-                            onSelect = { actions.onThickness(thicknesses[it]) },
-                            modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
-                        )
-                    }
-                    HorizontalDivider(color = colors.divider)
-                    val ortho = stringResource(R.string.options_ortho)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = RowHeight)
-                                .toggleable(value = state.ortho, role = Role.Switch, onValueChange = { actions.onOrtho() })
-                                .padding(horizontal = 16.dp),
-                    ) {
-                        Text(ortho, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                        Switch(
-                            checked = state.ortho,
-                            onCheckedChange = null,
-                            colors =
-                                SwitchDefaults.colors(
-                                    checkedTrackColor = colors.ink,
-                                    checkedThumbColor = colors.surface,
-                                    uncheckedTrackColor = colors.field,
-                                    uncheckedThumbColor = colors.inkTertiary,
-                                    uncheckedBorderColor = colors.border,
-                                ),
-                        )
-                    }
+                Tool.PENCIL, Tool.WALL -> {
+                    WallOptions(state, actions, onClose)
                 }
 
                 Tool.WINDOW -> {
@@ -302,6 +248,72 @@ private fun OptionsPanel(
                 }
             }
         }
+    }
+}
+
+// What the walls drawn next are built like, by the wall tool or from a sketch.
+@Composable
+private fun WallOptions(
+    state: EditorUiState,
+    actions: EditorActions,
+    onClose: () -> Unit,
+) {
+    val colors = OtvesTheme.colors
+    val material = state.material
+    OptionRow(
+        label = stringResource(R.string.inspector_material),
+        onClick = {
+            onClose()
+            actions.onMaterials(true)
+        },
+    ) {
+        Text(
+            if (material == null) stringResource(R.string.material_choose) else unitTitle(material, state.catalog.units),
+            style = MaterialTheme.typography.titleSmall,
+            color = if (material == null) colors.warning else colors.ink,
+            maxLines = 1,
+        )
+        Icon(OtvesIcons.ChevronRight, contentDescription = null, tint = colors.inkTertiary, modifier = Modifier.size(18.dp))
+    }
+    HorizontalDivider(color = colors.divider)
+    val thicknesses = state.thicknessesOf(material)
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(
+            stringResource(R.string.inspector_thickness),
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.inkSecondary,
+        )
+        SegmentedControl(
+            options = thicknesses.map { grouped(it) },
+            selected = thicknesses.indexOf(state.thickness),
+            onSelect = { actions.onThickness(thicknesses[it]) },
+            modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
+        )
+    }
+    HorizontalDivider(color = colors.divider)
+    val ortho = stringResource(R.string.options_ortho)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = RowHeight)
+                .toggleable(value = state.ortho, role = Role.Switch, onValueChange = { actions.onOrtho() })
+                .padding(horizontal = 16.dp),
+    ) {
+        Text(ortho, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Switch(
+            checked = state.ortho,
+            onCheckedChange = null,
+            colors =
+                SwitchDefaults.colors(
+                    checkedTrackColor = colors.ink,
+                    checkedThumbColor = colors.surface,
+                    uncheckedTrackColor = colors.field,
+                    uncheckedThumbColor = colors.inkTertiary,
+                    uncheckedBorderColor = colors.border,
+                ),
+        )
     }
 }
 

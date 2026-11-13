@@ -42,6 +42,7 @@ internal fun kindName(kind: OpeningKind): String =
 internal fun toolIcon(tool: Tool): ImageVector =
     when (tool) {
         Tool.SELECT -> OtvesIcons.Select
+        Tool.PENCIL -> OtvesIcons.Pencil
         Tool.WALL -> OtvesIcons.Wall
         Tool.WINDOW -> OtvesIcons.Window
         Tool.DOOR -> OtvesIcons.Door
@@ -61,6 +62,7 @@ internal fun turnName(turn: Turn): String =
 internal fun toolName(tool: Tool): String =
     when (tool) {
         Tool.SELECT -> stringResource(R.string.tool_select)
+        Tool.PENCIL -> stringResource(R.string.tool_pencil)
         Tool.WALL -> stringResource(R.string.tool_wall)
         Tool.WINDOW -> stringResource(R.string.tool_window)
         Tool.DOOR -> stringResource(R.string.tool_door)

@@ -44,8 +44,8 @@ import uz.otves.engine.Wall
 import uz.otves.engine.WallOutline
 import kotlin.math.abs
 
-/** What a tap on the plan does. */
-internal enum class Tool { SELECT, WALL, WINDOW, DOOR }
+/** What a touch on the plan does. */
+internal enum class Tool { SELECT, PENCIL, WALL, WINDOW, DOOR }
 
 /** A window or door size a builder picks from. */
 internal data class OpeningSize(
@@ -148,12 +148,21 @@ internal data class PriceEntry(
     val digits: String = "",
 )
 
-/** A wall's exact length being typed: the digits so far, in millimetres. */
+/**
+ * A wall's exact length being typed: the digits so far, in millimetres. While the sketched walls of
+ * a storey get their lengths one after another, this is wall [step] of [of]; no digits then keep
+ * the length the sketch gave.
+ */
 internal data class LengthEntry(
     val wall: ElementId,
     val was: Mm,
     val digits: String = "",
-)
+    val step: Int = 0,
+    val of: Int = 0,
+) {
+    val refining: Boolean
+        get() = of > 0
+}
 
 @Immutable
 internal data class EditorUiState(
@@ -220,6 +229,10 @@ internal data class EditorUiState(
     val typing: Boolean
         get() = entry != null || sizeEntry != null || priceEntry != null || measure != null
 
+    /** Walls of the shown storey read from a sketch, whose lengths nobody has given yet. */
+    val rough: List<ElementId>
+        get() = dimensions.filterNot { it.wall.exact }.map { it.id }
+
     /** Walls of the shown storey that have no material yet. */
     val unchosen: Set<ElementId>
         get() = issues.filter { it.kind == IssueKind.MATERIAL_NOT_CHOSEN }.mapNotNull { it.element }.toSet()
@@ -279,6 +292,9 @@ internal class EditorViewModel(
 
     // Counts touches of the wall tool, so one that waited for the engine knows the finger moved on.
     private var aims = 0
+
+    // The sketched walls already asked for a length in this pass; one the engine refused is not asked twice.
+    private val refined = mutableSetOf<ElementId>()
 
     // One step at a time, in the order the builder made them: each sees what the ones before it
     // left, and the log keeps the engine's order.
@@ -345,6 +361,10 @@ internal class EditorViewModel(
                 pick(onLevel, at, reach)
             }
 
+            Tool.PENCIL -> {
+                // The pencil draws strokes; a touch that went nowhere is not one.
+            }
+
             Tool.WALL -> {
                 aim(at, reach)
                 commit()
@@ -403,6 +423,48 @@ internal class EditorViewModel(
             state.update { it.withRun() }
             if (to != null) build(to.point, closes = to.meets)
         }
+
+    /**
+     * A stroke drawn with the pencil, as the finger's path in plan millimetres. The engine reads it
+     * as walls (docs/adr/0012): built like the walls the wall tool draws, in one undo step, with
+     * lengths that are not exact until they are typed.
+     */
+    fun sketch(
+        points: List<PointMm>,
+        reach: Mm,
+    ) = act {
+        val current = state.value
+        val level = current.level ?: return@act
+        if (current.tool != Tool.PENCIL || current.typing) return@act
+        val stroke =
+            EngineCommand.AddSketch(
+                level = level,
+                points = points,
+                reach = reach,
+                grid = Grid,
+                square = current.ortho,
+                thickness = current.thickness,
+                height = WallHeight,
+                unit = current.material,
+            )
+        execute(listOf(stroke))
+    }
+
+    /** Asks the length of each sketched wall of the storey, one after another. */
+    fun refine() =
+        act {
+            refined.clear()
+            state.update { it.copy(entry = it.nextRough(step = 1, of = it.rough.size)) }
+        }
+
+    // The next sketched wall of the pass, if one is left.
+    private fun EditorUiState.nextRough(
+        step: Int,
+        of: Int,
+    ): LengthEntry? =
+        dimensions
+            .firstOrNull { !it.wall.exact && it.id !in refined }
+            ?.let { LengthEntry(it.id, was = it.length, step = step, of = of) }
 
     /** Ends the run of walls being drawn. */
     fun finishWall() =
@@ -644,14 +706,21 @@ internal class EditorViewModel(
     fun cancelLength() = state.update { it.copy(entry = null) }
 
     /**
-     * Gives the wall the typed length. The engine says which end stays, a partition's being the one
-     * on the wall it stands against, and carries what is joined to the other, as one undo step.
+     * Gives the wall the typed length, which makes it exact. The engine says which end stays, a
+     * partition's being the one on the wall it stands against, and carries what is joined to the
+     * other, as one undo step. In a pass over sketched walls the next one is asked.
      */
     fun confirmLength() {
         val entry = state.value.entry ?: return
         state.update { it.copy(entry = null) }
-        val length = entry.digits.toLongOrNull() ?: return
-        send(listOf(EngineCommand.SetWallLength(entry.wall, Mm(length))))
+        val length = entry.digits.toLongOrNull()?.let(::Mm) ?: entry.was.takeIf { entry.refining } ?: return
+        act {
+            execute(listOf(EngineCommand.SetWallLength(entry.wall, length)))
+            if (entry.refining) {
+                refined += entry.wall
+                state.update { it.copy(entry = it.nextRough(entry.step + 1, entry.of)) }
+            }
+        }
     }
 
     fun selectThickness(thickness: Mm) = state.update { it.copy(thickness = thickness) }
