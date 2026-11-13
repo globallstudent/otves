@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -28,34 +29,36 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
+import uz.otves.engine.Drawing
 import uz.otves.engine.Issue
-import uz.otves.engine.LocationLine
-import uz.otves.engine.OpeningKind
-import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.WallOutline
-import kotlin.math.atan2
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.roundToLong
 
 /**
- * The plan as the engine derived it: wall and opening outlines in metres, drawn with y up, over
- * the storey below in outline. Two fingers always move and zoom the plan. One finger moves it
+ * The storey as the engine drew it ([plan], docs/adr/0013), painted with y up, under what the
+ * finger is doing. Whenever the zoom changes enough to change which labels fit, [onLabelSize]
+ * says how big the label text now is on the plan. Two fingers always move and zoom the plan. One
+ * finger moves it
  * too, except while [drawing]: then it aims the wall's next point and lifting it places the point;
  * and while [sketching]: then it draws a stroke, which goes out when the finger lifts and stays on
  * the plan, faintly, until the next one. Touches go out in plan millimetres, with how far around
@@ -63,13 +66,10 @@ import kotlin.math.roundToLong
  */
 @Composable
 internal fun PlanCanvas(
+    plan: Drawing,
     outlines: List<WallOutline>,
-    openings: List<OpeningOutline>,
-    below: List<WallOutline>,
     selected: ElementId?,
     issues: List<Issue>,
-    dimensions: List<Dimension>,
-    unchosen: Set<ElementId>,
     draft: Draft?,
     draftThickness: Mm,
     drawing: Boolean,
@@ -81,6 +81,7 @@ internal fun PlanCanvas(
     onAimCancel: () -> Unit,
     onCommit: () -> Unit,
     onSketch: (points: List<PointMm>, reach: Mm) -> Unit,
+    onLabelSize: (LabelSize) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -106,13 +107,46 @@ internal fun PlanCanvas(
     val sketchReach = with(density) { SKETCH_REACH.dp.toPx() }
     val strokeStep = with(density) { STROKE_STEP.dp.toPx() }
     val strokeWidth = with(density) { STROKE_WIDTH.dp.toPx() }
-    val labelGap = with(density) { LABEL_GAP.dp.toPx() }
     val measurer = rememberTextMeasurer()
     LaunchedEffect(focus) { view.reveal(focus) }
     val shown by rememberUpdatedState(outlines)
     LaunchedEffect(fit) { if (fit > 0) view.fit(shown.flatMap { it.points }) }
-    val labelStyle = MaterialTheme.typography.labelMedium.copy(color = colors.inkSecondary)
+    val labelSize =
+        with(density) {
+            MaterialTheme.typography.labelMedium.fontSize
+                .toPx()
+        }
     val about = stringResource(R.string.length_about_mark)
+    val painter =
+        remember(colors, wallStroke, selectionStroke, labelSize, about) {
+            PlanPainter(
+                palette =
+                    PlanPalette(
+                        wall = colors.inkTertiary.toArgb(),
+                        unchosen = colors.surface.toArgb(),
+                        gap = colors.canvas.toArgb(),
+                        edge = colors.ink.toArgb(),
+                        below = colors.inkTertiary.toArgb(),
+                        text = colors.inkSecondary.toArgb(),
+                        selection = colors.selection.toArgb(),
+                        warning = colors.warning.toArgb(),
+                    ),
+                hairline = wallStroke,
+                bold = selectionStroke,
+                textSize = labelSize,
+                about = about,
+            )
+        }
+    val tellLabelSize by rememberUpdatedState(onLabelSize)
+    LaunchedEffect(painter) {
+        var told = 0f
+        snapshotFlow { view.scale }.collect { scale ->
+            if (told == 0f || abs(ln(scale / told)) > ZOOM_STEP) {
+                told = scale
+                tellLabelSize(painter.labelSize(scale))
+            }
+        }
+    }
     val draftStyle = MaterialTheme.typography.titleMedium.copy(color = colors.selection)
     val dash = with(density) { 6.dp.toPx() }
 
@@ -190,45 +224,16 @@ internal fun PlanCanvas(
                 },
     ) {
         grid(view, colors.divider, colors.border)
-        for (outline in below) {
-            drawPath(path(view, outline), colors.inkTertiary, style = Stroke(width = wallStroke))
+        if (view.origin != Offset.Unspecified) {
+            val frame = PlanFrame(view.origin.x, view.origin.y, view.scale)
+            // Openings that do not fit are outlined in the warning colour.
+            val faulty = issues.mapNotNull { it.element }.toSet()
+            drawIntoCanvas { painter.paint(it.nativeCanvas, plan, frame, selected, faulty) }
         }
-        for (outline in outlines) {
-            val path = path(view, outline)
-            // A wall with no material yet is an empty outline: it is drawn but not built from anything.
-            drawPath(path, if (outline.wall in unchosen) colors.surface else colors.inkTertiary)
-            drawPath(path, colors.ink, style = Stroke(width = wallStroke))
-        }
-        val bodies = outlines.map { outline -> outline.wall to outline.points.map { view.toScreen(it.x, it.y) } }
-        val written = mutableListOf<Offset>()
-        for (dimension in dimensions) {
-            val others = bodies.filter { it.first != dimension.id }.map { it.second }
-            // A length nobody has given yet is written as about that much.
-            val length = dimension.length.value.toString()
-            val text = if (dimension.wall.exact) length else "$about $length"
-            dimension(view, dimension, measurer.measure(text, labelStyle), labelGap, others, written)
-        }
-        // The selection in the plan's only accent colour; openings stay cut out of a selected wall.
-        outlines.find { it.wall == selected }?.let { outline ->
-            val path = path(view, outline)
-            drawPath(path, colors.selection.copy(alpha = SELECTION_FILL))
-            drawPath(path, colors.selection, style = Stroke(width = selectionStroke))
-        }
-        for (opening in openings) {
-            opening(view, opening, colors.canvas, colors.ink, wallStroke)
-        }
-        // What to fix, in the warning colour: openings that do not fit, and points where walls
-        // meet wrongly.
-        val faulty = issues.mapNotNull { it.element }.toSet()
-        for (opening in openings.filter { it.opening in faulty }) {
-            drawPath(path(view, opening.points), colors.warning, style = Stroke(width = selectionStroke))
-        }
+        // Points where walls meet wrongly.
         for (at in issues.mapNotNull { it.at }) {
             val centre = view.toScreen(at.x.value / MM_PER_METRE, at.y.value / MM_PER_METRE)
             drawCircle(colors.warning, radius = markRadius, center = centre, style = Stroke(width = selectionStroke))
-        }
-        openings.find { it.opening == selected }?.let { opening ->
-            drawPath(path(view, opening.points), colors.selection, style = Stroke(width = selectionStroke))
         }
         if (draft != null) {
             val start = view.toScreen(draft.start)
@@ -351,149 +356,6 @@ private class PlanView(
     }
 }
 
-private fun path(
-    view: PlanView,
-    outline: WallOutline,
-): Path = path(view, outline.points)
-
-private fun path(
-    view: PlanView,
-    points: List<PointM>,
-): Path =
-    Path().apply {
-        points.forEachIndexed { index, point ->
-            val at = view.toScreen(point.x, point.y)
-            if (index == 0) moveTo(at.x, at.y) else lineTo(at.x, at.y)
-        }
-        close()
-    }
-
-// The wall's length beside it, along the wall and never upside down: by its left face at the
-// middle unless another wall or another length lies there, then by the other face or nearer an end. Left out when
-// the wall is too short on screen to hold it.
-private fun DrawScope.dimension(
-    view: PlanView,
-    dimension: Dimension,
-    label: TextLayoutResult,
-    gap: Float,
-    others: List<List<Offset>>,
-    written: MutableList<Offset>,
-) {
-    val wall = dimension.wall
-    val start = view.toScreen(wall.start.x.value / MM_PER_METRE, wall.start.y.value / MM_PER_METRE)
-    val end = view.toScreen(wall.end.x.value / MM_PER_METRE, wall.end.y.value / MM_PER_METRE)
-    val run = end - start
-    val onScreen = run.getDistance()
-    if (onScreen == 0f || label.size.width > onScreen * LABEL_FILL) return
-    val along = run / onScreen
-    // The plan's left of the wall: y runs down on screen, so it is the screen's right turn.
-    val left = Offset(along.y, -along.x)
-    val face =
-        when (wall.locationLine) {
-            LocationLine.CENTER -> wall.thickness.value / 2.0
-            LocationLine.LEFT_FACE -> 0.0
-            LocationLine.RIGHT_FACE -> wall.thickness.value.toDouble()
-        }
-    val clearance = gap + label.size.height / 2f
-    val toLeft = (face / MM_PER_METRE * view.scale).toFloat() + clearance
-    val toRight = ((wall.thickness.value - face) / MM_PER_METRE * view.scale).toFloat() + clearance
-    val half = along * (label.size.width / 2f)
-    val places =
-        LABEL_PLACES.flatMap { along -> listOf(start + run * along + left * toLeft, start + run * along - left * toRight) }
-    val free = { at: Offset ->
-        others.none { body -> inside(at, body) || inside(at - half, body) || inside(at + half, body) } &&
-            written.none { (it - at).getDistance() < label.size.width }
-    }
-    val centre = places.firstOrNull(free) ?: places.first()
-    written += centre
-    var degrees = angle(run)
-    // Upright, and on an upright wall read from the bottom up, as on drawings.
-    if (degrees >= QUARTER_TURN || degrees < -QUARTER_TURN) degrees += HALF_TURN
-    rotate(degrees, pivot = centre) {
-        drawText(label, topLeft = centre - Offset(label.size.width / 2f, label.size.height / 2f))
-    }
-}
-
-// The gap an opening leaves in its wall, with the usual plan symbol: a window's glazing line, a
-// door's leaf and swing. Corners come counter-clockwise: near and far end on the right face, then
-// far and near end on the left face.
-private fun DrawScope.opening(
-    view: PlanView,
-    opening: OpeningOutline,
-    gap: Color,
-    ink: Color,
-    stroke: Float,
-) {
-    if (opening.points.size != OUTLINE_CORNERS) return
-    val (nearRight, farRight, farLeft, nearLeft) = opening.points.map { view.toScreen(it.x, it.y) }
-    val path =
-        Path().apply {
-            moveTo(nearRight.x, nearRight.y)
-            lineTo(farRight.x, farRight.y)
-            lineTo(farLeft.x, farLeft.y)
-            lineTo(nearLeft.x, nearLeft.y)
-            close()
-        }
-    drawPath(path, gap)
-    drawLine(ink, nearRight, nearLeft, stroke)
-    drawLine(ink, farRight, farLeft, stroke)
-    when (opening.kind) {
-        OpeningKind.WINDOW -> {
-            drawLine(ink, nearRight, farRight, stroke)
-            drawLine(ink, nearLeft, farLeft, stroke)
-            drawLine(ink, (nearRight + nearLeft) / 2f, (farRight + farLeft) / 2f, stroke)
-        }
-
-        OpeningKind.DOOR -> {
-            // The leaf stands open at right angles to the wall, hinged at the near left corner.
-            val width = (farLeft - nearLeft).getDistance()
-            val across = nearLeft - nearRight
-            val leaf = nearLeft + across / across.getDistance() * width
-            drawLine(ink, nearLeft, leaf, stroke)
-            val start = angle(leaf - nearLeft)
-            val sweep = normalised(angle(farLeft - nearLeft) - start)
-            drawArc(
-                color = ink,
-                startAngle = start,
-                sweepAngle = sweep,
-                useCenter = false,
-                topLeft = nearLeft - Offset(width, width),
-                size = Size(width * 2, width * 2),
-                style = Stroke(width = stroke),
-            )
-        }
-
-        OpeningKind.EMPTY -> {
-            // The jambs alone.
-        }
-    }
-}
-
-// Whether a point lies inside a polygon, by counting the edges a ray to the right crosses.
-internal fun inside(
-    point: Offset,
-    polygon: List<Offset>,
-): Boolean {
-    var crossings = 0
-    for (index in polygon.indices) {
-        val a = polygon[index]
-        val b = polygon[(index + 1) % polygon.size]
-        if ((a.y > point.y) != (b.y > point.y) && point.x < a.x + (point.y - a.y) / (b.y - a.y) * (b.x - a.x)) crossings++
-    }
-    return crossings % 2 == 1
-}
-
-// Degrees clockwise from +x on screen, as drawArc measures them.
-private fun angle(direction: Offset): Float = Math.toDegrees(atan2(direction.y, direction.x).toDouble()).toFloat()
-
-// The shorter way round, in (-180°, 180°].
-private fun normalised(degrees: Float): Float =
-    when {
-        degrees > HALF_TURN -> degrees - FULL_TURN
-        degrees <= -HALF_TURN -> degrees + FULL_TURN
-        else -> degrees
-    }
-
 // One line a metre, with the axes a shade darker.
 private fun DrawScope.grid(
     view: PlanView,
@@ -528,17 +390,11 @@ private const val TOUCH_REACH = 12f
 private const val SKETCH_REACH = 24f
 private const val STROKE_STEP = 3f
 private const val STROKE_WIDTH = 3f
-private const val SELECTION_FILL = 0.25f
-private const val OUTLINE_CORNERS = 4
-private const val QUARTER_TURN = 90f
-private const val HALF_TURN = 180f
-private const val LABEL_GAP = 4f
-private const val LABEL_FILL = 0.8f
-private const val FULL_TURN = 360f
-private const val LABEL_LIFT = 3f
 
-// Where along a wall its length may be written, the middle first.
-private val LABEL_PLACES = listOf(0.5f, 0.3f, 0.7f)
+// The labels are asked again when the zoom has changed by about a twentieth.
+private const val ZOOM_STEP = 0.05f
+private const val SELECTION_FILL = 0.25f
+private const val LABEL_LIFT = 3f
 private const val FIT_SIDE = 0.12f
 private const val FIT_TOP = 0.2f
 private const val FIT_BOTTOM = 0.72f

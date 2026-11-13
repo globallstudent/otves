@@ -11,6 +11,7 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | wall | стена | devor | Masonry or block wall with thickness in bricks; its height is the masonry, below the ring beam |
 | location line | линия привязки | bog‘lash chizig‘i | The wall line whose points are stored: centre, left or right face |
 | sketch | набросок | qoralama | A stroke drawn with a finger and read as walls (ADR 0012) |
+| drawing | чертёж | chizma | One level as a display list: polygons, lines, arcs and texts the engine placed and the app paints (ADR 0013) |
 | exact length | точный размер | aniq o‘lcham | A wall length that was typed or measured; a sketched wall's is written with «≈» until then |
 | wall join | сопряжение стен | devorlar tutashuvi | How wall ends meet: a mitre at a corner, slices around a shared point |
 | butt joint | примыкание | tirab ulash | A wall ending against the face of another wall |

@@ -11,11 +11,13 @@ flowchart TB
   end
   subgraph Engine["C++ engine (engine/)"]
     C["core<br/>model · commands · op log"] --> G["geom<br/>pure geometry"]
+    G --> DR["drafting<br/>the plan as a display list"]
     C --> T["takeoff<br/>quantities · norm checks (Luau)"]
     C --> R["render<br/>Filament, Vulkan / GLES"]
   end
   B -- "commands (FlatBuffers)" --> C
   C -- "events, 1× per frame" --> B
+  DR -- "Drawing" --> B
   D --> JOB[("&lt;job&gt;.job")]
   D --> CAT[("catalog.db")]
   T -. "rules, norms" .-> CON["content/<br/>rules · norms · catalog"]
@@ -27,9 +29,10 @@ flowchart TB
 |---|---|---|
 | `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels with their strip footing, ring beam and junction meshes, walls with their masonry unit, openings, the job's estimating conditions, commands, document with op log, undo, gestures and opening a saved job | exists |
 | `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`); the wall under a point and opening outlines; where a wall being drawn ends (`aim`), what moves with a wall given a length (`resize_wall`) and the walls a finger's stroke means (`straighten`) | exists |
+| `engine/drafting` | One level as a display list (`draft`): wall fills, opening symbols and wall lengths placed clear of walls and of each other, for a painter that positions nothing (ADR 0013) | exists |
 | `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar per chosen unit, Luau rules sandbox (`RuleSet`) | exists |
 | `content/` | Norm tables and rules in Luau: mortar, cement, lintels, strip footings, ring beams, junction meshes; the catalog of masonry units and ring beam heights to choose from | exists |
-| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement and picking at a tap, aiming a wall and giving one a typed length (ADR 0011), reading a sketch as walls (ADR 0012), outlines with lengths, issues, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
+| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement and picking at a tap, aiming a wall and giving one a typed length (ADR 0011), reading a sketch as walls (ADR 0012), drawing a level (ADR 0013), outlines with lengths, issues, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
 | `engine/render`, `export` | Drawing, PDF/DXF/IFC | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money`, `ElementId` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme, segmented control | exists |
@@ -38,7 +41,7 @@ flowchart TB
 | `android/data/catalog` | The app-wide catalog database: the builder's own price for one unit of each take-off item, the same for every job | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
 | `android/feature/projects` | The jobs on this phone, newest first; create, rename, delete | exists |
-| `android/feature/editor` | Plan of a job storey by storey: walls drawn in a run by touch or drag, aimed by the engine (90° lock, wall ends, lines through them, onto walls), walls sketched with a pencil and straightened by the engine, their lengths marked «≈» until each is typed in a pass over them, walls entered by measured lengths and turns, exact lengths typed on a number pad with joined walls carried along, windows and doors by a tap on a wall, the wall material chosen from the catalog or typed as a size of the builder's own, a select tool with an inspector (material, length, thickness, kind, size, delete), a strip footing, ring beam and junction meshes chosen per storey, the job's estimating conditions (seismic intensity, cement, mortar, waste), a price typed per take-off line with line costs and a total, shared as text or as a PDF sheet with the plan, wall lengths and issues on the plan, undo/redo, the take-off in a panel, shared as text; drawn from engine outlines | exists |
+| `android/feature/editor` | Plan of a job storey by storey, painted by one `PlanPainter` from the engine's drawing, on screen and on the PDF sheet: walls drawn in a run by touch or drag, aimed by the engine (90° lock, wall ends, lines through them, onto walls), walls sketched with a pencil and straightened by the engine, their lengths marked «≈» until each is typed in a pass over them, walls entered by measured lengths and turns, exact lengths typed on a number pad with joined walls carried along, windows and doors by a tap on a wall, the wall material chosen from the catalog or typed as a size of the builder's own, a select tool with an inspector (material, length, thickness, kind, size, delete), a strip footing, ring beam and junction meshes chosen per storey, the job's estimating conditions (seismic intensity, cement, mortar, waste), a price typed per take-off line with line costs and a total, shared as text or as a PDF sheet with the plan, wall lengths and issues on the plan, undo/redo, the take-off in a panel, shared as text; drawn from engine outlines | exists |
 | `android/feature/*` (estimate, ledger, …), `device/*` | Screens, hardware | planned |
 
 ## Rules that hold everywhere

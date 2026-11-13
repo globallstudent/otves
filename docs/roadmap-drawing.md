@@ -8,7 +8,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 
 | Area | Today | What blocks the goal |
 |---|---|---|
-| Drawing | `PlanCanvas.dimension()` and `opening()` place labels and door swings; `EstimatePdf.length()` repeats it | Geometry in Kotlin, twice. Rule 1 is broken the way ADR 0011 found it for editing |
+| Drawing | `drafting::draft` places lengths and opening symbols; one `PlanPainter` paints the screen and the PDF (ADR 0013) | Only wall lengths and opening symbols are drawn yet |
 | Wall | One thickness, one masonry unit, a location line the app never shows | No layers, no hatches, no take-off for insulation or facing brick |
 | Rooms | None | No names, areas or room schedule |
 | Dimensions | One length per wall, along its location line | Plans give clear room sizes and chains along walls |
@@ -66,10 +66,10 @@ The engine answers a `Draw` query with a `Drawing` for one level.
 | Text | kind (length, area, room name code, mark), value, anchor, angle |
 | Handle | the element and, for a dimension, what editing it means |
 
-- `Draw` names the level, the purpose (screen or sheet) and how many plan millimetres one text height covers. The engine uses it to place labels and drop the ones that do not fit.
-- Tick sizes, text heights and offsets of SPDS go to `content/norms/drafting.luau` (rule 5).
+- `Draw` names the level and how big the label text is on the plan: a line's height and a digit's width in plan millimetres. The engine uses them to place labels and drop the ones that do not fit. The purpose (screen or sheet) joins it in slice 7.
+- Tick sizes, text heights and offsets of SPDS go to `content/norms/drafting.luau` (rule 5) with the dimension chains of slice 5; until then the only numbers are layout ratios in `drafting`.
 - One `PlanPainter` over `android.graphics.Canvas` serves Compose and the PDF. It maps `Fill` and `Stroke` to paints and formats numbers; it positions nothing.
-- `Response.outlines` and `Response.openings` stay in the schema and stop being filled once the painter reads the drawing.
+- `Response.outlines` stays, for the plan's extent and the walls' lengths. `Response.openings` has no reader in the app any more.
 
 ### 0014: wall types and layers
 
@@ -124,8 +124,8 @@ flowchart LR
 |---|---|---|---|---|---|---|
 | 0 | Groundwork | — | Split the editor files, `JobSession`, shared components, icon-only tool bar, tool options button | — | G31 bar, G43–G46 | in part |
 | 1 | Pencil | `geom/sketch`, `AddSketch`, `Wall.exact` | Pencil tool, refine lengths | v5 | G39–G42 | built |
-| 2 | Display list | `engine/drafting`, `Draw` | `PlanPainter`; delete placement code | — | — | next |
-| 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | |
+| 2 | Display list | `engine/drafting`, `Draw` | `PlanPainter`; delete placement code | — | — | built |
+| 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | next |
 | 4 | Rooms | `geom/rooms`, `Room` | Room labels, room panel | v7 | G31, G34 | |
 | 5 | Dimensions | chains, `SetDistance`, `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | |
 | 6 | Openings | hinge, swing, marks, schedules | Door panel | v8 | G37 | |
@@ -137,9 +137,9 @@ Slice 1 comes first because it is the smallest end-to-end change: it proves the 
 
 | Step | Result | Status |
 |---|---|---|
-| `data/project/JobSession` | One place sends commands and records the response, in order. It holds the mirrored model. The view model maps it to `UiState` | with slice 2 |
+| `data/project/JobSession` | One place sends commands and records the response, in order. It holds the mirrored model. The view model maps it to `UiState` | with slice 3 |
 | Split `EditorScreen.kt` | Tool bar, tool options, panels and number pads in files of their own, each under about 400 lines | done |
-| Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState` | with slice 2 |
+| Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState` | with slice 3 |
 | `core/designsystem` | Round button, panel, inspector row, number pad, switch row | when a second feature needs them |
 | Tool bar | Five icons, the chosen one filled; names in the tools sheet | done |
 | Tool options | One movable button per screen; its rows come from the tool. It hides for a tool with nothing to choose. Position and options persist per device | done, but the position lasts only while the app lives |
@@ -171,7 +171,7 @@ A new element type touches the model tuple, the op variant, `Document::plan` and
 | Property tests | Seeded random plans in GoogleTest: footprints and rooms tile the outline; `straighten` returns the walls a noisy stroke was drawn along |
 | Bridge | Every new command and result in `session_test.cpp`, valid and corrupt |
 | Job file | A migration test per version; an instrumented test that saves and reopens a golden job |
-| Screens | Roborazzi images of `PlanPainter` on a fixed drawing and of each new panel |
+| Screens | Roborazzi images of `PlanPainter` on a fixed drawing and of each new panel. Not set up yet: the painter was checked by eye on the emulator and on a PDF |
 | Speed | A benchmark derives joins, layers, rooms and the drawing for 500 walls; the budget is one frame |
 | Device | The emulator checklist from the last change: draw, type a length, undo, refuse |
 

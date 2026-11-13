@@ -4,18 +4,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.text.TextPaint
 import android.text.TextUtils
-import androidx.compose.ui.geometry.Offset
 import androidx.core.content.FileProvider
-import androidx.core.graphics.withRotation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import uz.otves.engine.PointM
+import uz.otves.engine.Drawing
 import uz.otves.engine.QuantityLine
 import java.io.File
 import java.io.OutputStream
@@ -23,7 +21,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
-import kotlin.math.atan2
 
 /**
  * The job's materials as a sheet to send: the plan of every storey, then every material with
@@ -40,28 +37,67 @@ internal class EstimatePdf(
     private val small = text(LABEL_SIZE, SECONDARY)
     private val strong = text(TOTAL_SIZE, INK, bold = true)
     private val rule = Paint().apply { color = DIVIDER }
-    private val wallFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = WALL }
-    private val wallEdge =
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = INK
-            style = Paint.Style.STROKE
-            strokeWidth = HAIRLINE
-        }
-    private val gap =
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = PAPER
-            style = Paint.Style.FILL
-        }
 
+    // A sheet shows each storey alone, so the storey below it is not drawn; a wall with no
+    // material is left white, as it is on screen.
+    private val painter =
+        PlanPainter(
+            palette =
+                PlanPalette(
+                    wall = WALL,
+                    unchosen = PAPER,
+                    gap = PAPER,
+                    edge = INK,
+                    below = Color.TRANSPARENT,
+                    text = SECONDARY,
+                    selection = Color.TRANSPARENT,
+                    warning = Color.TRANSPARENT,
+                ),
+            hairline = HAIRLINE,
+            bold = HAIRLINE,
+            textSize = LABEL_SIZE,
+            about = resources.getString(R.string.length_about_mark),
+        )
+
+    // Where a storey's plan lies in its box: as large as the box allows, with room around the
+    // walls for the lengths written outside them.
+    private class Placed(
+        val left: Double,
+        val bottom: Double,
+        val tall: Double,
+        val scale: Float,
+    ) {
+        val height: Float get() = (tall * scale).toFloat() + 2 * LABEL_ROOM
+    }
+
+    private fun place(storey: Storey): Placed? {
+        val points = storey.outlines.flatMap { it.points }
+        if (points.isEmpty()) return null
+        val left = points.minOf { it.x }
+        val bottom = points.minOf { it.y }
+        val wide = (points.maxOf { it.x } - left).coerceAtLeast(MIN_EXTENT)
+        val tall = (points.maxOf { it.y } - bottom).coerceAtLeast(MIN_EXTENT)
+        val scale = minOf((CONTENT - 2 * LABEL_ROOM) / wide, (PLAN_HEIGHT - 2 * LABEL_ROOM) / tall).toFloat()
+        return Placed(left, bottom, tall, scale)
+    }
+
+    /**
+     * How big the sheet's label text is on each storey's plan, from the bottom up; null for a
+     * storey with no walls. The engine draws each storey for its size.
+     */
+    fun labels(state: EditorUiState): List<LabelSize?> = state.storeys.map { storey -> place(storey)?.let { painter.labelSize(it.scale) } }
+
+    /** [drawings] are the storeys' drawings, asked with [labels]. */
     fun write(
         state: EditorUiState,
+        drawings: List<Drawing?>,
         date: LocalDate,
         out: OutputStream,
     ) {
         val document = PdfDocument()
         val sheet = Sheet(document)
         sheet.header(state, date)
-        sheet.plans(state)
+        sheet.plans(state, drawings)
         sheet.table(state)
         sheet.finish()
         document.writeTo(out)
@@ -106,104 +142,34 @@ internal class EstimatePdf(
             y += LINE
         }
 
-        // Each storey's walls with their openings cut out and their lengths written beside them, as
-        // large as the box allows.
-        fun plans(state: EditorUiState) {
+        // Each storey as the engine drew it, in a box of its own.
+        fun plans(
+            state: EditorUiState,
+            drawings: List<Drawing?>,
+        ) {
             state.storeys.forEachIndexed { index, storey ->
-                if (storey.outlines.isNotEmpty()) plan(storey, resources.getString(R.string.level_name, index + 1))
+                val placed = place(storey)
+                val drawing = drawings.getOrNull(index)
+                if (placed != null && drawing != null) plan(placed, drawing, resources.getString(R.string.level_name, index + 1))
             }
         }
 
         private fun plan(
-            storey: Storey,
+            placed: Placed,
+            drawing: Drawing,
             name: String,
         ) {
-            val points = storey.outlines.flatMap { it.points }
-            val left = points.minOf { it.x }
-            val bottom = points.minOf { it.y }
-            val wide = (points.maxOf { it.x } - left).coerceAtLeast(MIN_EXTENT)
-            val tall = (points.maxOf { it.y } - bottom).coerceAtLeast(MIN_EXTENT)
-            // Room around the walls for the lengths written outside them.
-            val scale = minOf((CONTENT - 2 * LABEL_ROOM) / wide, (PLAN_HEIGHT - 2 * LABEL_ROOM) / tall).toFloat()
-            val height = (tall * scale).toFloat() + 2 * LABEL_ROOM
-            room(LINE + height)
+            room(LINE + placed.height)
             canvas.drawText(name, MARGIN, y + TEXT_SIZE, heading)
             y += LINE
-            val top = y
-
-            fun at(
-                x: Double,
-                up: Double,
-            ) = Offset(MARGIN + LABEL_ROOM + ((x - left) * scale).toFloat(), top + height - LABEL_ROOM - ((up - bottom) * scale).toFloat())
-
-            fun path(outline: List<PointM>) =
-                Path().apply {
-                    outline.forEachIndexed { index, point ->
-                        val corner = at(point.x, point.y)
-                        if (index == 0) moveTo(corner.x, corner.y) else lineTo(corner.x, corner.y)
-                    }
-                    close()
-                }
-            val chosen =
-                storey.dimensions
-                    .filter { it.wall.unit != null }
-                    .map { it.id }
-                    .toSet()
-            for (outline in storey.outlines) {
-                val wall = path(outline.points)
-                if (outline.wall in chosen) canvas.drawPath(wall, wallFill)
-                canvas.drawPath(wall, wallEdge)
-            }
-            for (opening in storey.openings) {
-                val hole = path(opening.points)
-                canvas.drawPath(hole, gap)
-                canvas.drawPath(hole, wallEdge)
-            }
-            val bodies = storey.outlines.map { outline -> outline.wall to outline.points.map { at(it.x, it.y) } }
-            val written = mutableListOf<Offset>()
-            for (dimension in storey.dimensions) {
-                val others = bodies.filter { it.first != dimension.id }.map { it.second }
-                length(dimension, scale, others, written, ::at)
-            }
-            y += height + ROW_GAP
-        }
-
-        // The wall's length beside it and along it: by one face at the middle unless another wall
-        // or another length lies there, then by the other face or nearer an end.
-        private fun length(
-            dimension: Dimension,
-            scale: Float,
-            others: List<List<Offset>>,
-            written: MutableList<Offset>,
-            at: (Double, Double) -> Offset,
-        ) {
-            val wall = dimension.wall
-            val start = at(wall.start.x.value / MM_PER_METRE, wall.start.y.value / MM_PER_METRE)
-            val end = at(wall.end.x.value / MM_PER_METRE, wall.end.y.value / MM_PER_METRE)
-            val run = end - start
-            val long = run.getDistance()
-            // A length nobody has given yet is written as about that much.
-            val length = dimension.length.value.toString()
-            val label = if (wall.exact) length else "${resources.getString(R.string.length_about_mark)} $length"
-            val width = small.measureText(label)
-            if (long == 0f || width > long) return
-            val along = run / long
-            val side = Offset(along.y, -along.x)
-            val away = (wall.thickness.value / 2 / MM_PER_METRE * scale).toFloat() + LABEL_SIZE
-            val half = along * (width / 2)
-            val places = LABEL_PLACES.flatMap { part -> listOf(start + run * part + side * away, start + run * part - side * away) }
-            val free = { place: Offset ->
-                others.none { inside(place, it) || inside(place - half, it) || inside(place + half, it) } &&
-                    written.none { (it - place).getDistance() < width }
-            }
-            val centre = places.firstOrNull(free) ?: places.first()
-            written += centre
-            var degrees = Math.toDegrees(atan2(run.y, run.x).toDouble()).toFloat()
-            // Never upside down, and on an upright wall read from the bottom up, as on drawings.
-            if (degrees >= QUARTER_TURN || degrees < -QUARTER_TURN) degrees += HALF_TURN
-            canvas.withRotation(degrees, centre.x, centre.y) {
-                drawText(label, centre.x - width / 2, centre.y + LABEL_SIZE / 3, small)
-            }
+            val frame =
+                PlanFrame(
+                    originX = MARGIN + LABEL_ROOM - (placed.left * placed.scale).toFloat(),
+                    originY = y + placed.height - LABEL_ROOM + (placed.bottom * placed.scale).toFloat(),
+                    scale = placed.scale,
+                )
+            painter.paint(canvas, drawing, frame)
+            y += placed.height + ROW_GAP
         }
 
         fun table(state: EditorUiState) {
@@ -295,12 +261,6 @@ internal class EstimatePdf(
         const val HAIRLINE = 0.6f
         const val LABEL_SIZE = 7f
         const val LABEL_ROOM = 14f
-        const val MM_PER_METRE = 1000.0
-        const val QUARTER_TURN = 90f
-        const val HALF_TURN = 180f
-
-        // Where along a wall its length may be written, the middle first.
-        val LABEL_PLACES = listOf(0.5f, 0.3f, 0.7f)
 
         // A single short wall is not blown up to fill the box: at least this many metres show.
         const val MIN_EXTENT = 4.0
@@ -312,8 +272,16 @@ internal class EstimatePdf(
     }
 }
 
-/** Writes the estimate into the cache and offers it to the apps that take a PDF. */
-internal suspend fun Context.shareEstimate(state: EditorUiState) {
+/**
+ * Writes the estimate into the cache and offers it to the apps that take a PDF. [sheets] asks the
+ * engine for every storey's drawing with label text of the sizes the sheet uses.
+ */
+internal suspend fun Context.shareEstimate(
+    state: EditorUiState,
+    sheets: suspend (List<LabelSize?>) -> List<Drawing?>,
+) {
+    val pdf = EstimatePdf(resources)
+    val drawings = sheets(pdf.labels(state))
     val file =
         withContext(Dispatchers.IO) {
             val folder = File(cacheDir, "estimates").apply { mkdirs() }
@@ -323,7 +291,7 @@ internal suspend fun Context.shareEstimate(state: EditorUiState) {
                     .replace(Regex("""[\\/:*?"<>|]"""), " ")
                     .trim()
             File(folder, "$name.pdf").also { file ->
-                file.outputStream().use { EstimatePdf(resources).write(state, LocalDate.now(), it) }
+                file.outputStream().use { pdf.write(state, drawings, LocalDate.now(), it) }
             }
         }
     val uri = FileProvider.getUriForFile(this, "$packageName.editor.files", file)

@@ -49,15 +49,21 @@ import uz.otves.data.project.JobStore
 import uz.otves.engine.Aimed
 import uz.otves.engine.Catalog
 import uz.otves.engine.Condition
+import uz.otves.engine.Drawing
+import uz.otves.engine.DrawnLine
+import uz.otves.engine.DrawnPolygon
+import uz.otves.engine.DrawnText
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
+import uz.otves.engine.FillKind
 import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.OpeningKind
-import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
+import uz.otves.engine.StrokeKind
+import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
 import uz.otves.engine.Wall
 import uz.otves.engine.WallOutline
@@ -91,6 +97,8 @@ fun EditorRoute(
                 onCommit = viewModel::commit,
                 onSketch = viewModel::sketch,
                 onRefine = viewModel::refine,
+                onLabelSize = viewModel::setLabelSize,
+                onSheets = viewModel::sheets,
                 onFinishWall = viewModel::finishWall,
                 onOrtho = viewModel::toggleOrtho,
                 onTool = viewModel::selectTool,
@@ -146,6 +154,9 @@ internal data class EditorActions(
     val onCommit: () -> Unit = {},
     val onSketch: (points: List<PointMm>, reach: Mm) -> Unit = { _, _ -> },
     val onRefine: () -> Unit = {},
+    val onLabelSize: (LabelSize) -> Unit = {},
+    /** Every storey's drawing with label text of the given sizes, for a sheet. */
+    val onSheets: suspend (List<LabelSize?>) -> List<Drawing?> = { emptyList() },
     val onFinishWall: () -> Unit = {},
     val onOrtho: () -> Unit = {},
     val onTool: (Tool) -> Unit = {},
@@ -209,13 +220,10 @@ internal fun EditorScreen(
             // The wall whose length is typed is marked as a selected one is.
             val sized = state.dimensions.find { it.id == state.entry?.wall }
             PlanCanvas(
+                plan = state.drawing,
                 outlines = state.outlines,
-                openings = state.openings,
-                below = state.below,
                 selected = sized?.id ?: state.selected?.id,
                 issues = state.issues,
-                dimensions = state.dimensions,
-                unchosen = state.unchosen,
                 draft = state.draft,
                 draftThickness = state.thickness,
                 drawing = state.tool == Tool.WALL && !state.typing && !listOpen,
@@ -233,6 +241,7 @@ internal fun EditorScreen(
                 onAimCancel = actions.onAimCancel,
                 onCommit = actions.onCommit,
                 onSketch = actions.onSketch,
+                onLabelSize = actions.onLabelSize,
                 modifier = Modifier.fillMaxSize(),
             )
             Column(
@@ -387,6 +396,8 @@ private fun EditorScreenPreview() {
     val wall = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000002"))
     val window = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000003"))
     val drawn = Wall(level, PointMm(0.mm, 0.mm), PointMm(6_400.mm, 0.mm), 380.mm, 2_800.mm)
+    val body = listOf(PointM(-0.19, -0.19), PointM(6.59, -0.19), PointM(6.21, 0.19), PointM(0.19, 0.19))
+    val gap = listOf(PointM(2.25, -0.19), PointM(3.75, -0.19), PointM(3.75, 0.19), PointM(2.25, 0.19))
     OtvesTheme {
         EditorScreen(
             state =
@@ -394,25 +405,23 @@ private fun EditorScreenPreview() {
                     ready = true,
                     levels = listOf(level),
                     level = level,
-                    outlines =
-                        listOf(
-                            WallOutline(
-                                wall,
-                                level,
-                                listOf(PointM(-0.19, -0.19), PointM(6.59, -0.19), PointM(6.21, 0.19), PointM(0.19, 0.19)),
-                                length = 6_400.mm,
-                            ),
+                    drawing =
+                        Drawing(
+                            polygons =
+                                listOf(
+                                    DrawnPolygon(wall, FillKind.WALL, StrokeKind.WALL_EDGE, body),
+                                    DrawnPolygon(window, FillKind.GAP, StrokeKind.NONE, gap),
+                                ),
+                            lines =
+                                listOf(
+                                    DrawnLine(window, StrokeKind.WALL_EDGE, gap[0], gap[3]),
+                                    DrawnLine(window, StrokeKind.WALL_EDGE, gap[1], gap[2]),
+                                    DrawnLine(window, StrokeKind.FRAME, PointM(2.25, 0.0), PointM(3.75, 0.0)),
+                                ),
+                            texts = listOf(DrawnText(wall, TextKind.LENGTH, 6_400.mm, PointM(3.2, 0.42), PointM(1.0, 0.0))),
                         ),
+                    outlines = listOf(WallOutline(wall, level, body, length = 6_400.mm)),
                     dimensions = listOf(Dimension(wall, drawn, 6_400.mm)),
-                    openings =
-                        listOf(
-                            OpeningOutline(
-                                window,
-                                level,
-                                OpeningKind.WINDOW,
-                                listOf(PointM(2.25, -0.19), PointM(3.75, -0.19), PointM(3.75, 0.19), PointM(2.25, 0.19)),
-                            ),
-                        ),
                     draft = Draft(PointMm(6_400.mm, 0.mm), Aimed(PointMm(6_400.mm, 4_200.mm), length = 4_200.mm)),
                     drawn = wall,
                     canUndo = true,

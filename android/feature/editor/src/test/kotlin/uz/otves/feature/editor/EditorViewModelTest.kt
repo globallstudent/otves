@@ -11,6 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Before
@@ -29,12 +30,16 @@ import uz.otves.engine.CommandResult
 import uz.otves.engine.Condition
 import uz.otves.engine.Conditions
 import uz.otves.engine.ContentScript
+import uz.otves.engine.Drawing
+import uz.otves.engine.DrawnPolygon
+import uz.otves.engine.DrawnText
 import uz.otves.engine.ElementChange
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineElement
 import uz.otves.engine.EngineError
 import uz.otves.engine.EngineResponse
+import uz.otves.engine.FillKind
 import uz.otves.engine.Footing
 import uz.otves.engine.Guide
 import uz.otves.engine.Issue
@@ -50,7 +55,9 @@ import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.QuantityUnit
+import uz.otves.engine.StrokeKind
 import uz.otves.engine.Takeoff
+import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
@@ -83,12 +90,15 @@ class EditorViewModelTest {
      * that changed the model, and undoes its last step. Picks what the test chose. It knows no
      * geometry (engine/geom has the real thing and its tests): an aim answers the finger's own
      * point unless the test says otherwise, measured walls and typed lengths run along the axes
-     * only, and a sketch is a wall between each two of its points.
+     * only, a sketch is a wall between each two of its points, and a drawing lists what a storey
+     * holds without saying where. Requests for drawings are kept apart in [drawn], so [sent] reads
+     * as what the builder did.
      */
     private class FakeEngine(
         private val ground: ElementId,
     ) : Engine {
         val sent = mutableListOf<List<EngineCommand>>()
+        val drawn = mutableListOf<EngineCommand.Draw>()
         var refuseNext: EngineError? = null
         var pickNext: ElementId? = null
         var issues: List<Issue> = emptyList()
@@ -114,7 +124,9 @@ class EditorViewModelTest {
         ) = PointMm(from.x + Mm(dx * length), from.y + Mm(dy * length))
 
         override suspend fun send(commands: List<EngineCommand>): EngineResponse {
-            sent += commands
+            val asked = commands.filterNot { it is EngineCommand.Draw }
+            if (asked.isNotEmpty()) sent += asked
+            drawn += commands.filterIsInstance<EngineCommand.Draw>()
             hold?.await()
             val refusal = refuseNext
             refuseNext = null
@@ -206,6 +218,10 @@ class EditorViewModelTest {
 
                     command is EngineCommand.Pick -> {
                         results += CommandResult.Done(null, picked = pickNext)
+                    }
+
+                    command is EngineCommand.Draw -> {
+                        results += CommandResult.Done(null, drawing = drawing(command.level))
                     }
 
                     command is EngineCommand.Aim -> {
@@ -349,6 +365,42 @@ class EditorViewModelTest {
                     },
                 log = log,
                 issues = if (changed) issues else null,
+            )
+        }
+
+        // The walls of the storey under [level] in outline, then its own walls, the gaps of the
+        // openings in them and a length for each wall.
+        private fun drawing(level: ElementId): Drawing {
+            val storeys =
+                elements
+                    .filterValues { it is Level }
+                    .entries
+                    .sortedBy { (it.value as Level).elevation.value }
+                    .map { it.key }
+            val under = storeys.getOrNull(storeys.indexOf(level) - 1)
+            val walls = elements.filterValues { (it as? Wall)?.level == level }.mapValues { it.value as Wall }
+            val nowhere = PointM(0.0, 0.0)
+            return Drawing(
+                polygons =
+                    elements.values.filter { under != null && (it as? Wall)?.level == under }.map {
+                        DrawnPolygon(null, FillKind.NONE, StrokeKind.BELOW, emptyList())
+                    } +
+                        walls.map { (id, wall) ->
+                            DrawnPolygon(id, if (wall.unit == null) FillKind.UNCHOSEN else FillKind.WALL, StrokeKind.WALL_EDGE, emptyList())
+                        } +
+                        elements.filterValues { (it as? Opening)?.wall in walls }.keys.map {
+                            DrawnPolygon(it, FillKind.GAP, StrokeKind.NONE, emptyList())
+                        },
+                texts =
+                    walls.map { (id, wall) ->
+                        DrawnText(
+                            id,
+                            if (wall.exact) TextKind.LENGTH else TextKind.ABOUT_LENGTH,
+                            wall.end.x - wall.start.x,
+                            nowhere,
+                            nowhere,
+                        )
+                    },
             )
         }
 
@@ -711,6 +763,68 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun theShownStoreyIsDrawnByTheEngineInTheRequestThatChangesIt() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        val requests = engine.drawn.size
+
+        viewModel.buildWall()
+
+        // One request built the wall and drew the storey.
+        assertThat(engine.drawn).hasSize(requests + 1)
+        assertThat(engine.drawn.last().level).isEqualTo(level)
+        val wall =
+            viewModel.uiState.value.outlines
+                .single()
+                .wall
+        assertThat(
+            viewModel.uiState.value.drawing.polygons
+                .map { it.element },
+        ).containsExactly(wall)
+        assertThat(
+            viewModel.uiState.value.drawing.texts
+                .single()
+                .value,
+        ).isEqualTo(6_000.mm)
+    }
+
+    @Test
+    fun zoomingAsksTheDrawingAgainWithTheLabelTextAsBigAsItIsNow() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.buildWall()
+        val requests = engine.drawn.size
+
+        viewModel.setLabelSize(LabelSize(height = 800.mm, digit = 410.mm))
+        viewModel.setLabelSize(LabelSize(height = 800.mm, digit = 410.mm))
+
+        assertThat(engine.drawn).hasSize(requests + 1)
+        assertThat(engine.drawn.last()).isEqualTo(EngineCommand.Draw(level, textHeight = 800.mm, digitWidth = 410.mm))
+        // What the builder does next is drawn at that size too.
+        viewModel.undo()
+        assertThat(engine.drawn.last().textHeight).isEqualTo(800.mm)
+    }
+
+    @Test
+    fun aSheetAsksEveryStoreyWithItsOwnLabelSize() =
+        runTest {
+            val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+            viewModel.buildWall()
+            viewModel.addLevel()
+            val upper =
+                viewModel.uiState.value.levels
+                    .last()
+            val requests = engine.drawn.size
+
+            // The upper storey has no walls, so the sheet has no size for it.
+            val drawings = viewModel.sheets(listOf(LabelSize(120.mm, 60.mm), null))
+
+            assertThat(engine.drawn.drop(requests)).containsExactly(EngineCommand.Draw(level, 120.mm, 60.mm))
+            assertThat(drawings).hasSize(2)
+            assertThat(drawings[0]?.polygons).hasSize(1)
+            assertThat(drawings[1]).isNull()
+            assertThat(upper).isNotEqualTo(level)
+        }
+
+    @Test
     fun aStrokeOfThePencilGoesToTheEngineAsDrawn() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.selectTool(Tool.PENCIL)
@@ -851,11 +965,11 @@ class EditorViewModelTest {
         assertThat(place.height).isEqualTo(1_500.mm)
         assertThat(place.sill).isEqualTo(900.mm)
         assertThat(place.kind).isEqualTo(OpeningKind.WINDOW)
+        // The engine draws the window: the plan shows its gap in the wall.
         assertThat(
-            viewModel.uiState.value.openings
-                .single()
-                .kind,
-        ).isEqualTo(OpeningKind.WINDOW)
+            viewModel.uiState.value.drawing.polygons
+                .count { it.fill == FillKind.GAP },
+        ).isEqualTo(1)
         assertThat(viewModel.uiState.value.canUndo).isTrue()
     }
 
@@ -897,7 +1011,8 @@ class EditorViewModelTest {
         assertThat(state.levels.first()).isEqualTo(level)
         assertThat(state.level).isEqualTo(state.levels.last())
         assertThat(state.outlines).isEmpty()
-        assertThat(state.below).hasSize(1)
+        // The wall of the storey under it, in outline.
+        assertThat(state.drawing.polygons.map { it.stroke }).containsExactly(StrokeKind.BELOW)
         assertThat(state.canUndo).isTrue()
     }
 
@@ -913,7 +1028,7 @@ class EditorViewModelTest {
         val state = viewModel.uiState.value
         assertThat(state.level).isEqualTo(level)
         assertThat(state.outlines).hasSize(1)
-        assertThat(state.below).isEmpty()
+        assertThat(state.drawing.polygons.map { it.stroke }).containsExactly(StrokeKind.WALL_EDGE)
     }
 
     @Test
@@ -977,9 +1092,11 @@ class EditorViewModelTest {
         viewModel.selectTool(Tool.WINDOW)
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
         val window =
-            viewModel.uiState.value.openings
-                .single()
-                .opening
+            checkNotNull(
+                viewModel.uiState.value.drawing.polygons
+                    .single { it.fill == FillKind.GAP }
+                    .element,
+            )
         viewModel.selectTool(Tool.SELECT)
         engine.pickNext = window
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)

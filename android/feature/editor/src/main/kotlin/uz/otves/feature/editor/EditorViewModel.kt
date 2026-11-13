@@ -22,6 +22,7 @@ import uz.otves.engine.Catalog
 import uz.otves.engine.CommandResult
 import uz.otves.engine.Condition
 import uz.otves.engine.Conditions
+import uz.otves.engine.Drawing
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
@@ -34,7 +35,6 @@ import uz.otves.engine.MasonryUnitKind
 import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
-import uz.otves.engine.OpeningOutline
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.Takeoff
@@ -84,11 +84,10 @@ internal data class Dimension(
     val length: Mm,
 )
 
-/** One storey as it is drawn: its walls, the openings in them and the walls' lengths. */
+/** One storey of the job and where its walls lie, for a sheet that shows them all. */
 internal data class Storey(
+    val level: ElementId,
     val outlines: List<WallOutline>,
-    val openings: List<OpeningOutline>,
-    val dimensions: List<Dimension>,
 )
 
 /**
@@ -172,11 +171,10 @@ internal data class EditorUiState(
     /** Storeys from the bottom up; the user works on [level]. */
     val levels: List<ElementId> = emptyList(),
     val level: ElementId? = null,
-    /** The current storey's walls and openings. */
+    /** The current storey as the engine drew it (docs/adr/0013), over the storey below. */
+    val drawing: Drawing = Drawing(),
+    /** Where the current storey's walls lie, to show them all. */
     val outlines: List<WallOutline> = emptyList(),
-    val openings: List<OpeningOutline> = emptyList(),
-    /** The walls of the storey below, drawn faintly to build on. */
-    val below: List<WallOutline> = emptyList(),
     /** Every storey from the bottom up, for a sheet of the whole job. */
     val storeys: List<Storey> = emptyList(),
     /** What to fix on the current storey. */
@@ -274,8 +272,11 @@ internal class EditorViewModel(
     private val openings = mutableMapOf<ElementId, Opening>()
     private var conditions: Pair<ElementId, Conditions>? = null
     private var wallOutlines: List<WallOutline> = emptyList()
-    private var openingOutlines: List<OpeningOutline> = emptyList()
     private var allIssues: List<Issue> = emptyList()
+
+    // How big the plan's label text is at the zoom the canvas told last; the engine places the
+    // labels by it.
+    private var label = LabelSize(height = 400.mm, digit = 200.mm)
 
     // The walls drawn in a row: where the first one started and the walls built since. The next
     // wall starts where the last one ends, wherever an edit has since put that end, so undo and
@@ -543,6 +544,44 @@ internal class EditorViewModel(
     }
 
     fun toggleOrtho() = state.update { it.copy(ortho = !it.ortho) }
+
+    /** The canvas zoomed: the labels that fit now are not the ones that fitted before. */
+    fun setLabelSize(size: LabelSize) =
+        act {
+            if (size == label) return@act
+            label = size
+            redraw()
+        }
+
+    /**
+     * Every storey's drawing for a sheet, from the bottom up, with label text as big as [sizes]
+     * say for each; null for a storey that has no size.
+     */
+    suspend fun sheets(sizes: List<LabelSize?>): List<Drawing?> =
+        turn.withLock {
+            val asked =
+                orderedLevels().zip(sizes).mapNotNull { (level, size) ->
+                    size?.let { EngineCommand.Draw(level, it.height, it.digit) }
+                }
+            val drawings =
+                engine
+                    .send(asked)
+                    .results
+                    .map { (it as? CommandResult.Done)?.drawing }
+                    .iterator()
+            sizes.map { size -> if (size == null || !drawings.hasNext()) null else drawings.next() }
+        }
+
+    private fun draw(level: ElementId) = EngineCommand.Draw(level, label.height, label.digit)
+
+    // Asks the shown storey's drawing again. The model does not change, so nothing is recorded.
+    private suspend fun redraw() {
+        val drawing =
+            state.value.level?.let { level ->
+                (engine.send(listOf(draw(level))).results.singleOrNull() as? CommandResult.Done)?.drawing
+            }
+        state.update { it.copy(drawing = drawing ?: Drawing()) }
+    }
 
     fun showTakeoff(open: Boolean) = state.update { it.copy(takeoffOpen = open, conditionsOpen = false) }
 
@@ -847,25 +886,34 @@ internal class EditorViewModel(
         viewModelScope.launch { turn.withLock { step() } }
     }
 
-    // Returns what the first command created.
+    // Returns what the first command created. The shown storey's drawing is asked in the same
+    // request, so the plan changes in one step.
     private suspend fun execute(
         commands: List<EngineCommand>,
         showCreated: Boolean = false,
     ): ElementId? {
-        val response = engine.send(commands)
+        val level = state.value.level
+        val response = engine.send(commands + listOfNotNull(level?.let(::draw)))
         job.record(response)
         // Each group in the log is one step: undo takes one back, anything else adds one.
         userSteps += response.log.sumOf { if (it.isUndo) -1 else 1 }
         val created = (response.results.firstOrNull() as? CommandResult.Done)?.created
-        apply(response, show = created.takeIf { showCreated })
+        val drawing = (response.results.getOrNull(commands.size) as? CommandResult.Done)?.drawing
+        apply(
+            response.copy(results = response.results.take(commands.size)),
+            show = created.takeIf { showCreated },
+            drawn = if (level != null && drawing != null) level to drawing else null,
+        )
         return created
     }
 
     // Mirrors the engine's changes, then shows [show], or else stays on the current storey while
-    // it exists; when undo removed it, the top storey left.
-    private fun apply(
+    // it exists; when undo removed it, the top storey left. [drawn] is a storey's drawing that
+    // came with the response.
+    private suspend fun apply(
         response: EngineResponse,
         show: ElementId? = null,
+        drawn: Pair<ElementId, Drawing>? = null,
     ) {
         for (change in response.changes) {
             when (val element = change.element) {
@@ -894,7 +942,6 @@ internal class EditorViewModel(
         // Undo and removal take walls off the run: it goes on from the last one still standing.
         run = run?.let { it.copy(built = it.built.takeWhile { wall -> wall in walls }) }
         wallOutlines = response.outlines ?: wallOutlines
-        openingOutlines = response.openings ?: openingOutlines
         allIssues = response.issues ?: allIssues
         state.update { current ->
             current.copy(
@@ -918,7 +965,7 @@ internal class EditorViewModel(
                 conditions = conditions?.second ?: Conditions(),
             )
         }
-        show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels })
+        show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels }, drawn)
     }
 
     // Two rules may ask for the same material, as the footing and the ring beam do for bars of one
@@ -932,34 +979,30 @@ internal class EditorViewModel(
     private fun selection(id: ElementId): Selected? =
         walls[id]?.let { Selected.WallPart(id, it) } ?: openings[id]?.let { Selected.OpeningPart(id, it) }
 
-    private fun show(level: ElementId?) {
+    // Shows a storey: [drawn] is its drawing if one came with the response, else the engine is
+    // asked for it.
+    private suspend fun show(
+        level: ElementId?,
+        drawn: Pair<ElementId, Drawing>? = null,
+    ) {
         val ordered = orderedLevels()
         val shown = level ?: ordered.lastOrNull()
-        val below = ordered.getOrNull(ordered.indexOf(shown) - 1)
         if (shown != state.value.level) run = null
-        val storeys =
-            ordered.associateWith { storey ->
-                val outlines = wallOutlines.filter { it.level == storey }
-                Storey(
-                    outlines = outlines,
-                    openings = openingOutlines.filter { it.level == storey },
-                    dimensions =
-                        outlines.mapNotNull { outline ->
-                            walls[outline.wall]?.let { Dimension(outline.wall, it, outline.length) }
-                        },
-                )
-            }
+        val storeys = ordered.map { storey -> Storey(storey, wallOutlines.filter { it.level == storey }) }
+        val outlines = storeys.find { it.level == shown }?.outlines.orEmpty()
         state.update { current ->
             val sameLevel = shown == current.level
             current
                 .copy(
                     levels = ordered,
                     level = shown,
-                    storeys = storeys.values.toList(),
-                    outlines = storeys[shown]?.outlines.orEmpty(),
-                    dimensions = storeys[shown]?.dimensions.orEmpty(),
-                    openings = storeys[shown]?.openings.orEmpty(),
-                    below = if (below == null) emptyList() else wallOutlines.filter { it.level == below },
+                    storeys = storeys,
+                    outlines = outlines,
+                    dimensions =
+                        outlines.mapNotNull { outline ->
+                            walls[outline.wall]?.let { Dimension(outline.wall, it, outline.length) }
+                        },
+                    drawing = drawn?.second?.takeIf { drawn.first == shown } ?: current.drawing,
                     issues = allIssues.filter { it.level == shown },
                     ringBeam = levels[shown]?.ringBeam ?: 0.mm,
                     footing = levels[shown]?.footing,
@@ -967,6 +1010,7 @@ internal class EditorViewModel(
                     selected = if (sameLevel) current.selected else null,
                 ).withRun()
         }
+        if (drawn?.first != shown) redraw()
     }
 
     // By elevation; storeys at one elevation keep the order of their ids, which grow with time.

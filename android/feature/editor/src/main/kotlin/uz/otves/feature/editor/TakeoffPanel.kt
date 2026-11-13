@@ -52,7 +52,7 @@ internal fun TakeoffPanel(
             ShareMenu(
                 enabled = lines.isNotEmpty() && !state.takeoffFailed,
                 onText = { context.share(shared) },
-                onPdf = { scope.launch { context.shareEstimate(state) } },
+                onPdf = { scope.launch { context.shareEstimate(state, actions.onSheets) } },
             )
             PanelAction(stringResource(R.string.takeoff_close), onClose)
         }
