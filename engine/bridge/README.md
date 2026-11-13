@@ -33,11 +33,13 @@ sequenceDiagram
 
 | Field | Content |
 |---|---|
-| `results` | One per command, in order: `ErrorCode`, an English message for logs, the created element's id |
+| `results` | One per command, in order: `ErrorCode`, an English message for logs, the created element's id, the element a `Pick` found, where an `Aim` or `AimMeasured` says a wall would end |
 | `changes` | Each changed level, wall or opening with its full value, or with no value when deleted; sorted by id |
 | `can_undo`, `can_redo` | For the toolbar |
 | `outlines` | Every wall's joined plan outline in metres, level by level; only when the model or the content changed |
 | `takeoff`, `takeoff_error` | Material lines from the loaded rules, or why they could not run; absent until `LoadContent` |
+
+`Pick`, `Aim` and `AimMeasured` are questions: they read the model and change nothing. `SetWallLength` asks `geom::resize_wall` what moves and runs it as `MoveWallEnd` commands in one undo step ([ADR 0011](../../docs/adr/0011-plan-editing-in-the-engine.md)).
 
 `LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.
 

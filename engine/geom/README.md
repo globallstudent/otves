@@ -13,6 +13,9 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | `hit_wall(walls, at, reach)` | The wall nearest to a plan point within a reach, and how far along its location line the point lies |
 | `hit_opening(openings, at, reach)` | The opening nearest to a plan point within a reach |
 | `opening_outline(wall, opening)` | The rectangle an opening cuts through its wall on the plan, face to face |
+| `aim(walls, below, touch)` | Where a wall being drawn would end under the finger, its length, the wall ends it lined up with and whether it meets the plan there |
+| `aim(walls, measured)` | Where a wall of a typed length ends, turning left, straight or right from the wall before it |
+| `resize_wall(walls, wall, length, fixed)` | Every wall end that moves when a wall gets a length, so what is joined stays joined |
 
 ## Joins
 
@@ -27,11 +30,23 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | Two ends inside a wall from one side | Issue `kOverlap` |
 | Walls crossing away from their ends | Issue `kOverlap`; split at the crossing, they join as four ends at one point |
 
+## Editing
+
+Editing reads the walls as a graph by the definition the joins use ([ADR 0011](../../docs/adr/0011-plan-editing-in-the-engine.md)): ends at one point are a joint, and an end inside another wall's body stands against that wall.
+
+| Question | Answer |
+|---|---|
+| A touch near a wall end, of this level or the one below | That end |
+| A touch elsewhere | The wall turns onto the nearer axis, always with the 90° lock and otherwise within about 6° of it; each free coordinate lines up with a wall end within reach or falls on the grid |
+| A touch on or beside a wall's body | The point moves onto that wall's line, so the new wall meets it along its length |
+| A typed length for a wall | Its fixed end stays and its far joint moves along it. Unless one is named, the fixed end is the one joined to other walls when the other is free, so a partition grows from the wall it stands against; else the start. A wall at a moving point stretches if it runs along the move and otherwise goes whole, with the ends standing against it; a wall reaching the fixed end turns about it |
+| A length that would make a joined wall vanish or turn back, or leave a wall end off the wall it stands against | Refused with `kBreaksJoin`; nothing moves |
+
 ## Invariants
 
 - Outlines are counter-clockwise. Joined outlines share edges and never overlap, so their areas add up to the masonry area.
 - Overlaps at shared points, at ends inside a wall and where location lines cross are reported. Walls overlapping only side by side are not checked yet.
-- Ends join only when their points are equal to the millimetre; the editor snaps.
+- Ends join only when their points are equal to the millimetre; `aim` puts a touched point on them, and `resize_wall` moves every end of a joint together.
 - Directions are sorted and tested for parallel on integer millimetre steps, so which walls join never depends on floating-point rounding.
 - Coordinates use only correctly rounded operations (`+ − × ÷ √`) with `-ffp-contract=off`, so arm64 and x86-64 give the same bits. A golden test checks this.
 - Input walls pass `validate()` and have unique ids. Input order does not change the result.

@@ -33,6 +33,8 @@ enum class ErrorCode : std::uint8_t {
   kDoesNotFit,           // an opening wider than its wall
   kConditionOutOfRange,  // an estimating condition below its unset value or a waste of 100 % or
                          // more
+  kBreaksJoin,           // a wall joined to a resized one would vanish, turn back on itself or
+                         // come off the wall it stands against
 };
 
 struct Error {

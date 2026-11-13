@@ -26,10 +26,10 @@ flowchart TB
 | Module | Role | Status |
 |---|---|---|
 | `engine/core` | Units (`Mm`), ids (UUIDv7), hybrid clock, levels with their strip footing, ring beam and junction meshes, walls with their masonry unit, openings, the job's estimating conditions, commands, document with op log, undo, gestures and opening a saved job | exists |
-| `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`); the wall under a point and opening outlines | exists |
+| `engine/geom` | Wall joins, plan outlines and junctions (`join_walls`); the wall under a point and opening outlines; where a wall being drawn ends (`aim`) and what moves with a wall given a length (`resize_wall`) | exists |
 | `engine/takeoff` | Wall quantities net of openings and lintels, masonry units and mortar per chosen unit, Luau rules sandbox (`RuleSet`) | exists |
 | `content/` | Norm tables and rules in Luau: mortar, cement, lintels, strip footings, ring beams, junction meshes; the catalog of masonry units and ring beam heights to choose from | exists |
-| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement and picking at a tap, outlines with lengths, issues, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
+| `engine/bridge` | `Session` over FlatBuffers requests (`schema/engine.fbs`): commands, opening placement and picking at a tap, aiming a wall and giving one a typed length (ADR 0011), outlines with lengths, issues, take-off, op-log groups for the job file; JNI functions of `libdesign.so` | exists |
 | `engine/render`, `export` | Drawing, PDF/DXF/IFC | planned |
 | `android/core/model` | Value types shared by features: `Mm`, `Money`, `ElementId` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme, segmented control | exists |

@@ -16,6 +16,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/geom/editing.h>
 
 #include "engine_generated.h"
 
@@ -59,6 +60,34 @@ struct OpeningPlacement {
 
 // kCorruptData when the point is missing or the kind is unknown.
 [[nodiscard]] std::expected<OpeningPlacement, Error> decode(const schema::PlaceOpening* place);
+
+// A touch on a level while a wall is drawn (schema Aim).
+struct Sight {
+  ElementId level;
+  geom::Aim aim;
+};
+
+// kCorruptData when the point under the finger is missing.
+[[nodiscard]] std::expected<Sight, Error> decode(const schema::Aim* aim);
+
+// A wall of a typed length on a level (schema AimMeasured).
+struct MeasuredSight {
+  ElementId level;
+  geom::Measured measured;
+};
+
+// kCorruptData when the wall's start is missing or the turn is unknown.
+[[nodiscard]] std::expected<MeasuredSight, Error> decode(const schema::AimMeasured* aim);
+
+// A wall and the length it gets (schema SetWallLength).
+struct Resize {
+  ElementId wall;
+  Mm length;
+  std::optional<WallEnd> fixed;  // absent: the plan says which end stays
+};
+
+// kCorruptData when the fixed end is unknown.
+[[nodiscard]] std::expected<Resize, Error> decode(const schema::SetWallLength* set);
 
 // A schema element as a union member: its type and its table.
 struct EncodedElement {

@@ -1,4 +1,5 @@
 add_library(otves_geom
+  src/editing.cpp
   src/openings.cpp
   src/polygon.cpp
   src/wall_joins.cpp)
@@ -12,6 +13,7 @@ target_link_libraries(otves_geom
 
 if(OTVES_BUILD_TESTS)
   otves_add_test(otves_geom_tests
+    tests/editing_test.cpp
     tests/openings_test.cpp
     tests/polygon_test.cpp
     tests/wall_joins_test.cpp)

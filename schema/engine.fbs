@@ -133,6 +133,48 @@ table Pick {
   reach:long;
 }
 
+enum Turn:ubyte { Left = 0, Straight = 1, Right = 2 }
+
+// A touch on `level` while a wall is drawn (docs/adr/0011). Changes nothing; the result's `aimed`
+// says where the wall would end. `from` is the wall's start, absent while its first point is
+// placed; `reach` is how far from the finger still counts as touched; a free coordinate falls on
+// a multiple of `grid`; `square` holds the wall to the plan's axes.
+table Aim {
+  level:Uuid;
+  from:PointMm;
+  at:PointMm;
+  reach:long;
+  grid:long;
+  square:bool;
+}
+
+// A wall of a typed length from `from`, turning from the wall that ended there; that wall started
+// at `before`, absent for the first wall of a run, which goes to the right of the plan. Changes
+// nothing; the result's `aimed` says where the wall ends.
+table AimMeasured {
+  level:Uuid;
+  from:PointMm;
+  before:PointMm;
+  turn:Turn = Straight;
+  length:long;
+}
+
+// The end of a wall that stays when the wall gets a length. `Joined` leaves it to the plan: the
+// end joined to other walls when the other end is free, so a partition grows from the wall it
+// stands against; else the start.
+enum FixedEnd:ubyte { Joined = 0, Start = 1, End = 2 }
+
+// Gives the wall a length along its line. Its `fixed` end stays; what is joined to the other end
+// goes with it so that walls keep their direction. Runs as MoveWallEnd commands in one undo step;
+// changes nothing when the length is not positive (ZeroLength), a point would leave the plan
+// (OffPlan), or a joined wall would vanish, turn back on itself or come off the wall it stands
+// against (BreaksJoin).
+table SetWallLength {
+  wall:Uuid;
+  length:long;
+  fixed:FixedEnd = Joined;
+}
+
 // Replaces the open model with a saved job's elements (docs/adr/0007) and starts an empty log
 // with no undo or redo. `clock` is the newest stamp in the job's log; later stamps sort after it.
 // Fails with CorruptData, changing nothing, when an element is invalid, an id repeats, or a wall
@@ -178,6 +220,9 @@ union Command {
   SetLevelJunctionMeshes,
   SetCondition,
   SetLevelFooting,
+  Aim,
+  AimMeasured,
+  SetWallLength,
 }
 
 table CommandEntry {
@@ -215,6 +260,21 @@ enum ErrorCode:ubyte {
   NoWall = 21,
   DoesNotFit = 22,
   ConditionOutOfRange = 23,
+  BreaksJoin = 24,
+}
+
+// The aimed point lined up with a wall end: a line from that end to the point.
+struct Guide {
+  from:PointMm;
+  to:PointMm;
+}
+
+// Where a wall being drawn would end (engine/geom/editing.h).
+table Aimed {
+  point:PointMm;
+  length:long;     // from the wall's start along its line; 0 for a first point
+  guides:[Guide];
+  meets:bool;      // the point is a wall end or lies in a wall, so a wall ending here joins the plan
 }
 
 table CommandResult {
@@ -222,6 +282,7 @@ table CommandResult {
   message:string;  // English context for logs; the app shows translated text for `error`
   created:Uuid;    // the element the command created, if any
   picked:Uuid;     // the element a Pick found, if any
+  aimed:Aimed;     // the answer to an Aim or AimMeasured
 }
 
 union Element { Level, Wall, Opening, Conditions }

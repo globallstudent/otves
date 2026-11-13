@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <iterator>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -13,9 +15,11 @@
 #include <otves/core/level.h>
 #include <otves/core/model.h>
 #include <otves/core/opening.h>
+#include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/geom/editing.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
@@ -51,7 +55,66 @@ std::vector<geom::WallInput> walls_on(const Model& model, ElementId level) {
   return walls;
 }
 
+// The level under `level`: the one before it by elevation. Levels at one elevation keep the order
+// of their ids, which grow with time.
+std::optional<ElementId> level_below(const Model& model, ElementId level) {
+  std::vector<std::pair<Mm, ElementId>> order;
+  model.for_each<Level>(
+      [&order](ElementId id, const Level& value) { order.emplace_back(value.elevation, id); });
+  std::ranges::sort(order);
+  const auto found = std::ranges::find(order, level, &std::pair<Mm, ElementId>::second);
+  if (found == order.end() || found == order.begin()) {
+    return std::nullopt;
+  }
+  return std::prev(found)->second;
+}
+
 }  // namespace
+
+Result<geom::Aimed> aim(const Model& model, const Sight& sight) {
+  if (model.find<Level>(sight.level) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "level not found");
+  }
+  std::vector<PointMm> below;
+  if (const std::optional<ElementId> under = level_below(model, sight.level)) {
+    for (const geom::WallInput& input : walls_on(model, *under)) {
+      below.push_back(input.wall.start);
+      below.push_back(input.wall.end);
+    }
+  }
+  return geom::aim(walls_on(model, sight.level), below, sight.aim);
+}
+
+Result<geom::Aimed> aim(const Model& model, const MeasuredSight& sight) {
+  if (model.find<Level>(sight.level) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "level not found");
+  }
+  return geom::aim(walls_on(model, sight.level), sight.measured);
+}
+
+Result<std::vector<MoveWallEnd>> resize(const Model& model, const Resize& resize) {
+  const Wall* wall = model.find<Wall>(resize.wall);
+  if (wall == nullptr) {
+    return make_error(ErrorCode::kNotFound, "wall not found");
+  }
+  return geom::resize_wall(walls_on(model, wall->level), resize.wall, resize.length, resize.fixed)
+      .transform([&model](const std::vector<geom::EndMove>& moves) {
+        std::vector<MoveWallEnd> commands;
+        commands.reserve(moves.size());
+        for (const geom::EndMove& move : moves) {
+          commands.push_back({.wall = move.wall, .end = move.end, .to = move.to});
+          // One end moves at a time. A wall sliding along its own line by its own length would
+          // put its start on its end, so its end goes first.
+          const Wall* moved = model.find<Wall>(move.wall);
+          const std::size_t count = commands.size();
+          if (move.end == WallEnd::kEnd && count > 1 && commands[count - 2].wall == move.wall &&
+              moved != nullptr && commands[count - 2].to == moved->end) {
+            std::swap(commands[count - 2], commands[count - 1]);
+          }
+        }
+        return commands;
+      });
+}
 
 Result<std::optional<ElementId>> pick(const Model& model, const Tap& tap) {
   if (model.find<Level>(tap.level) == nullptr) {

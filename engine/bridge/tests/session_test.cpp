@@ -47,6 +47,33 @@ class Request {
     return add(Command::AddWall, schema::CreateAddWall(builder_, wall).Union());
   }
 
+  Request& add_wall(ElementId level, schema::PointMm start, schema::PointMm end) {
+    const schema::Uuid on = key(level);
+    const auto wall = schema::CreateWall(builder_, &on, &start, &end, 380, 2800);
+    return add(Command::AddWall, schema::CreateAddWall(builder_, wall).Union());
+  }
+
+  // A touch with a 300 mm reach on a 100 mm grid, for a wall from `from` if there is one.
+  Request& aim(ElementId level, schema::PointMm at, const schema::PointMm* from = nullptr) {
+    const schema::Uuid on = key(level);
+    return add(Command::Aim, schema::CreateAim(builder_, &on, from, &at, 300, 100).Union());
+  }
+
+  // A wall of a typed length turning from the wall that ran from `before` to `from`.
+  Request& aim_measured(ElementId level, schema::PointMm from, schema::PointMm before,
+                        schema::Turn turn, std::int64_t length) {
+    const schema::Uuid on = key(level);
+    return add(Command::AimMeasured,
+               schema::CreateAimMeasured(builder_, &on, &from, &before, turn, length).Union());
+  }
+
+  Request& set_length(ElementId wall, std::int64_t length,
+                      schema::FixedEnd fixed = schema::FixedEnd::Joined) {
+    const schema::Uuid id = key(wall);
+    return add(Command::SetWallLength,
+               schema::CreateSetWallLength(builder_, &id, length, fixed).Union());
+  }
+
   // A wall up from the origin, meeting add_wall's at a corner.
   Request& add_wall_up(ElementId level, std::int64_t length) {
     const schema::Uuid on = key(level);
@@ -474,6 +501,227 @@ TEST(Session, PickFindsWhatIsUnderTheTapOpeningsFirst) {
   EXPECT_EQ(picked.changes()->size(), 0U);
   EXPECT_EQ(picked.log()->size(), 0U);
   EXPECT_EQ(picked.outlines(), nullptr);
+}
+
+// The wall's line as the response reports it: start x, start y, end x, end y.
+std::vector<std::int64_t> line(const schema::Response& response, ElementId wall) {
+  for (const schema::ElementChange* change : *response.changes()) {
+    const schema::Wall* value = change->element_as_Wall();
+    if (to_id(change->id()) == wall && value != nullptr) {
+      return {value->start()->x(), value->start()->y(), value->end()->x(), value->end()->y()};
+    }
+  }
+  return {};
+}
+
+using Line = std::vector<std::int64_t>;
+
+TEST(Session, AimAnswersWhereAWallWouldEndAndChangesNothing) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_wall(session, level);
+  const schema::PointMm from{6400, 0};
+
+  const auto& aimed = respond(session, Request{}
+                                           .aim(level, {6300, 150})
+                                           .aim(level, {6480, 3960}, &from)
+                                           .aim(level, {3040, 260})
+                                           .aim(ElementId{Uuid{7, 7}}, {0, 0})
+                                           .empty(Command::Aim)
+                                           .bytes());
+
+  ASSERT_EQ(aimed.results()->size(), 5U);
+  // A first point within reach of a wall end is that end.
+  const schema::Aimed* end = aimed.results()->Get(0)->aimed();
+  ASSERT_NE(end, nullptr);
+  EXPECT_EQ(end->point()->x(), 6400);
+  EXPECT_EQ(end->point()->y(), 0);
+  EXPECT_EQ(end->length(), 0);
+  EXPECT_TRUE(end->meets());
+  // A wall from that end turns onto the axis and stops on the grid.
+  const schema::Aimed* up = aimed.results()->Get(1)->aimed();
+  ASSERT_NE(up, nullptr);
+  EXPECT_EQ(up->point()->x(), 6400);
+  EXPECT_EQ(up->point()->y(), 4000);
+  EXPECT_EQ(up->length(), 4000);
+  EXPECT_FALSE(up->meets());
+  // A first point beside the wall moves onto its line.
+  const schema::Aimed* on_wall = aimed.results()->Get(2)->aimed();
+  ASSERT_NE(on_wall, nullptr);
+  EXPECT_EQ(on_wall->point()->x(), 3000);
+  EXPECT_EQ(on_wall->point()->y(), 0);
+  EXPECT_TRUE(on_wall->meets());
+  EXPECT_EQ(aimed.results()->Get(3)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(aimed.results()->Get(3)->aimed(), nullptr);
+  EXPECT_EQ(aimed.results()->Get(4)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(aimed.changes()->size(), 0U);
+  EXPECT_EQ(aimed.log()->size(), 0U);
+  EXPECT_EQ(aimed.outlines(), nullptr);
+}
+
+TEST(Session, AimCatchesTheWallEndsOfTheStoreyBelow) {
+  Session session{kDevice};
+  const ElementId ground = add_level(session);
+  add_wall(session, ground);
+  const auto& added =
+      respond(session, Request{}.add_level(3000, 3000).add_level(-3000, 2500).bytes());
+  const ElementId upper = to_id(added.results()->Get(0)->created());
+  const ElementId cellar = to_id(added.results()->Get(1)->created());
+
+  const auto& aimed =
+      respond(session, Request{}.aim(upper, {6250, 180}).aim(cellar, {6250, 180}).bytes());
+
+  // The upper storey stands on the ground floor's walls; the cellar has nothing under it.
+  const schema::Aimed* above = aimed.results()->Get(0)->aimed();
+  ASSERT_NE(above, nullptr);
+  EXPECT_EQ(above->point()->x(), 6400);
+  EXPECT_EQ(above->point()->y(), 0);
+  EXPECT_FALSE(above->meets());
+  const schema::Aimed* under = aimed.results()->Get(1)->aimed();
+  ASSERT_NE(under, nullptr);
+  EXPECT_EQ(under->point()->x(), 6300);
+  EXPECT_EQ(under->point()->y(), 200);
+}
+
+TEST(Session, AimMeasuredTurnsFromTheWallBefore) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_wall(session, level);
+
+  const auto& aimed =
+      respond(session, Request{}
+                           .aim_measured(level, {6400, 0}, {0, 0}, schema::Turn::Left, 4000)
+                           .aim_measured(level, {6400, 0}, {0, 0}, schema::Turn::Right, 4000)
+                           .aim_measured(level, {0, 4000}, {6400, 4000}, schema::Turn::Left, 4000)
+                           .bytes());
+
+  ASSERT_EQ(aimed.results()->size(), 3U);
+  EXPECT_EQ(aimed.results()->Get(0)->aimed()->point()->y(), 4000);
+  EXPECT_EQ(aimed.results()->Get(0)->aimed()->length(), 4000);
+  EXPECT_EQ(aimed.results()->Get(1)->aimed()->point()->y(), -4000);
+  // A run that comes back to where a wall starts closes on it.
+  const schema::Aimed* closing = aimed.results()->Get(2)->aimed();
+  EXPECT_EQ(closing->point()->x(), 0);
+  EXPECT_EQ(closing->point()->y(), 0);
+  EXPECT_TRUE(closing->meets());
+  EXPECT_EQ(aimed.changes()->size(), 0U);
+}
+
+// A 6 000 × 4 000 room drawn round from the origin: bottom, right, top, left.
+std::vector<ElementId> add_room(Session& session, ElementId level) {
+  const auto& added = respond(session, Request{}
+                                           .add_wall(level, {0, 0}, {6000, 0})
+                                           .add_wall(level, {6000, 0}, {6000, 4000})
+                                           .add_wall(level, {6000, 4000}, {0, 4000})
+                                           .add_wall(level, {0, 4000}, {0, 0})
+                                           .bytes());
+  std::vector<ElementId> walls;
+  for (const schema::CommandResult* result : *added.results()) {
+    walls.push_back(to_id(result->created()));
+  }
+  return walls;
+}
+
+TEST(Session, ATypedLengthKeepsTheRoomSquareInOneUndoStep) {
+  Session session{kDevice};
+  const std::vector<ElementId> room = add_room(session, add_level(session));
+
+  const auto& longer = respond(session, Request{}.set_length(room[0], 6400).bytes());
+
+  ASSERT_EQ(longer.results()->Get(0)->error(), schema::ErrorCode::None);
+  EXPECT_EQ(longer.changes()->size(), 3U);
+  EXPECT_EQ(line(longer, room[0]), (Line{0, 0, 6400, 0}));
+  EXPECT_EQ(line(longer, room[1]), (Line{6400, 0, 6400, 4000}));
+  EXPECT_EQ(line(longer, room[2]), (Line{6400, 4000, 0, 4000}));
+  ASSERT_EQ(longer.log()->size(), 1U);
+  EXPECT_EQ(longer.log()->Get(0)->kind(), schema::CommandKind::MoveWallEnd);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(line(undone, room[0]), (Line{0, 0, 6000, 0}));
+  EXPECT_EQ(line(undone, room[1]), (Line{6000, 0, 6000, 4000}));
+  EXPECT_EQ(line(undone, room[2]), (Line{6000, 4000, 0, 4000}));
+  EXPECT_FALSE(respond(session, Request{}.undo().undo().undo().undo().undo().bytes()).can_undo());
+}
+
+TEST(Session, APartitionGrowsFromTheWallItStandsAgainst) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_room(session, level);
+  // Drawn from inside the room down onto the bottom wall.
+  const auto& added = respond(session, Request{}.add_wall(level, {3000, 3000}, {3000, 0}).bytes());
+  const ElementId partition = to_id(added.results()->Get(0)->created());
+
+  const auto& longer = respond(session, Request{}.set_length(partition, 3500).bytes());
+
+  ASSERT_EQ(longer.results()->Get(0)->error(), schema::ErrorCode::None);
+  ASSERT_EQ(longer.changes()->size(), 1U);
+  EXPECT_EQ(line(longer, partition), (Line{3000, 3500, 3000, 0}));
+
+  // Named, the other end stays instead and the wall it stands against goes with it.
+  const auto& pushed =
+      respond(session, Request{}.set_length(partition, 4000, schema::FixedEnd::Start).bytes());
+  EXPECT_EQ(line(pushed, partition), (Line{3000, 3500, 3000, -500}));
+  EXPECT_EQ(pushed.changes()->size(), 4U);
+}
+
+TEST(Session, ATypedLengthJoinsTheGestureAroundIt) {
+  Session session{kDevice};
+  const std::vector<ElementId> room = add_room(session, add_level(session));
+
+  const auto& sized = respond(session, Request{}
+                                           .begin_gesture()
+                                           .set_length(room[0], 6400)
+                                           .set_length(room[1], 5000)
+                                           .end_gesture()
+                                           .bytes());
+
+  EXPECT_EQ(line(sized, room[2]), (Line{6400, 5000, 0, 5000}));
+  ASSERT_EQ(sized.log()->size(), 1U);
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(line(undone, room[2]), (Line{6000, 4000, 0, 4000}));
+}
+
+TEST(Session, ATypedLengthThatBreaksAWallChangesNothing) {
+  Session session{kDevice};
+  const std::vector<ElementId> room = add_room(session, add_level(session));
+
+  const auto& refused = respond(session, Request{}
+                                             .set_length(room[0], 0)
+                                             .set_length(ElementId{Uuid{7, 7}}, 6400)
+                                             .set_length(room[0], 6000)
+                                             .empty(Command::SetWallLength)
+                                             .bytes());
+
+  ASSERT_EQ(refused.results()->size(), 4U);
+  EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::ZeroLength);
+  EXPECT_EQ(refused.results()->Get(1)->error(), schema::ErrorCode::NotFound);
+  // The length it already has is not a change.
+  EXPECT_EQ(refused.results()->Get(2)->error(), schema::ErrorCode::None);
+  EXPECT_EQ(refused.results()->Get(3)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(refused.changes()->size(), 0U);
+  EXPECT_EQ(refused.log()->size(), 0U);
+}
+
+TEST(Session, AWallCarriedAlongItsOwnLineByItsOwnLengthArrives) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  // A wall with a post, a brace from the post's top and a tie from the brace back to the post:
+  // the tie lies along the move and is as long as the move.
+  const auto& added = respond(session, Request{}
+                                           .add_wall(level, {0, 0}, {6000, 0})
+                                           .add_wall(level, {6000, 0}, {6000, 4000})
+                                           .add_wall(level, {6000, 4000}, {7000, 2000})
+                                           .add_wall(level, {6000, 2000}, {7000, 2000})
+                                           .bytes());
+  const ElementId wall = to_id(added.results()->Get(0)->created());
+  const ElementId tie = to_id(added.results()->Get(3)->created());
+
+  const auto& longer =
+      respond(session, Request{}.set_length(wall, 7000, schema::FixedEnd::Start).bytes());
+
+  ASSERT_EQ(longer.results()->Get(0)->error(), schema::ErrorCode::None);
+  EXPECT_EQ(line(longer, tie), (Line{7000, 2000, 8000, 2000}));
+  EXPECT_EQ(longer.log()->size(), 1U);
 }
 
 std::vector<ElementId> deleted(const schema::Response& response) {

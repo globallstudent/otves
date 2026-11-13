@@ -19,6 +19,7 @@
 #include <otves/core/error.h>
 #include <otves/core/op.h>
 #include <otves/core/uuid.h>
+#include <otves/geom/editing.h>
 #include <otves/takeoff/rules.h>
 
 #include "convert.h"
@@ -77,10 +78,35 @@ struct Session::Impl {
               return place_opening(document.model(), placement);
             })
             .and_then([this](const AddOpening& add) { return document.execute(add); });
+      case schema::Command::SetWallLength:
+        return decode(entry.command_as_SetWallLength())
+            .and_then([this](const Resize& set) { return resize(document.model(), set); })
+            .and_then([this](const std::vector<MoveWallEnd>& moves) { return together(moves); });
       default:
         return decode(entry).and_then(
             [this](const Command& command) { return document.execute(command); });
     }
+  }
+
+  // Several moves as one undo step: a gesture of their own, or part of the app's when it has one
+  // open. resize() has checked that each succeeds.
+  Outcome together(std::span<const MoveWallEnd> moves) {
+    const bool own = !document.in_gesture();
+    if (own) {
+      document.begin_gesture();
+    }
+    Outcome outcome = std::nullopt;
+    for (const MoveWallEnd& move : moves) {
+      outcome = document.execute(move);
+      if (!outcome) {
+        break;
+      }
+    }
+    if (own) {
+      static_cast<void>(document.end_gesture());
+    }
+    return outcome.transform(
+        [](const std::optional<ElementId>&) -> std::optional<ElementId> { return std::nullopt; });
   }
 
   // The log starts over with the opened job, so groups not yet reported are kept aside first.
@@ -146,6 +172,44 @@ struct Session::Impl {
     return schema::CreateCommandResult(builder, schema::ErrorCode::None, 0, nullptr, &id);
   }
 
+  // An aim reads the model and answers with where the wall would end.
+  flatbuffers::Offset<schema::CommandResult> aimed(const schema::CommandEntry& entry) {
+    const Result<geom::Aimed> answer =
+        entry.command_type() == schema::Command::Aim
+            ? decode(entry.command_as_Aim()).and_then([this](const Sight& sight) {
+                return aim(document.model(), sight);
+              })
+            : decode(entry.command_as_AimMeasured()).and_then([this](const MeasuredSight& sight) {
+                return aim(document.model(), sight);
+              });
+    if (!answer) {
+      return error(answer.error().code, answer.error().message);
+    }
+    std::vector<schema::Guide> guides;
+    guides.reserve(answer->guides.size());
+    for (const geom::Guide& guide : answer->guides) {
+      guides.emplace_back(to_schema(guide.from), to_schema(guide.to));
+    }
+    const schema::PointMm point = to_schema(answer->point);
+    const auto result = schema::CreateAimed(builder, &point, answer->length.value(),
+                                            builder.CreateVectorOfStructs(guides), answer->meets);
+    return schema::CreateCommandResult(builder, schema::ErrorCode::None, 0, nullptr, nullptr,
+                                       result);
+  }
+
+  // A query changes nothing; every other entry is a command.
+  flatbuffers::Offset<schema::CommandResult> answer(const schema::CommandEntry& entry) {
+    switch (entry.command_type()) {
+      case schema::Command::Pick:
+        return picked(entry);
+      case schema::Command::Aim:
+      case schema::Command::AimMeasured:
+        return aimed(entry);
+      default:
+        return result(execute(entry));
+    }
+  }
+
   flatbuffers::Offset<schema::CommandResult> error(ErrorCode code, const std::string& message) {
     return error(to_schema(code), message);
   }
@@ -168,8 +232,7 @@ struct Session::Impl {
     } else if (parsed->commands() != nullptr) {
       results.reserve(parsed->commands()->size());
       for (const schema::CommandEntry* entry : *parsed->commands()) {
-        results.push_back(entry->command_type() == schema::Command::Pick ? picked(*entry)
-                                                                         : result(execute(*entry)));
+        results.push_back(answer(*entry));
       }
     }
     finish(results);

@@ -21,6 +21,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/geom/editing.h>
 
 #include "engine_generated.h"
 
@@ -322,6 +323,8 @@ schema::ErrorCode to_schema(ErrorCode code) {
       return schema::ErrorCode::DoesNotFit;
     case ErrorCode::kConditionOutOfRange:
       return schema::ErrorCode::ConditionOutOfRange;
+    case ErrorCode::kBreaksJoin:
+      return schema::ErrorCode::BreaksJoin;
   }
   return schema::ErrorCode::Internal;
 }
@@ -393,6 +396,65 @@ std::expected<OpeningPlacement, Error> decode(const schema::PlaceOpening* place)
                                       .height = Mm{place->height()},
                                       .sill = Mm{place->sill()},
                                       .kind = *kind}};
+}
+
+std::expected<Sight, Error> decode(const schema::Aim* aim) {
+  if (aim == nullptr || aim->at() == nullptr) {
+    return corrupt("aim or its point is missing");
+  }
+  return Sight{
+      .level = to_id(aim->level()),
+      .aim = {.from = aim->from() != nullptr ? std::optional{to_point(*aim->from())} : std::nullopt,
+              .at = to_point(*aim->at()),
+              .reach = Mm{aim->reach()},
+              .grid = Mm{aim->grid()},
+              .square = aim->square()}};
+}
+
+std::expected<MeasuredSight, Error> decode(const schema::AimMeasured* aim) {
+  if (aim == nullptr || aim->from() == nullptr) {
+    return corrupt("measured wall or its start is missing");
+  }
+  geom::Turn turn = geom::Turn::kStraight;
+  switch (aim->turn()) {
+    case schema::Turn::Left:
+      turn = geom::Turn::kLeft;
+      break;
+    case schema::Turn::Straight:
+      break;
+    case schema::Turn::Right:
+      turn = geom::Turn::kRight;
+      break;
+    default:
+      return corrupt("unknown turn");
+  }
+  return MeasuredSight{
+      .level = to_id(aim->level()),
+      .measured = {.from = to_point(*aim->from()),
+                   .before = aim->before() != nullptr ? std::optional{to_point(*aim->before())}
+                                                      : std::nullopt,
+                   .turn = turn,
+                   .length = Mm{aim->length()}}};
+}
+
+std::expected<Resize, Error> decode(const schema::SetWallLength* set) {
+  if (set == nullptr) {
+    return corrupt("wall length is missing");
+  }
+  Resize resize{.wall = to_id(set->wall()), .length = Mm{set->length()}, .fixed = std::nullopt};
+  switch (set->fixed()) {
+    case schema::FixedEnd::Joined:
+      break;
+    case schema::FixedEnd::Start:
+      resize.fixed = WallEnd::kStart;
+      break;
+    case schema::FixedEnd::End:
+      resize.fixed = WallEnd::kEnd;
+      break;
+    default:
+      return corrupt("unknown fixed end");
+  }
+  return resize;
 }
 
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Level& level) {
