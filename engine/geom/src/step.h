@@ -33,5 +33,15 @@ struct StepMm {
 [[nodiscard]] constexpr int sign(std::int64_t value) {
   return static_cast<int>(value > 0) - static_cast<int>(value < 0);
 }
+[[nodiscard]] constexpr std::int64_t magnitude(std::int64_t value) {
+  return value < 0 ? -value : value;
+}
+
+// How far apart two points are along the axis where they differ most. A touch reaches the same
+// way along both axes: a square around the finger.
+[[nodiscard]] constexpr std::int64_t apart(PointMm a, PointMm b) {
+  const StepMm gap = step(a, b);
+  return magnitude(gap.x) > magnitude(gap.y) ? magnitude(gap.x) : magnitude(gap.y);
+}
 
 }  // namespace otves::geom

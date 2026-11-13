@@ -23,14 +23,11 @@
 
 #include "axis.h"
 #include "faces.h"
+#include "hold.h"
 #include "step.h"
 
 namespace otves::geom {
 namespace {
-
-// A free wall turns onto an axis when it strays from it by no more than a tenth of its run,
-// about 6°.
-constexpr std::int64_t kAxisCatch = 10;
 
 constexpr WallEnd other(WallEnd end) {
   return end == WallEnd::kStart ? WallEnd::kEnd : WallEnd::kStart;
@@ -38,15 +35,6 @@ constexpr WallEnd other(WallEnd end) {
 
 constexpr PointMm point_at(const Wall& wall, WallEnd end) {
   return end == WallEnd::kStart ? wall.start : wall.end;
-}
-
-constexpr std::int64_t magnitude(std::int64_t value) { return value < 0 ? -value : value; }
-
-// How far apart two points are along the axis where they differ most. A touch reaches the same
-// way along both axes: a square around the finger.
-constexpr std::int64_t apart(PointMm a, PointMm b) {
-  const StepMm gap = step(a, b);
-  return std::max(magnitude(gap.x), magnitude(gap.y));
 }
 
 // The nearest multiple of `grid`, a half going up; `value` itself when there is no grid.
@@ -185,24 +173,9 @@ Aimed finished(const Plan& plan, std::optional<PointMm> from, PointMm point,
       .point = point, .length = length, .guides = std::move(guides), .meets = plan.touches(point)};
 }
 
-// Which axis the wall being drawn is held to.
-enum class Held : std::uint8_t {
-  kFree,
-  kAlongX,
-  kAlongY,
-};
-
+// Which axis the wall being drawn is held to; a first point is free.
 Held held(const Aim& request) {
-  if (!request.from) {
-    return Held::kFree;
-  }
-  const StepMm run = step(*request.from, request.at);
-  const std::int64_t across_x = magnitude(run.y);
-  const std::int64_t across_y = magnitude(run.x);
-  if (across_y >= across_x) {
-    return request.square || across_x * kAxisCatch <= across_y ? Held::kAlongX : Held::kFree;
-  }
-  return request.square || across_y * kAxisCatch <= across_x ? Held::kAlongY : Held::kFree;
+  return request.from ? geom::held(*request.from, request.at, request.square) : Held::kFree;
 }
 
 // Settles one free coordinate: onto that of the nearest wall end within reach, which becomes a
