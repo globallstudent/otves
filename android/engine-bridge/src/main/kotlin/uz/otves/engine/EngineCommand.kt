@@ -208,6 +208,17 @@ public sealed interface EngineCommand {
         public val unit: UnitSize? = null,
     ) : EngineCommand
 
+    /**
+     * The drawing of [level] (docs/adr/0013). Changes nothing; the result's `drawing` holds it.
+     * [textHeight] and [digitWidth] say how big the label text is on the plan at the current
+     * zoom: the engine places labels with them and leaves out the ones that do not fit.
+     */
+    public data class Draw(
+        public val level: ElementId,
+        public val textHeight: Mm,
+        public val digitWidth: Mm,
+    ) : EngineCommand
+
     /** Commands until [EndGesture] fold into one undo step, as a drag does. */
     public data object BeginGesture : EngineCommand
 

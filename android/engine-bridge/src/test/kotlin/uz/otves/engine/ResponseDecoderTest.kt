@@ -14,7 +14,13 @@ import kotlin.uuid.Uuid
 import uz.otves.schema.Aimed as AimedTable
 import uz.otves.schema.CommandKind as CommandKindCode
 import uz.otves.schema.CommandResult as ResultTable
+import uz.otves.schema.Drawing as DrawingTable
+import uz.otves.schema.DrawnArc as ArcTable
+import uz.otves.schema.DrawnLine as DrawnLineTable
+import uz.otves.schema.DrawnPolygon as PolygonTable
+import uz.otves.schema.DrawnText as TextTable
 import uz.otves.schema.ElementChange as ChangeTable
+import uz.otves.schema.Fill as FillCode
 import uz.otves.schema.Guide as GuideStruct
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
@@ -25,6 +31,8 @@ import uz.otves.schema.OpeningOutline as OpeningOutlineTable
 import uz.otves.schema.PointM as PointMStruct
 import uz.otves.schema.PointMm as PointStruct
 import uz.otves.schema.QuantityLine as LineTable
+import uz.otves.schema.Stroke as StrokeCode
+import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Unit as UnitCode
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
@@ -172,6 +180,82 @@ class ResponseDecoderTest {
                 CommandResult.Done(
                     created = null,
                     aimed = Aimed(corner, length = 6000.mm, guides = listOf(Guide(PointMm(0.mm, 0.mm), corner)), meets = true),
+                ),
+            )
+    }
+
+    @Test
+    fun aDrawingComesBackAsListsOfWhatToPaint() {
+        val builder = FlatBufferBuilder(1024)
+        PolygonTable.startPointsVector(builder, 3)
+        PointMStruct.createPointM(builder, 6.4, 0.19)
+        PointMStruct.createPointM(builder, 6.4, -0.19)
+        PointMStruct.createPointM(builder, 0.0, -0.19)
+        val outline = builder.endVector()
+        PolygonTable.startDrawnPolygon(builder)
+        PolygonTable.addElement(builder, builder.uuid(wall))
+        PolygonTable.addFill(builder, FillCode.Wall)
+        PolygonTable.addStroke(builder, StrokeCode.WallEdge)
+        PolygonTable.addPoints(builder, outline)
+        val masonry = PolygonTable.endDrawnPolygon(builder)
+        // Hatched by a newer engine, under no element.
+        PolygonTable.startDrawnPolygon(builder)
+        PolygonTable.addFill(builder, 99)
+        val newer = PolygonTable.endDrawnPolygon(builder)
+        DrawnLineTable.startDrawnLine(builder)
+        DrawnLineTable.addElement(builder, builder.uuid(window))
+        DrawnLineTable.addStroke(builder, StrokeCode.Frame)
+        DrawnLineTable.addFrom(builder, PointMStruct.createPointM(builder, 2.0, 0.0))
+        DrawnLineTable.addTo(builder, PointMStruct.createPointM(builder, 3.5, 0.0))
+        val glazing = DrawnLineTable.endDrawnLine(builder)
+        ArcTable.startDrawnArc(builder)
+        ArcTable.addStroke(builder, StrokeCode.Leaf)
+        ArcTable.addCentre(builder, PointMStruct.createPointM(builder, 1.0, 0.19))
+        ArcTable.addFrom(builder, PointMStruct.createPointM(builder, 1.9, 0.19))
+        ArcTable.addTo(builder, PointMStruct.createPointM(builder, 1.0, 1.09))
+        val swing = ArcTable.endDrawnArc(builder)
+        TextTable.startDrawnText(builder)
+        TextTable.addElement(builder, builder.uuid(wall))
+        TextTable.addKind(builder, TextKindCode.AboutLength)
+        TextTable.addValue(builder, 6400)
+        TextTable.addAt(builder, PointMStruct.createPointM(builder, 3.2, 0.415))
+        TextTable.addAlong(builder, PointMStruct.createPointM(builder, 1.0, 0.0))
+        val length = TextTable.endDrawnText(builder)
+        val drawing =
+            DrawingTable.createDrawing(
+                builder,
+                DrawingTable.createPolygonsVector(builder, intArrayOf(masonry, newer)),
+                DrawingTable.createLinesVector(builder, intArrayOf(glazing)),
+                DrawingTable.createArcsVector(builder, intArrayOf(swing)),
+                DrawingTable.createTextsVector(builder, intArrayOf(length)),
+            )
+        ResultTable.startCommandResult(builder)
+        ResultTable.addDrawing(builder, drawing)
+        val result = ResultTable.endCommandResult(builder)
+        val results = Response.createResultsVector(builder, intArrayOf(result))
+        Response.startResponse(builder)
+        Response.addVersion(builder, 1L)
+        Response.addResults(builder, results)
+        builder.finish(Response.endResponse(builder), "OTVS")
+
+        val decoded = (ResponseDecoder.decode(builder.dataBuffer()).results.single() as CommandResult.Done).drawing
+
+        assertThat(decoded)
+            .isEqualTo(
+                Drawing(
+                    polygons =
+                        listOf(
+                            DrawnPolygon(
+                                wall,
+                                FillKind.WALL,
+                                StrokeKind.WALL_EDGE,
+                                listOf(PointM(0.0, -0.19), PointM(6.4, -0.19), PointM(6.4, 0.19)),
+                            ),
+                            DrawnPolygon(element = null, FillKind.UNKNOWN, StrokeKind.NONE, emptyList()),
+                        ),
+                    lines = listOf(DrawnLine(window, StrokeKind.FRAME, PointM(2.0, 0.0), PointM(3.5, 0.0))),
+                    arcs = listOf(DrawnArc(element = null, StrokeKind.LEAF, PointM(1.0, 0.19), PointM(1.9, 0.19), PointM(1.0, 1.09))),
+                    texts = listOf(DrawnText(wall, TextKind.ABOUT_LENGTH, 6400.mm, PointM(3.2, 0.415), PointM(1.0, 0.0))),
                 ),
             )
     }

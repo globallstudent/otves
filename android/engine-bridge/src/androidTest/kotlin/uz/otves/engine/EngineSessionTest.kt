@@ -154,6 +154,39 @@ class EngineSessionTest {
     }
 
     @Test
+    fun theEngineDrawsAStoreyInTheRequestThatBuildsIt() {
+        val level = session.send(listOf(EngineCommand.AddLevel(Level(0.mm, 3000.mm)))).createdId()
+        val wall = Wall(level, PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), 380.mm, 2800.mm)
+
+        val built =
+            session.send(
+                listOf(
+                    EngineCommand.AddWall(wall),
+                    EngineCommand.PlaceOpening(level, PointMm(1500.mm, 0.mm), 300.mm, 900.mm, 2100.mm, 0.mm, OpeningKind.DOOR),
+                    EngineCommand.Draw(level, textHeight = 300.mm, digitWidth = 150.mm),
+                ),
+            )
+
+        val (added, placed, drawn) = built.results.map { it as CommandResult.Done }
+        val drawing = checkNotNull(drawn.drawing)
+        // The wall with no material yet, then the door's gap in it.
+        assertThat(drawing.polygons.map { it.element }).containsExactly(added.created, placed.created).inOrder()
+        assertThat(drawing.polygons.map { it.fill }).containsExactly(FillKind.UNCHOSEN, FillKind.GAP).inOrder()
+        assertThat(drawing.polygons[0].points).hasSize(4)
+        // Two jambs and the leaf, which swings a quarter turn.
+        assertThat(drawing.lines.map { it.stroke }).containsExactly(StrokeKind.WALL_EDGE, StrokeKind.WALL_EDGE, StrokeKind.LEAF).inOrder()
+        assertThat(drawing.arcs.single().centre).isEqualTo(PointM(1.05, 0.19))
+        val length = drawing.texts.single()
+        assertThat(length.kind).isEqualTo(TextKind.LENGTH)
+        assertThat(length.value).isEqualTo(6000.mm)
+        assertThat(length.at.x).isWithin(1e-9).of(3.0)
+        assertThat(length.along).isEqualTo(PointM(1.0, 0.0))
+
+        val nowhere = session.send(listOf(EngineCommand.Draw(ElementId(Uuid.random()), 300.mm, 150.mm)))
+        assertThat((nowhere.results.single() as CommandResult.Failed).error).isEqualTo(EngineError.NOT_FOUND)
+    }
+
+    @Test
     fun refusedCommandsComeBackAsTypedErrors() {
         val response =
             session.send(

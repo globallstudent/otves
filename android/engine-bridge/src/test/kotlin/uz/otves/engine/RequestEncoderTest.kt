@@ -12,6 +12,7 @@ import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
+import uz.otves.schema.Draw as DrawTable
 import uz.otves.schema.FixedEnd as FixedEndCode
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
@@ -239,6 +240,20 @@ class RequestEncoderTest {
 
         assertThat((request.commands(0).command(AddWallTable()) as AddWallTable).wall().exact()).isFalse()
         assertThat((request.commands(1).command(AddWallTable()) as AddWallTable).wall().exact()).isTrue()
+    }
+
+    @Test
+    fun aDrawingIsAskedWithTheSizeOfTheLabelText() {
+        val request =
+            Request.getRootAsRequest(
+                RequestEncoder.encode(listOf(EngineCommand.Draw(level, textHeight = 400.mm, digitWidth = 210.mm))),
+            )
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.Draw)
+        val draw = request.commands(0).command(DrawTable()) as DrawTable
+        assertThat(Uuid.fromLongs(draw.level().high(), draw.level().low())).isEqualTo(level.uuid)
+        assertThat(draw.textHeight()).isEqualTo(400L)
+        assertThat(draw.digitWidth()).isEqualTo(210L)
     }
 
     @Test

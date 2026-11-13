@@ -58,6 +58,100 @@ public data class OpeningOutline(
     public val points: List<PointM>,
 )
 
+/** What a polygon of a drawing is filled as (docs/adr/0013); the painter maps each to a paint. */
+public enum class FillKind {
+    NONE,
+
+    /** Masonry. */
+    WALL,
+
+    /** A wall with no material yet. */
+    UNCHOSEN,
+
+    /** What an opening leaves of its wall. */
+    GAP,
+
+    /** A fill from a newer engine than this app knows; it is not painted. */
+    UNKNOWN,
+}
+
+/** What a line of a drawing is drawn as. */
+public enum class StrokeKind {
+    NONE,
+    WALL_EDGE,
+
+    /** A wall of the level below. */
+    BELOW,
+
+    /** A window's faces and glazing. */
+    FRAME,
+
+    /** A door's leaf and swing. */
+    LEAF,
+
+    /** A stroke from a newer engine than this app knows; it is not painted. */
+    UNKNOWN,
+}
+
+public enum class TextKind {
+    /** A wall's length. */
+    LENGTH,
+
+    /** A length nobody has typed or measured. */
+    ABOUT_LENGTH,
+
+    /** A text from a newer engine than this app knows; it is not written. */
+    UNKNOWN,
+}
+
+/** A filled outline of a drawing. [element] is what it draws, null for what cannot be picked. */
+public data class DrawnPolygon(
+    public val element: ElementId?,
+    public val fill: FillKind,
+    /** Of its outline. */
+    public val stroke: StrokeKind,
+    public val points: List<PointM>,
+)
+
+public data class DrawnLine(
+    public val element: ElementId?,
+    public val stroke: StrokeKind,
+    public val from: PointM,
+    public val to: PointM,
+)
+
+/** Around [centre] from [from] to [to], counter-clockwise on the plan; both lie at one radius. */
+public data class DrawnArc(
+    public val element: ElementId?,
+    public val stroke: StrokeKind,
+    public val centre: PointM,
+    public val from: PointM,
+    public val to: PointM,
+)
+
+/**
+ * A number written with its middle at [at], along the unit direction [along], which never points
+ * to the left or straight down.
+ */
+public data class DrawnText(
+    public val element: ElementId?,
+    public val kind: TextKind,
+    public val value: Mm,
+    public val at: PointM,
+    public val along: PointM,
+)
+
+/**
+ * One level as a display list (docs/adr/0013), in plan metres: what to draw and where. It is
+ * painted in the order of its lists, each in the order given; nothing in it is to be moved.
+ */
+public data class Drawing(
+    public val polygons: List<DrawnPolygon> = emptyList(),
+    public val lines: List<DrawnLine> = emptyList(),
+    public val arcs: List<DrawnArc> = emptyList(),
+    public val texts: List<DrawnText> = emptyList(),
+)
+
 /** What is wrong with an opening or where walls meet; the app shows translated text for each. */
 public enum class IssueKind {
     /** Past the wall's ends, below its base or above its top. */

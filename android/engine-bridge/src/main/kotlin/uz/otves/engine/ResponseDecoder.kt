@@ -10,7 +10,9 @@ import kotlin.uuid.Uuid
 import uz.otves.schema.Aimed as AimedTable
 import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.Conditions as ConditionsTable
+import uz.otves.schema.Drawing as DrawingTable
 import uz.otves.schema.ElementChange as ChangeTable
+import uz.otves.schema.Fill as FillCode
 import uz.otves.schema.Guide as GuideStruct
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
@@ -23,6 +25,8 @@ import uz.otves.schema.OpeningOutline as OpeningOutlineTable
 import uz.otves.schema.PointM as PointMStruct
 import uz.otves.schema.PointMm as PointStruct
 import uz.otves.schema.QuantityLine as LineTable
+import uz.otves.schema.Stroke as StrokeCode
+import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Unit as UnitCode
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
@@ -153,12 +157,74 @@ internal object ResponseDecoder {
                     created = result.created()?.let(::id),
                     picked = result.picked()?.let(::id),
                     aimed = result.aimed()?.let(::aimed),
+                    drawing = result.drawing()?.let(::drawing),
                 )
             }
 
             else -> {
                 CommandResult.Failed(error = error, message = result.message().orEmpty())
             }
+        }
+
+    private fun drawing(drawing: DrawingTable): Drawing =
+        Drawing(
+            polygons =
+                List(drawing.polygonsLength()) {
+                    val polygon = drawing.polygons(it)
+                    DrawnPolygon(
+                        element = polygon.element()?.let(::id),
+                        fill = fill(polygon.fill()),
+                        stroke = stroke(polygon.stroke()),
+                        points = List(polygon.pointsLength()) { index -> metres(polygon.points(PointMStruct(), index)) },
+                    )
+                },
+            lines =
+                List(drawing.linesLength()) {
+                    val line = drawing.lines(it)
+                    DrawnLine(line.element()?.let(::id), stroke(line.stroke()), metres(line.from()), metres(line.to()))
+                },
+            arcs =
+                List(drawing.arcsLength()) {
+                    val arc = drawing.arcs(it)
+                    DrawnArc(arc.element()?.let(::id), stroke(arc.stroke()), metres(arc.centre()), metres(arc.from()), metres(arc.to()))
+                },
+            texts =
+                List(drawing.textsLength()) {
+                    val text = drawing.texts(it)
+                    DrawnText(text.element()?.let(::id), textKind(text.kind()), Mm(text.value()), metres(text.at()), metres(text.along()))
+                },
+        )
+
+    private fun metres(point: PointMStruct?): PointM {
+        checkNotNull(point) { "The engine left out a point of a drawing" }
+        return PointM(point.x(), point.y())
+    }
+
+    // A newer engine may draw with kinds this app has no paint for.
+    private fun fill(code: Int): FillKind =
+        when (code) {
+            FillCode.None -> FillKind.NONE
+            FillCode.Wall -> FillKind.WALL
+            FillCode.Unchosen -> FillKind.UNCHOSEN
+            FillCode.Gap -> FillKind.GAP
+            else -> FillKind.UNKNOWN
+        }
+
+    private fun stroke(code: Int): StrokeKind =
+        when (code) {
+            StrokeCode.None -> StrokeKind.NONE
+            StrokeCode.WallEdge -> StrokeKind.WALL_EDGE
+            StrokeCode.Below -> StrokeKind.BELOW
+            StrokeCode.Frame -> StrokeKind.FRAME
+            StrokeCode.Leaf -> StrokeKind.LEAF
+            else -> StrokeKind.UNKNOWN
+        }
+
+    private fun textKind(code: Int): TextKind =
+        when (code) {
+            TextKindCode.Length -> TextKind.LENGTH
+            TextKindCode.AboutLength -> TextKind.ABOUT_LENGTH
+            else -> TextKind.UNKNOWN
         }
 
     private fun aimed(aimed: AimedTable): Aimed =

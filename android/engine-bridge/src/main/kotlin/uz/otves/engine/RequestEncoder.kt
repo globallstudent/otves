@@ -16,6 +16,7 @@ import uz.otves.schema.AimMeasured as AimMeasuredTable
 import uz.otves.schema.BeginGesture as BeginGestureTable
 import uz.otves.schema.Conditions as ConditionsTable
 import uz.otves.schema.ConditionsField as ConditionsFieldCode
+import uz.otves.schema.Draw as DrawTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.EndGesture as EndGestureTable
 import uz.otves.schema.FixedEnd as FixedEndCode
@@ -318,6 +319,14 @@ internal object RequestEncoder {
                 AddSketchTable.addGrid(this, command.grid.value)
                 AddSketchTable.addSquare(this, command.square)
                 Command.AddSketch to AddSketchTable.endAddSketch(this)
+            }
+
+            is EngineCommand.Draw -> {
+                DrawTable.startDraw(this)
+                DrawTable.addLevel(this, uuid(command.level))
+                DrawTable.addTextHeight(this, command.textHeight.value)
+                DrawTable.addDigitWidth(this, command.digitWidth.value)
+                Command.Draw to DrawTable.endDraw(this)
             }
 
             EngineCommand.BeginGesture -> {

@@ -48,6 +48,8 @@ public sealed interface CommandResult {
         public val picked: ElementId? = null,
         /** The answer to an [EngineCommand.Aim] or [EngineCommand.AimMeasured]. */
         public val aimed: Aimed? = null,
+        /** The answer to an [EngineCommand.Draw]. */
+        public val drawing: Drawing? = null,
     ) : CommandResult
 
     /** [message] is English context for logs, not for the screen. */
