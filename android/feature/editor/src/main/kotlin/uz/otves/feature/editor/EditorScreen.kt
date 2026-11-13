@@ -1030,7 +1030,8 @@ private fun TakeoffPanel(
                 Text(stringResource(R.string.takeoff_failed), color = OtvesTheme.colors.warning)
             }
 
-            state.outlines.isEmpty() -> {
+            // The take-off is the whole job's, whichever storey is shown.
+            state.storeys.all { it.outlines.isEmpty() } -> {
                 Text(stringResource(R.string.takeoff_empty), color = OtvesTheme.colors.inkSecondary)
             }
 
