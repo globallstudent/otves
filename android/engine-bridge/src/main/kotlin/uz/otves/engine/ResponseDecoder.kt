@@ -233,6 +233,7 @@ internal object ResponseDecoder {
                 } else {
                     null
                 },
+            exact = wall.exact(),
         )
 
     private fun opening(opening: OpeningTable): Opening =

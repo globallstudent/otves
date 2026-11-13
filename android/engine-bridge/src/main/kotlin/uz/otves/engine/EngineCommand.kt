@@ -176,8 +176,9 @@ public sealed interface EngineCommand {
     ) : EngineCommand
 
     /**
-     * Gives the wall a [length] along its line. Its [fixed] end stays; what is joined to the other
-     * end goes with it so that walls keep their direction, as one undo step. With no end named
+     * Gives the wall a [length] along its line and makes it exact. Its [fixed] end stays; what is
+     * joined to the other end goes with it so that walls keep their direction, as one undo step.
+     * With no end named
      * the plan says which stays: the one joined to other walls when the other is free, so a
      * partition grows from the wall it stands against; else the start. Fails, changing nothing,
      * with [EngineError.ZERO_LENGTH], [EngineError.BREAKS_JOIN] or [EngineError.OFF_PLAN].
@@ -186,6 +187,25 @@ public sealed interface EngineCommand {
         public val wall: ElementId,
         public val length: Mm,
         public val fixed: WallEnd? = null,
+    ) : EngineCommand
+
+    /**
+     * A stroke drawn with a finger on [level], read as walls (docs/adr/0012). [points] is the
+     * finger's path in the order drawn; [reach], [grid] and [square] mean what they do for [Aim].
+     * The walls are [thickness] thick and [height] high, laid from [unit], and none is exact until
+     * it gets a length. They are added in one undo step. Fails, changing nothing, with
+     * [EngineError.ZERO_LENGTH] when the stroke gives no wall, or [EngineError.OFF_PLAN].
+     */
+    public data class AddSketch(
+        public val level: ElementId,
+        public val points: List<PointMm>,
+        public val reach: Mm,
+        public val grid: Mm,
+        public val square: Boolean,
+        public val thickness: Mm,
+        public val height: Mm,
+        public val locationLine: LocationLine = LocationLine.CENTER,
+        public val unit: UnitSize? = null,
     ) : EngineCommand
 
     /** Commands until [EndGesture] fold into one undo step, as a drag does. */

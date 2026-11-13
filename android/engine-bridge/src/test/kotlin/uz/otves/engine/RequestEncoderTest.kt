@@ -8,6 +8,7 @@ import uz.otves.schema.Command
 import uz.otves.schema.Element
 import uz.otves.schema.Request
 import kotlin.uuid.Uuid
+import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
@@ -196,6 +197,48 @@ class RequestEncoderTest {
         assertThat(sized.fixed()).isEqualTo(FixedEndCode.End)
         // With no end named the engine reads which one stays off the plan.
         assertThat((request.commands(5).command(SetWallLengthTable()) as SetWallLengthTable).fixed()).isEqualTo(FixedEndCode.Joined)
+    }
+
+    @Test
+    fun aSketchCarriesItsStrokeAndTheWallToBuild() {
+        val sketch =
+            EngineCommand.AddSketch(
+                level = level,
+                points = listOf(PointMm(40.mm, (-30).mm), PointMm(3_000.mm, 20.mm), PointMm(5_960.mm, 50.mm)),
+                reach = 300.mm,
+                grid = 100.mm,
+                square = true,
+                thickness = 380.mm,
+                height = 2_800.mm,
+                unit = UnitSize(250.mm, 120.mm, 65.mm),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(sketch)))
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.AddSketch)
+        val drawn = request.commands(0).command(AddSketchTable()) as AddSketchTable
+        assertThat(List(drawn.pointsLength()) { drawn.points(it).x() }).containsExactly(40L, 3_000L, 5_960L).inOrder()
+        assertThat(drawn.points(0).y()).isEqualTo(-30L)
+        assertThat(drawn.reach()).isEqualTo(300L)
+        assertThat(drawn.grid()).isEqualTo(100L)
+        assertThat(drawn.square()).isTrue()
+        val like = drawn.wall()
+        assertThat(Uuid.fromLongs(like.level().high(), like.level().low())).isEqualTo(level.uuid)
+        assertThat(like.start()).isNull()
+        assertThat(like.thickness()).isEqualTo(380L)
+        assertThat(like.height()).isEqualTo(2_800L)
+        assertThat(like.unitWidth()).isEqualTo(120L)
+    }
+
+    @Test
+    fun aWallSaysWhetherItsLengthIsExact() {
+        val sketched = Wall(level, PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm), 380.mm, 2_800.mm, exact = false)
+        val commands = listOf(EngineCommand.AddWall(sketched), EngineCommand.AddWall(sketched.copy(exact = true)))
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(commands))
+
+        assertThat((request.commands(0).command(AddWallTable()) as AddWallTable).wall().exact()).isFalse()
+        assertThat((request.commands(1).command(AddWallTable()) as AddWallTable).wall().exact()).isTrue()
     }
 
     @Test

@@ -9,6 +9,7 @@ import uz.otves.schema.Request
 import java.nio.ByteBuffer
 import uz.otves.schema.AddLevel as AddLevelTable
 import uz.otves.schema.AddOpening as AddOpeningTable
+import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
@@ -298,6 +299,27 @@ internal object RequestEncoder {
                 Command.SetWallLength to SetWallLengthTable.endSetWallLength(this)
             }
 
+            is EngineCommand.AddSketch -> {
+                // A vector of structs is written back to front.
+                AddSketchTable.startPointsVector(this, command.points.size)
+                command.points.asReversed().forEach { point(it) }
+                val points = endVector()
+                WallTable.startWall(this)
+                WallTable.addLevel(this, uuid(command.level))
+                WallTable.addThickness(this, command.thickness.value)
+                WallTable.addHeight(this, command.height.value)
+                WallTable.addLocationLine(this, code(command.locationLine))
+                unit(command.unit)
+                val wall = WallTable.endWall(this)
+                AddSketchTable.startAddSketch(this)
+                AddSketchTable.addWall(this, wall)
+                AddSketchTable.addPoints(this, points)
+                AddSketchTable.addReach(this, command.reach.value)
+                AddSketchTable.addGrid(this, command.grid.value)
+                AddSketchTable.addSquare(this, command.square)
+                Command.AddSketch to AddSketchTable.endAddSketch(this)
+            }
+
             EngineCommand.BeginGesture -> {
                 BeginGestureTable.startBeginGesture(this)
                 Command.BeginGesture to BeginGestureTable.endBeginGesture(this)
@@ -368,12 +390,17 @@ internal object RequestEncoder {
         WallTable.addThickness(this, wall.thickness.value)
         WallTable.addHeight(this, wall.height.value)
         WallTable.addLocationLine(this, code(wall.locationLine))
-        wall.unit?.let { unit ->
-            WallTable.addUnitLength(this, unit.length.value)
-            WallTable.addUnitWidth(this, unit.width.value)
-            WallTable.addUnitHeight(this, unit.height.value)
-        }
+        unit(wall.unit)
+        WallTable.addExact(this, wall.exact)
         return WallTable.endWall(this)
+    }
+
+    // Inside a wall table that is being written.
+    private fun FlatBufferBuilder.unit(unit: UnitSize?) {
+        if (unit == null) return
+        WallTable.addUnitLength(this, unit.length.value)
+        WallTable.addUnitWidth(this, unit.width.value)
+        WallTable.addUnitHeight(this, unit.height.value)
     }
 
     private fun FlatBufferBuilder.opening(opening: Opening): Int {

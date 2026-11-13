@@ -181,6 +181,11 @@ public data class Wall(
     public val locationLine: LocationLine = LocationLine.CENTER,
     /** What the wall is laid from; null until the builder chooses. */
     public val unit: UnitSize? = null,
+    /**
+     * Whether the length was typed or measured. A wall read from a sketch is not, until it gets a
+     * length (docs/adr/0012).
+     */
+    public val exact: Boolean = true,
 ) : EngineElement
 
 /** A window, door or empty opening, placed along its wall from the start and up from the base. */

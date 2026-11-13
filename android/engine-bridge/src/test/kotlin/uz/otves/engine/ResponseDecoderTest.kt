@@ -57,6 +57,7 @@ class ResponseDecoderTest {
                             thickness = 380.mm,
                             height = 2800.mm,
                             locationLine = LocationLine.RIGHT_FACE,
+                            exact = false,
                         ),
                 ),
                 ElementChange(id = gone, element = null),
@@ -196,6 +197,7 @@ class ResponseDecoderTest {
         WallTable.addThickness(builder, 380)
         WallTable.addHeight(builder, 2800)
         WallTable.addLocationLine(builder, LocationLineCode.RightFace)
+        WallTable.addExact(builder, false)
         val wallValue = WallTable.endWall(builder)
 
         ChangeTable.startElementChange(builder)

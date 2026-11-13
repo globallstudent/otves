@@ -116,6 +116,44 @@ class EngineSessionTest {
     }
 
     @Test
+    fun aSketchedRoomComesBackAsWallsThatAreNotExactUntilSized() {
+        val level = session.send(listOf(EngineCommand.AddLevel(Level(0.mm, 3000.mm)))).createdId()
+        // A room drawn roughly: no corner on the grid, the loop not quite closed.
+        val stroke =
+            listOf(40 to -30, 3000 to 20, 5960 to 50, 6030 to 2000, 5980 to 4040, 3000 to 3970, -20 to 3960, 30 to 2000, 10 to 60)
+                .map { (x, y) -> PointMm(x.mm, y.mm) }
+        val sketch =
+            EngineCommand.AddSketch(
+                level,
+                stroke,
+                reach = 300.mm,
+                grid = 100.mm,
+                square = true,
+                thickness = 380.mm,
+                height = 2800.mm,
+            )
+
+        val drawn = session.send(listOf(sketch))
+
+        assertThat(drawn.results.single()).isEqualTo(CommandResult.Done(created = null))
+        val walls = drawn.changes.map { it.element as Wall }
+        val corners = listOf(PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), PointMm(6000.mm, 4000.mm), PointMm(0.mm, 4000.mm))
+        assertThat(walls.map { it.start to it.end }).containsExactly(*Array(4) { corners[it] to corners[(it + 1) % 4] })
+        assertThat(walls.none { it.exact }).isTrue()
+        assertThat(walls.all { it.thickness == 380.mm && it.level == level }).isTrue()
+        assertThat(drawn.outlines).hasSize(4)
+        assertThat(drawn.log).hasSize(1)
+
+        val bottom = drawn.changes.single { (it.element as Wall).end == corners[1] }.id
+        val sized = session.send(listOf(EngineCommand.SetWallLength(bottom, 6400.mm)))
+        assertThat((sized.changes.single { it.id == bottom }.element as Wall).exact).isTrue()
+
+        val tap = session.send(listOf(sketch.copy(points = stroke.take(1))))
+        assertThat((tap.results.single() as CommandResult.Failed).error).isEqualTo(EngineError.ZERO_LENGTH)
+        assertThat(tap.changes).isEmpty()
+    }
+
+    @Test
     fun refusedCommandsComeBackAsTypedErrors() {
         val response =
             session.send(
