@@ -118,4 +118,7 @@
     <string name="footing_section">%1$s × %2$s mm</string>
     <string name="size_depth">Chuqurlik, mm</string>
     <string name="item_formwork">Qolip</string>
+    <string name="tool_options">Asbob parametrlari</string>
+    <string name="tool_options_open">Parametrlar ochiq</string>
+    <string name="options_ortho">Faqat to‘g‘ri burchaklar</string>
 </resources>

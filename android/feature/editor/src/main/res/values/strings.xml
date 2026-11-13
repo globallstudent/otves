@@ -127,4 +127,7 @@
     <string name="footing_section">%1$s × %2$s мм</string>
     <string name="size_depth">Глубина, мм</string>
     <string name="item_formwork">Опалубка</string>
+    <string name="tool_options">Параметры инструмента</string>
+    <string name="tool_options_open">Параметры открыты</string>
+    <string name="options_ortho">Только прямые углы</string>
 </resources>

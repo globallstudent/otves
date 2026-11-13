@@ -23,6 +23,8 @@ public object OtvesIcons {
     public val Backspace: ImageVector = icon("Backspace", "M9 5h11v14H9l-6-7zM13 9.5l5 5M18 9.5l-5 5")
     public val Fit: ImageVector = icon("Fit", "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5")
     public val Plus: ImageVector = icon("Plus", "M12 5v14M5 12h14")
+    public val ChevronRight: ImageVector = icon("ChevronRight", "M9 6l6 6-6 6")
+    public val Tune: ImageVector = icon("Tune", "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4")
 
     private fun icon(
         name: String,

@@ -118,4 +118,7 @@
     <string name="footing_section">%1$s × %2$s мм</string>
     <string name="size_depth">Чуқурлик, мм</string>
     <string name="item_formwork">Қолип</string>
+    <string name="tool_options">Асбоб параметрлари</string>
+    <string name="tool_options_open">Параметрлар очиқ</string>
+    <string name="options_ortho">Фақат тўғри бурчаклар</string>
 </resources>
