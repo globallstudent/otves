@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <initializer_list>
 #include <optional>
@@ -29,6 +30,11 @@ namespace otves {
 namespace {
 
 using Ops = std::vector<Op>;
+
+// The 12 bits after an id's timestamp count up within a millisecond (RFC 9562, method 1). The
+// count starts in its lower half, so 2 048 ids made in one millisecond still sort as made.
+constexpr std::uint64_t kFirstIdCounts = 0x7FF;
+constexpr std::uint64_t kLastIdCount = 0xFFF;
 
 template <typename T>
 using FieldChange = std::pair<typename ElementTraits<T>::Field, typename ElementTraits<T>::Value>;
@@ -490,8 +496,15 @@ void Document::append(CommandKind kind, GroupId origin, std::vector<Op> ops) {
       OpGroup{.id = id, .kind = kind, .stamp = stamp, .origin = origin, .ops = std::move(ops)});
 }
 
-Uuid Document::next_uuid() const {
-  return Uuid::v7(environment_.unix_ms(), environment_.random_u64(), environment_.random_u64());
+Uuid Document::next_uuid() {
+  const std::int64_t now = environment_.unix_ms();
+  if (now == id_ms_) {
+    id_count_ = std::min(id_count_ + 1, kLastIdCount);
+  } else {
+    id_ms_ = now;
+    id_count_ = environment_.random_u64() & kFirstIdCounts;
+  }
+  return Uuid::v7(now, id_count_, environment_.random_u64());
 }
 
 }  // namespace otves

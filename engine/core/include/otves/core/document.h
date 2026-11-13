@@ -80,7 +80,9 @@ class Document {
   void apply(const Op& op);
   void apply_all(const std::vector<Op>& ops);
   void append(CommandKind kind, GroupId origin, std::vector<Op> ops);
-  [[nodiscard]] Uuid next_uuid() const;
+  // Ids made within one millisecond sort in the order they were made, so elements added in one
+  // step are visited in that order.
+  [[nodiscard]] Uuid next_uuid();
 
   DocumentEnvironment environment_;
   HybridClock clock_;
@@ -90,6 +92,8 @@ class Document {
   std::vector<std::size_t> redo_;
   std::optional<OpGroup> gesture_;
   std::vector<ElementId> dirty_;
+  std::int64_t id_ms_ = -1;     // the millisecond of the last id made
+  std::uint64_t id_count_ = 0;  // counts up within it
 };
 
 }  // namespace otves

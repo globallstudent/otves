@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -309,6 +311,25 @@ TEST(Document, AWallUnitIsChosenWholeAndUndoneWhole) {
 
   ASSERT_TRUE(document.undo());
   EXPECT_EQ(*document.model().find<Wall>(id), wall_4(level));
+}
+
+TEST(Document, IdsMadeInOneMillisecondSortAsMade) {
+  DocumentEnvironment environment = test_environment();
+  environment.unix_ms = [] { return std::int64_t{1'762'387'200'000}; };
+  Document document{std::move(environment)};
+  const ElementId level = add_level(document);
+
+  std::vector<ElementId> made;
+  for (std::int64_t metres = 1; metres <= 50; ++metres) {
+    Wall wall = wall_4(level);
+    wall.end.x = Mm{1000 * metres};
+    const ElementId added =
+        document.execute(AddWall{.wall = wall}).value_or(std::nullopt).value_or(ElementId{});
+    ASSERT_FALSE(added.is_nil());
+    made.push_back(added);
+  }
+
+  EXPECT_TRUE(std::ranges::is_sorted(made));
 }
 
 TEST(Document, ALevelCarriesItsRingBeamAndMeshes) {
