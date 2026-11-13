@@ -87,6 +87,12 @@ struct SetWallUnit {
   Mm height;
 };
 
+// Whether the wall's length was typed or measured (docs/adr/0012).
+struct SetWallExact {
+  ElementId wall;
+  bool exact = true;
+};
+
 // Removes the wall and every opening in it.
 struct RemoveWall {
   ElementId wall;
@@ -133,7 +139,7 @@ using Command = std::variant<AddLevel, SetLevelElevation, SetLevelHeight, Remove
                              MoveWallEnd, SetWallThickness, SetWallHeight, SetWallLocationLine,
                              RemoveWall, AddOpening, MoveOpening, ResizeOpening, SetOpeningSill,
                              SetOpeningKind, RemoveOpening, SetWallUnit, SetLevelRingBeam,
-                             SetLevelJunctionMeshes, SetCondition, SetLevelFooting>;
+                             SetLevelJunctionMeshes, SetCondition, SetLevelFooting, SetWallExact>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 

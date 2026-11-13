@@ -332,6 +332,26 @@ TEST(Document, IdsMadeInOneMillisecondSortAsMade) {
   EXPECT_TRUE(std::ranges::is_sorted(made));
 }
 
+TEST(Document, ASketchedWallBecomesExactAndUndoes) {
+  Document document{test_environment()};
+  const ElementId level = add_level(document);
+  Wall sketched = wall_4(level);
+  sketched.exact = false;
+  ASSERT_TRUE(document.execute(AddWall{.wall = sketched}));
+  const ElementId id = only_wall(document);
+  EXPECT_FALSE(document.model().find<Wall>(id)->exact);
+
+  ASSERT_TRUE(document.execute(SetWallExact{.wall = id, .exact = true}));
+  EXPECT_TRUE(document.model().find<Wall>(id)->exact);
+  EXPECT_EQ(document.log().back().kind, CommandKind::kSetWallExact);
+  const std::size_t groups = document.log().size();
+  ASSERT_TRUE(document.execute(SetWallExact{.wall = id, .exact = true}));
+  EXPECT_EQ(document.log().size(), groups);
+
+  ASSERT_TRUE(document.undo());
+  EXPECT_FALSE(document.model().find<Wall>(id)->exact);
+}
+
 TEST(Document, ALevelCarriesItsRingBeamAndMeshes) {
   Document document{test_environment()};
   const ElementId level = add_level(document);

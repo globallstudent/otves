@@ -16,6 +16,7 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | `aim(walls, below, touch)` | Where a wall being drawn would end under the finger, its length, the wall ends it lined up with and whether it meets the plan there |
 | `aim(walls, measured)` | Where a wall of a typed length ends, turning left, straight or right from the wall before it |
 | `resize_wall(walls, wall, length, fixed)` | Every wall end that moves when a wall gets a length, so what is joined stays joined |
+| `straighten(walls, below, sketch, like)` | The walls a stroke drawn with a finger means: corners found, legs laid on the axes, a loop closed, joined to the plan as `aim` joins a wall |
 
 ## Joins
 
@@ -42,6 +43,29 @@ Editing reads the walls as a graph by the definition the joins use ([ADR 0011](.
 | A typed length for a wall | Its fixed end stays and its far joint moves along it. Unless one is named, the fixed end is the one joined to other walls when the other is free, so a partition grows from the wall it stands against; else the start. A wall at a moving point stretches if it runs along the move and otherwise goes whole, with the ends standing against it; a wall reaching the fixed end turns about it |
 | A length that would make a joined wall vanish or turn back, or leave a wall end off the wall it stands against | Refused with `kBreaksJoin`; nothing moves |
 
+## Sketches
+
+A stroke is read in six steps ([ADR 0012](../../docs/adr/0012-a-sketch-becomes-walls-in-the-engine.md)). The reach is how far from the finger still counts as touched, in plan millimetres at the zoom the stroke was drawn at.
+
+```mermaid
+flowchart LR
+  P["points"] --> C["1 corners<br/>further than the reach<br/>from the line between"]
+  C --> L["2 lines<br/>a held leg lies at the<br/>middle value of its points"]
+  L --> O["3 loop<br/>ends within two<br/>reaches of the start"]
+  O --> E["4 wall ends<br/>a corner within reach<br/>is that end"]
+  E --> A["5 aim<br/>each leg, the legs<br/>before it as walls"]
+  A --> R["6 runs<br/>legs in one line<br/>are one wall"]
+```
+
+| Stroke | Walls |
+|---|---|
+| A rough loop | The room, closed on its first corner; begun in the middle of a side, that side is still one wall |
+| Rounded corners | Walls where the stroke ran, not where the corners were cut |
+| A line that bows | One wall |
+| From a wall to a wall | A partition meeting both along their length |
+| Ending near a wall end | A wall to that end; the corner before it moves so the wall stays on its axis |
+| A tap, or a stroke within reach of its first point | Refused with `kZeroLength` |
+
 ## Invariants
 
 - Outlines are counter-clockwise. Joined outlines share edges and never overlap, so their areas add up to the masonry area.
@@ -50,3 +74,4 @@ Editing reads the walls as a graph by the definition the joins use ([ADR 0011](.
 - Directions are sorted and tested for parallel on integer millimetre steps, so which walls join never depends on floating-point rounding.
 - Coordinates use only correctly rounded operations (`+ − × ÷ √`) with `-ffp-contract=off`, so arm64 and x86-64 give the same bits. A golden test checks this.
 - Input walls pass `validate()` and have unique ids. Input order does not change the result.
+- A stroke's points are checked to lie on the plan before any arithmetic, and its reach and grid are held within the plan's size.

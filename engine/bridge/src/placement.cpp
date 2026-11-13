@@ -21,6 +21,7 @@
 #include <otves/core/wall.h>
 #include <otves/geom/editing.h>
 #include <otves/geom/openings.h>
+#include <otves/geom/sketch.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
@@ -69,20 +70,25 @@ std::optional<ElementId> level_below(const Model& model, ElementId level) {
   return std::prev(found)->second;
 }
 
+// The wall ends of the level under `level`, so walls stand on walls.
+std::vector<PointMm> ends_below(const Model& model, ElementId level) {
+  std::vector<PointMm> below;
+  if (const std::optional<ElementId> under = level_below(model, level)) {
+    for (const geom::WallInput& input : walls_on(model, *under)) {
+      below.push_back(input.wall.start);
+      below.push_back(input.wall.end);
+    }
+  }
+  return below;
+}
+
 }  // namespace
 
 Result<geom::Aimed> aim(const Model& model, const Sight& sight) {
   if (model.find<Level>(sight.level) == nullptr) {
     return make_error(ErrorCode::kNotFound, "level not found");
   }
-  std::vector<PointMm> below;
-  if (const std::optional<ElementId> under = level_below(model, sight.level)) {
-    for (const geom::WallInput& input : walls_on(model, *under)) {
-      below.push_back(input.wall.start);
-      below.push_back(input.wall.end);
-    }
-  }
-  return geom::aim(walls_on(model, sight.level), below, sight.aim);
+  return geom::aim(walls_on(model, sight.level), ends_below(model, sight.level), sight.aim);
 }
 
 Result<geom::Aimed> aim(const Model& model, const MeasuredSight& sight) {
@@ -92,25 +98,52 @@ Result<geom::Aimed> aim(const Model& model, const MeasuredSight& sight) {
   return geom::aim(walls_on(model, sight.level), sight.measured);
 }
 
-Result<std::vector<MoveWallEnd>> resize(const Model& model, const Resize& resize) {
+Result<std::vector<Command>> resize(const Model& model, const Resize& resize) {
   const Wall* wall = model.find<Wall>(resize.wall);
   if (wall == nullptr) {
     return make_error(ErrorCode::kNotFound, "wall not found");
   }
   return geom::resize_wall(walls_on(model, wall->level), resize.wall, resize.length, resize.fixed)
-      .transform([&model](const std::vector<geom::EndMove>& moves) {
-        std::vector<MoveWallEnd> commands;
-        commands.reserve(moves.size());
+      .transform([&model, &resize, wall](const std::vector<geom::EndMove>& moves) {
+        std::vector<MoveWallEnd> ordered;
+        ordered.reserve(moves.size());
         for (const geom::EndMove& move : moves) {
-          commands.push_back({.wall = move.wall, .end = move.end, .to = move.to});
+          ordered.push_back({.wall = move.wall, .end = move.end, .to = move.to});
           // One end moves at a time. A wall sliding along its own line by its own length would
           // put its start on its end, so its end goes first.
           const Wall* moved = model.find<Wall>(move.wall);
-          const std::size_t count = commands.size();
-          if (move.end == WallEnd::kEnd && count > 1 && commands[count - 2].wall == move.wall &&
-              moved != nullptr && commands[count - 2].to == moved->end) {
-            std::swap(commands[count - 2], commands[count - 1]);
+          const std::size_t count = ordered.size();
+          if (move.end == WallEnd::kEnd && count > 1 && ordered[count - 2].wall == move.wall &&
+              moved != nullptr && ordered[count - 2].to == moved->end) {
+            std::swap(ordered[count - 2], ordered[count - 1]);
           }
+        }
+        std::vector<Command> commands(ordered.begin(), ordered.end());
+        // A typed length is a measured one, also when it is the length the wall already has.
+        if (!wall->exact) {
+          commands.emplace_back(SetWallExact{.wall = resize.wall, .exact = true});
+        }
+        return commands;
+      });
+}
+
+Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke) {
+  const ElementId level = stroke.wall.level;
+  if (model.find<Level>(level) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "level not found");
+  }
+  const geom::Sketch drawn{
+      .points = stroke.points, .reach = stroke.reach, .grid = stroke.grid, .square = stroke.square};
+  return geom::straighten(walls_on(model, level), ends_below(model, level), drawn, stroke.wall)
+      .transform([&stroke](const std::vector<geom::Leg>& legs) {
+        std::vector<Command> commands;
+        commands.reserve(legs.size());
+        for (const geom::Leg& leg : legs) {
+          Wall wall = stroke.wall;
+          wall.start = leg.start;
+          wall.end = leg.end;
+          wall.exact = false;
+          commands.emplace_back(AddWall{.wall = wall});
         }
         return commands;
       });

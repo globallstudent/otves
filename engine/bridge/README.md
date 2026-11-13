@@ -39,7 +39,9 @@ sequenceDiagram
 | `outlines` | Every wall's joined plan outline in metres, level by level; only when the model or the content changed |
 | `takeoff`, `takeoff_error` | Material lines from the loaded rules, or why they could not run; absent until `LoadContent` |
 
-`Pick`, `Aim` and `AimMeasured` are questions: they read the model and change nothing. `SetWallLength` asks `geom::resize_wall` what moves and runs it as `MoveWallEnd` commands in one undo step ([ADR 0011](../../docs/adr/0011-plan-editing-in-the-engine.md)).
+`Pick`, `Aim` and `AimMeasured` are questions: they read the model and change nothing. `SetWallLength` asks `geom::resize_wall` what moves and runs it as `MoveWallEnd` commands in one undo step ([ADR 0011](../../docs/adr/0011-plan-editing-in-the-engine.md)); it also makes the wall exact.
+
+`AddSketch` asks `geom::straighten` what walls a stroke means and runs them as `AddWall` commands in one undo step, each wall not exact ([ADR 0012](../../docs/adr/0012-a-sketch-becomes-walls-in-the-engine.md)). Both check every command before running the first, so a refusal changes nothing.
 
 `LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.
 

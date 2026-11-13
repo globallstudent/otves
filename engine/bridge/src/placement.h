@@ -23,9 +23,14 @@ namespace otves::bridge {
 [[nodiscard]] Result<geom::Aimed> aim(const Model& model, const Sight& sight);
 [[nodiscard]] Result<geom::Aimed> aim(const Model& model, const MeasuredSight& sight);
 
-// The moves that give a wall its length, carrying what is joined to it (geom::resize_wall), each
-// checked to succeed. kNotFound when the wall does not exist.
-[[nodiscard]] Result<std::vector<MoveWallEnd>> resize(const Model& model, const Resize& resize);
+// The commands that give a wall its length: the moves that carry what is joined to it
+// (geom::resize_wall), each checked to succeed, and the wall made exact if it was not. kNotFound
+// when the wall does not exist.
+[[nodiscard]] Result<std::vector<Command>> resize(const Model& model, const Resize& resize);
+
+// The walls a stroke means on its level (geom::straighten), each checked to be buildable and
+// not exact. kNotFound when the level does not exist.
+[[nodiscard]] Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke);
 
 // The element a tap picks on its level: an opening or wall under the point, else the nearest
 // opening, else the nearest wall within reach. kNotFound when the level does not exist.

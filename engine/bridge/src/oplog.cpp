@@ -69,6 +69,8 @@ schema::CommandKind to_code(CommandKind kind) {
       return schema::CommandKind::SetCondition;
     case CommandKind::kSetLevelFooting:
       return schema::CommandKind::SetLevelFooting;
+    case CommandKind::kSetWallExact:
+      return schema::CommandKind::SetWallExact;
     case CommandKind::kAddOpening:
       return schema::CommandKind::AddOpening;
     case CommandKind::kMoveOpening:
@@ -137,6 +139,8 @@ std::optional<CommandKind> from_code(schema::CommandKind kind) {
       return CommandKind::kSetCondition;
     case schema::CommandKind::SetLevelFooting:
       return CommandKind::kSetLevelFooting;
+    case schema::CommandKind::SetWallExact:
+      return CommandKind::kSetWallExact;
   }
   return std::nullopt;
 }
@@ -195,6 +199,8 @@ schema::WallField to_code(WallField field) {
       return schema::WallField::UnitWidth;
     case WallField::kUnitHeight:
       return schema::WallField::UnitHeight;
+    case WallField::kExact:
+      return schema::WallField::Exact;
   }
   return schema::WallField::Start;
 }
@@ -217,6 +223,8 @@ std::optional<WallField> from_code(schema::WallField field) {
       return WallField::kUnitWidth;
     case schema::WallField::UnitHeight:
       return WallField::kUnitHeight;
+    case schema::WallField::Exact:
+      return WallField::kExact;
   }
   return std::nullopt;
 }
@@ -277,6 +285,7 @@ std::int64_t number(const WallValue& value) {
           [](PointMm) { return std::int64_t{0}; },
           [](Mm length) { return length.value(); },
           [](LocationLine line) { return static_cast<std::int64_t>(to_schema(line)); },
+          [](bool on) { return std::int64_t{on ? 1 : 0}; },
       },
       value);
 }
@@ -413,6 +422,8 @@ Result<WallValue> wall_value(WallField field, std::int64_t number, const schema:
       }
       return *line;
     }
+    case WallField::kExact:
+      return number != 0;
   }
   return corrupt("unknown wall field");
 }

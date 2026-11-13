@@ -81,23 +81,27 @@ struct Session::Impl {
       case schema::Command::SetWallLength:
         return decode(entry.command_as_SetWallLength())
             .and_then([this](const Resize& set) { return resize(document.model(), set); })
-            .and_then([this](const std::vector<MoveWallEnd>& moves) { return together(moves); });
+            .and_then([this](const std::vector<Command>& steps) { return together(steps); });
+      case schema::Command::AddSketch:
+        return decode(entry.command_as_AddSketch())
+            .and_then([this](const Stroke& stroke) { return sketch(document.model(), stroke); })
+            .and_then([this](const std::vector<Command>& walls) { return together(walls); });
       default:
         return decode(entry).and_then(
             [this](const Command& command) { return document.execute(command); });
     }
   }
 
-  // Several moves as one undo step: a gesture of their own, or part of the app's when it has one
-  // open. resize() has checked that each succeeds.
-  Outcome together(std::span<const MoveWallEnd> moves) {
+  // Several commands as one undo step: a gesture of their own, or part of the app's when it has
+  // one open. resize() and sketch() have checked that each succeeds.
+  Outcome together(std::span<const Command> commands) {
     const bool own = !document.in_gesture();
     if (own) {
       document.begin_gesture();
     }
     Outcome outcome = std::nullopt;
-    for (const MoveWallEnd& move : moves) {
-      outcome = document.execute(move);
+    for (const Command& command : commands) {
+      outcome = document.execute(command);
       if (!outcome) {
         break;
       }

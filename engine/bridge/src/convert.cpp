@@ -54,23 +54,36 @@ std::expected<Level, Error> to_level(const schema::Level* level) {
                .footing_depth = Mm{level->footing_depth()}};
 }
 
-std::expected<Wall, Error> to_wall(const schema::Wall* wall) {
-  if (wall == nullptr || wall->start() == nullptr || wall->end() == nullptr) {
-    return corrupt("wall or its points are missing");
+// A wall without its points: what a sketch builds its walls like.
+std::expected<Wall, Error> to_wall_like(const schema::Wall* wall) {
+  if (wall == nullptr) {
+    return corrupt("wall is missing");
   }
   const std::optional<LocationLine> line = from_schema(wall->location_line());
   if (!line) {
     return corrupt("unknown location line");
   }
   return Wall{.level = to_id(wall->level()),
-              .start = to_point(*wall->start()),
-              .end = to_point(*wall->end()),
+              .start = {},
+              .end = {},
               .thickness = Mm{wall->thickness()},
               .height = Mm{wall->height()},
               .location_line = *line,
               .unit_length = Mm{wall->unit_length()},
               .unit_width = Mm{wall->unit_width()},
-              .unit_height = Mm{wall->unit_height()}};
+              .unit_height = Mm{wall->unit_height()},
+              .exact = wall->exact()};
+}
+
+std::expected<Wall, Error> to_wall(const schema::Wall* wall) {
+  if (wall == nullptr || wall->start() == nullptr || wall->end() == nullptr) {
+    return corrupt("wall or its points are missing");
+  }
+  return to_wall_like(wall).transform([wall](Wall built) {
+    built.start = to_point(*wall->start());
+    built.end = to_point(*wall->end());
+    return built;
+  });
 }
 
 std::expected<Opening, Error> to_opening(const schema::Opening* opening) {
@@ -457,6 +470,26 @@ std::expected<Resize, Error> decode(const schema::SetWallLength* set) {
   return resize;
 }
 
+std::expected<Stroke, Error> decode(const schema::AddSketch* sketch) {
+  if (sketch == nullptr) {
+    return corrupt("sketch is missing");
+  }
+  return to_wall_like(sketch->wall()).transform([sketch](const Wall& wall) {
+    Stroke stroke{.wall = wall,
+                  .points = {},
+                  .reach = Mm{sketch->reach()},
+                  .grid = Mm{sketch->grid()},
+                  .square = sketch->square()};
+    if (sketch->points() != nullptr) {
+      stroke.points.reserve(sketch->points()->size());
+      for (const schema::PointMm* point : *sketch->points()) {
+        stroke.points.push_back(to_point(*point));
+      }
+    }
+    return stroke;
+  });
+}
+
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Level& level) {
   return {.type = schema::Element::Level,
           .value = schema::CreateLevel(builder, level.elevation.value(), level.height.value(),
@@ -473,7 +506,7 @@ EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Wall& wall)
           .value = schema::CreateWall(builder, &level, &start, &end, wall.thickness.value(),
                                       wall.height.value(), to_schema(wall.location_line),
                                       wall.unit_length.value(), wall.unit_width.value(),
-                                      wall.unit_height.value())
+                                      wall.unit_height.value(), wall.exact)
                        .Union()};
 }
 

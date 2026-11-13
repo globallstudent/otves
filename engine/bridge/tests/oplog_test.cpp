@@ -60,6 +60,7 @@ Document edited_document() {
       SetWallThickness{.wall = wall, .thickness = 510_mm},
       SetWallHeight{.wall = wall, .height = 2700_mm},
       SetWallLocationLine{.wall = wall, .location_line = LocationLine::kRightFace},
+      SetWallExact{.wall = wall, .exact = false},
       MoveOpening{.opening = window, .offset = 1000_mm},
       ResizeOpening{.opening = window, .width = 900_mm, .height = 2100_mm},
       SetOpeningSill{.opening = window, .sill = 0_mm},
@@ -86,7 +87,7 @@ void expect_round_trip(const OpGroup& group) {
 
 TEST(OpLog, EveryGroupComesBackFromItsBuffer) {
   const Document document = edited_document();
-  ASSERT_EQ(document.log().size(), 16U);
+  ASSERT_EQ(document.log().size(), 17U);
 
   for (const OpGroup& group : document.log()) {
     expect_round_trip(group);

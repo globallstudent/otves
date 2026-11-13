@@ -414,6 +414,9 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
           [&model](const SetWallLocationLine& set) {
             return edit<Wall>(model, set.wall, {{WallField::kLocationLine, set.location_line}});
           },
+          [&model](const SetWallExact& set) {
+            return edit<Wall>(model, set.wall, {{WallField::kExact, set.exact}});
+          },
           [&model](const RemoveWall& remove) { return remove_wall(model, remove.wall); },
           [this](const AddOpening& add) -> std::expected<Ops, Error> {
             if (auto valid = validate(add.opening); !valid) {

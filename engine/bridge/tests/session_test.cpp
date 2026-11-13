@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -72,6 +73,16 @@ class Request {
     const schema::Uuid id = key(wall);
     return add(Command::SetWallLength,
                schema::CreateSetWallLength(builder_, &id, length, fixed).Union());
+  }
+
+  // A stroke read with a 300 mm reach on a 100 mm grid, its walls held to the axes.
+  Request& add_sketch(ElementId level, const std::vector<schema::PointMm>& points,
+                      std::int64_t thickness = 380) {
+    const schema::Uuid on = key(level);
+    const auto wall = schema::CreateWall(builder_, &on, nullptr, nullptr, thickness, 2800);
+    const auto path = builder_.CreateVectorOfStructs(points);
+    return add(Command::AddSketch,
+               schema::CreateAddSketch(builder_, wall, path, 300, 100, true).Union());
   }
 
   // A wall up from the origin, meeting add_wall's at a corner.
@@ -732,6 +743,105 @@ std::vector<ElementId> deleted(const schema::Response& response) {
     }
   }
   return ids;
+}
+
+// The walls a response reports that are not exact, each as its line, sorted.
+std::vector<Line> rough_walls(const schema::Response& response) {
+  std::vector<Line> lines;
+  for (const schema::ElementChange* change : *response.changes()) {
+    const schema::Wall* wall = change->element_as_Wall();
+    if (wall != nullptr && !wall->exact()) {
+      lines.push_back(line(response, to_id(change->id())));
+    }
+  }
+  std::ranges::sort(lines);
+  return lines;
+}
+
+TEST(Session, ASketchBecomesWallsInOneUndoStep) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+
+  // A room drawn roughly: no corner on the grid, the loop not quite closed.
+  const auto& drawn = respond(session, Request{}
+                                           .add_sketch(level, {{40, -30},
+                                                               {3000, 20},
+                                                               {5960, 50},
+                                                               {6030, 2000},
+                                                               {5980, 4040},
+                                                               {3000, 3970},
+                                                               {-20, 3960},
+                                                               {30, 2000},
+                                                               {10, 60}})
+                                           .bytes());
+
+  ASSERT_EQ(drawn.results()->Get(0)->error(), schema::ErrorCode::None);
+  ASSERT_EQ(drawn.changes()->size(), 4U);
+  EXPECT_EQ(rough_walls(drawn),
+            (std::vector<Line>{
+                {0, 0, 6000, 0}, {0, 4000, 0, 0}, {6000, 0, 6000, 4000}, {6000, 4000, 0, 4000}}));
+  EXPECT_EQ(drawn.outlines()->size(), 4U);
+  ASSERT_EQ(drawn.log()->size(), 1U);
+  EXPECT_EQ(drawn.log()->Get(0)->kind(), schema::CommandKind::AddWall);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(deleted(undone).size(), 4U);
+}
+
+TEST(Session, ATypedLengthMakesASketchedWallExact) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const auto& drawn =
+      respond(session, Request{}.add_sketch(level, {{0, 0}, {3000, 40}, {6040, -20}}).bytes());
+  ASSERT_EQ(drawn.changes()->size(), 1U);
+  const ElementId wall = to_id(drawn.changes()->Get(0)->id());
+  EXPECT_EQ(line(drawn, wall), (Line{0, 0, 6000, 0}));
+  EXPECT_FALSE(drawn.changes()->Get(0)->element_as_Wall()->exact());
+
+  // The length it has, typed: nothing moves, and the wall is measured now.
+  const auto& kept = respond(session, Request{}.set_length(wall, 6000).bytes());
+  ASSERT_EQ(kept.changes()->size(), 1U);
+  EXPECT_TRUE(kept.changes()->Get(0)->element_as_Wall()->exact());
+  EXPECT_EQ(line(kept, wall), (Line{0, 0, 6000, 0}));
+  ASSERT_EQ(kept.log()->size(), 1U);
+  EXPECT_EQ(kept.log()->Get(0)->kind(), schema::CommandKind::SetWallExact);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  ASSERT_EQ(undone.changes()->size(), 1U);
+  EXPECT_FALSE(undone.changes()->Get(0)->element_as_Wall()->exact());
+
+  // Another length moves the end and makes the wall exact in the same step.
+  const auto& longer = respond(session, Request{}.set_length(wall, 6400).bytes());
+  ASSERT_EQ(longer.changes()->size(), 1U);
+  EXPECT_TRUE(longer.changes()->Get(0)->element_as_Wall()->exact());
+  EXPECT_EQ(line(longer, wall), (Line{0, 0, 6400, 0}));
+  ASSERT_EQ(longer.log()->size(), 1U);
+  EXPECT_EQ(longer.log()->Get(0)->kind(), schema::CommandKind::MoveWallEnd);
+}
+
+TEST(Session, ASketchThatGivesNoWallChangesNothing) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+
+  const auto& refused = respond(session, Request{}
+                                             .add_sketch(level, {{100, 100}, {180, 60}})
+                                             .add_sketch(ElementId{Uuid{7, 7}}, {{0, 0}, {6000, 0}})
+                                             .add_sketch(level, {{0, 0}, {6000, 0}}, 0)
+                                             .add_sketch(level, {{0, 0}, {200'000'000, 0}})
+                                             .add_sketch(level, {})
+                                             .empty(Command::AddSketch)
+                                             .bytes());
+
+  ASSERT_EQ(refused.results()->size(), 6U);
+  // A tap, a level that is not there, a wall without thickness, a point 200 km away, no stroke.
+  EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::ZeroLength);
+  EXPECT_EQ(refused.results()->Get(1)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(refused.results()->Get(2)->error(), schema::ErrorCode::ThicknessNotPositive);
+  EXPECT_EQ(refused.results()->Get(3)->error(), schema::ErrorCode::OffPlan);
+  EXPECT_EQ(refused.results()->Get(4)->error(), schema::ErrorCode::ZeroLength);
+  EXPECT_EQ(refused.results()->Get(5)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(refused.changes()->size(), 0U);
+  EXPECT_EQ(refused.log()->size(), 0U);
 }
 
 TEST(Session, OpeningASavedJobReplacesTheModel) {

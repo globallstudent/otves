@@ -3,6 +3,7 @@
 #include <expected>
 #include <optional>
 #include <variant>
+#include <vector>
 
 #include <flatbuffers/flatbuffers.h>
 
@@ -88,6 +89,18 @@ struct Resize {
 
 // kCorruptData when the fixed end is unknown.
 [[nodiscard]] std::expected<Resize, Error> decode(const schema::SetWallLength* set);
+
+// A stroke drawn on a level and the wall to build from it (schema AddSketch).
+struct Stroke {
+  Wall wall;  // on the stroke's level; its points are unset
+  std::vector<PointMm> points;
+  Mm reach;
+  Mm grid;
+  bool square = false;
+};
+
+// kCorruptData when the wall is missing or its location line is unknown.
+[[nodiscard]] std::expected<Stroke, Error> decode(const schema::AddSketch* sketch);
 
 // A schema element as a union member: its type and its table.
 struct EncodedElement {

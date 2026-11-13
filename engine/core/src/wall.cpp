@@ -60,6 +60,8 @@ WallValue get_field(const Wall& wall, WallField field) {
       return wall.unit_width;
     case WallField::kUnitHeight:
       return wall.unit_height;
+    case WallField::kExact:
+      return wall.exact;
   }
   OTVES_ASSERT(false);
   return wall.start;
@@ -90,6 +92,9 @@ void set_field(Wall& wall, WallField field, const WallValue& value) {
       return;
     case WallField::kUnitHeight:
       assign(wall.unit_height, value);
+      return;
+    case WallField::kExact:
+      assign(wall.exact, value);
       return;
   }
   OTVES_ASSERT(false);

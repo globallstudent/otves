@@ -38,6 +38,9 @@ struct Wall {
   Mm unit_length{};  // NOLINT(readability-redundant-member-init)
   Mm unit_width{};   // NOLINT(readability-redundant-member-init)
   Mm unit_height{};  // NOLINT(readability-redundant-member-init)
+  // Whether the wall's length was typed or measured. A wall read from a sketch is not exact until
+  // it gets a length (docs/adr/0012).
+  bool exact = true;
 
   // Whether a masonry unit was chosen.
   [[nodiscard]] constexpr bool has_unit() const { return unit_length > Mm{0}; }
@@ -62,14 +65,15 @@ enum class WallField : std::uint8_t {
   kUnitLength,
   kUnitWidth,
   kUnitHeight,
+  kExact,
 };
 
-using WallValue = std::variant<PointMm, Mm, LocationLine>;
+using WallValue = std::variant<PointMm, Mm, LocationLine, bool>;
 
 [[nodiscard]] WallValue get_field(const Wall& wall, WallField field);
 
 // The value's alternative must match the field (PointMm for kStart/kEnd, LocationLine for
-// kLocationLine, Mm for the rest); a mismatch is a programming error.
+// kLocationLine, bool for kExact, Mm for the rest); a mismatch is a programming error.
 void set_field(Wall& wall, WallField field, const WallValue& value);
 
 template <>

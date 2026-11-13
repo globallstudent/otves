@@ -43,6 +43,9 @@ table Wall {
   unit_length:long;
   unit_width:long;
   unit_height:long;
+  // Whether the length was typed or measured. A wall read from a sketch is not, until it gets a
+  // length (docs/adr/0012).
+  exact:bool = true;
 }
 
 table Opening {
@@ -164,15 +167,28 @@ table AimMeasured {
 // stands against; else the start.
 enum FixedEnd:ubyte { Joined = 0, Start = 1, End = 2 }
 
-// Gives the wall a length along its line. Its `fixed` end stays; what is joined to the other end
-// goes with it so that walls keep their direction. Runs as MoveWallEnd commands in one undo step;
-// changes nothing when the length is not positive (ZeroLength), a point would leave the plan
-// (OffPlan), or a joined wall would vanish, turn back on itself or come off the wall it stands
-// against (BreaksJoin).
+// Gives the wall a length along its line and makes it exact. Its `fixed` end stays; what is
+// joined to the other end goes with it so that walls keep their direction. Runs as MoveWallEnd
+// commands in one undo step; changes nothing when the length is not positive (ZeroLength), a
+// point would leave the plan (OffPlan), or a joined wall would vanish, turn back on itself or
+// come off the wall it stands against (BreaksJoin).
 table SetWallLength {
   wall:Uuid;
   length:long;
   fixed:FixedEnd = Joined;
+}
+
+// A stroke drawn with a finger, read as walls (docs/adr/0012, engine/geom/sketch.h). `points` is
+// the finger's path in the order drawn; `reach`, `grid` and `square` mean what they do for Aim.
+// `wall` is the wall to build, on its level; its start, end and exact are not read. Runs as
+// AddWall commands in one undo step, each wall not exact. Changes nothing when the stroke gives
+// no wall (ZeroLength), a point lies off the plan (OffPlan) or the wall cannot be built.
+table AddSketch {
+  wall:Wall;
+  points:[PointMm];
+  reach:long;
+  grid:long;
+  square:bool;
 }
 
 // Replaces the open model with a saved job's elements (docs/adr/0007) and starts an empty log
@@ -223,6 +239,7 @@ union Command {
   Aim,
   AimMeasured,
   SetWallLength,
+  AddSketch,
 }
 
 table CommandEntry {
@@ -312,6 +329,7 @@ enum CommandKind:ubyte {
   SetLevelJunctionMeshes = 20,
   SetCondition = 21,
   SetLevelFooting = 22,
+  SetWallExact = 23,
 }
 
 enum LevelField:ubyte {
@@ -331,6 +349,7 @@ enum WallField:ubyte {
   UnitLength = 5,
   UnitWidth = 6,
   UnitHeight = 7,
+  Exact = 8,
 }
 enum OpeningField:ubyte { Offset = 0, Width = 1, Height = 2, Sill = 3, Kind = 4 }
 
@@ -339,8 +358,8 @@ table CreateOp { id:Uuid; element:Element; }
 table DeleteOp { id:Uuid; element:Element; }
 // JunctionMeshes uses 0 and 1; the other fields millimetres.
 table SetLevelFieldOp { id:Uuid; field:LevelField; before:long; after:long; }
-// Start and End use the points; LocationLine its code and the other fields millimetres in before
-// and after.
+// Start and End use the points; LocationLine its code, Exact 0 and 1 and the other fields
+// millimetres in before and after.
 table SetWallFieldOp {
   id:Uuid;
   field:WallField;
