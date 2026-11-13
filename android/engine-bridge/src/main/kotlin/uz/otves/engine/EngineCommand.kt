@@ -147,6 +147,47 @@ public sealed interface EngineCommand {
         public val reach: Mm,
     ) : EngineCommand
 
+    /**
+     * A touch on [level] while a wall is drawn (docs/adr/0011). Changes nothing; the result's
+     * `aimed` says where the wall would end. [from] is the wall's start, null while its first
+     * point is placed; [reach] is how far from the finger still counts as touched; a free
+     * coordinate falls on a multiple of [grid]; [square] holds the wall to the plan's axes.
+     */
+    public data class Aim(
+        public val level: ElementId,
+        public val from: PointMm?,
+        public val at: PointMm,
+        public val reach: Mm,
+        public val grid: Mm,
+        public val square: Boolean,
+    ) : EngineCommand
+
+    /**
+     * A wall of a typed [length] from [from], turning from the wall that ended there; that wall
+     * started at [before], null for the first wall of a run, which goes to the right of the plan.
+     * Changes nothing; the result's `aimed` says where the wall ends.
+     */
+    public data class AimMeasured(
+        public val level: ElementId,
+        public val from: PointMm,
+        public val before: PointMm?,
+        public val turn: Turn,
+        public val length: Mm,
+    ) : EngineCommand
+
+    /**
+     * Gives the wall a [length] along its line. Its [fixed] end stays; what is joined to the other
+     * end goes with it so that walls keep their direction, as one undo step. With no end named
+     * the plan says which stays: the one joined to other walls when the other is free, so a
+     * partition grows from the wall it stands against; else the start. Fails, changing nothing,
+     * with [EngineError.ZERO_LENGTH], [EngineError.BREAKS_JOIN] or [EngineError.OFF_PLAN].
+     */
+    public data class SetWallLength(
+        public val wall: ElementId,
+        public val length: Mm,
+        public val fixed: WallEnd? = null,
+    ) : EngineCommand
+
     /** Commands until [EndGesture] fold into one undo step, as a drag does. */
     public data object BeginGesture : EngineCommand
 

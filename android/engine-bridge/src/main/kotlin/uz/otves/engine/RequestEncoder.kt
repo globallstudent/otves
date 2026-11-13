@@ -10,11 +10,14 @@ import java.nio.ByteBuffer
 import uz.otves.schema.AddLevel as AddLevelTable
 import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddWall as AddWallTable
+import uz.otves.schema.Aim as AimTable
+import uz.otves.schema.AimMeasured as AimMeasuredTable
 import uz.otves.schema.BeginGesture as BeginGestureTable
 import uz.otves.schema.Conditions as ConditionsTable
 import uz.otves.schema.ConditionsField as ConditionsFieldCode
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.EndGesture as EndGestureTable
+import uz.otves.schema.FixedEnd as FixedEndCode
 import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
@@ -41,9 +44,11 @@ import uz.otves.schema.SetLevelRingBeam as SetLevelRingBeamTable
 import uz.otves.schema.SetOpeningKind as SetOpeningKindTable
 import uz.otves.schema.SetOpeningSill as SetOpeningSillTable
 import uz.otves.schema.SetWallHeight as SetWallHeightTable
+import uz.otves.schema.SetWallLength as SetWallLengthTable
 import uz.otves.schema.SetWallLocationLine as SetWallLocationLineTable
 import uz.otves.schema.SetWallThickness as SetWallThicknessTable
 import uz.otves.schema.SetWallUnit as SetWallUnitTable
+import uz.otves.schema.Turn as TurnCode
 import uz.otves.schema.Undo as UndoTable
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
@@ -257,6 +262,42 @@ internal object RequestEncoder {
                 Command.Pick to PickTable.endPick(this)
             }
 
+            is EngineCommand.Aim -> {
+                AimTable.startAim(this)
+                AimTable.addLevel(this, uuid(command.level))
+                command.from?.let { AimTable.addFrom(this, point(it)) }
+                AimTable.addAt(this, point(command.at))
+                AimTable.addReach(this, command.reach.value)
+                AimTable.addGrid(this, command.grid.value)
+                AimTable.addSquare(this, command.square)
+                Command.Aim to AimTable.endAim(this)
+            }
+
+            is EngineCommand.AimMeasured -> {
+                AimMeasuredTable.startAimMeasured(this)
+                AimMeasuredTable.addLevel(this, uuid(command.level))
+                AimMeasuredTable.addFrom(this, point(command.from))
+                command.before?.let { AimMeasuredTable.addBefore(this, point(it)) }
+                AimMeasuredTable.addTurn(this, code(command.turn))
+                AimMeasuredTable.addLength(this, command.length.value)
+                Command.AimMeasured to AimMeasuredTable.endAimMeasured(this)
+            }
+
+            is EngineCommand.SetWallLength -> {
+                SetWallLengthTable.startSetWallLength(this)
+                SetWallLengthTable.addWall(this, uuid(command.wall))
+                SetWallLengthTable.addLength(this, command.length.value)
+                SetWallLengthTable.addFixed(
+                    this,
+                    when (command.fixed) {
+                        null -> FixedEndCode.Joined
+                        WallEnd.START -> FixedEndCode.Start
+                        WallEnd.END -> FixedEndCode.End
+                    },
+                )
+                Command.SetWallLength to SetWallLengthTable.endSetWallLength(this)
+            }
+
             EngineCommand.BeginGesture -> {
                 BeginGestureTable.startBeginGesture(this)
                 Command.BeginGesture to BeginGestureTable.endBeginGesture(this)
@@ -358,6 +399,13 @@ internal object RequestEncoder {
             OpeningKind.WINDOW -> OpeningKindCode.Window
             OpeningKind.DOOR -> OpeningKindCode.Door
             OpeningKind.EMPTY -> OpeningKindCode.Empty
+        }
+
+    private fun code(turn: Turn): Int =
+        when (turn) {
+            Turn.LEFT -> TurnCode.Left
+            Turn.STRAIGHT -> TurnCode.Straight
+            Turn.RIGHT -> TurnCode.Right
         }
 
     private fun code(end: WallEnd): Int =

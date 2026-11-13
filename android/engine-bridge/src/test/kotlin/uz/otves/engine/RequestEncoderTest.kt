@@ -9,6 +9,9 @@ import uz.otves.schema.Element
 import uz.otves.schema.Request
 import kotlin.uuid.Uuid
 import uz.otves.schema.AddWall as AddWallTable
+import uz.otves.schema.Aim as AimTable
+import uz.otves.schema.AimMeasured as AimMeasuredTable
+import uz.otves.schema.FixedEnd as FixedEndCode
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
@@ -17,6 +20,8 @@ import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.Pick as PickTable
 import uz.otves.schema.PlaceOpening as PlaceOpeningTable
+import uz.otves.schema.SetWallLength as SetWallLengthTable
+import uz.otves.schema.Turn as TurnCode
 import uz.otves.schema.WallEnd as WallEndCode
 
 class RequestEncoderTest {
@@ -141,6 +146,56 @@ class RequestEncoderTest {
         val pick = request.commands(0).command(PickTable()) as PickTable
         assertThat(pick.at().y()).isEqualTo(-20L)
         assertThat(pick.reach()).isEqualTo(300L)
+    }
+
+    @Test
+    fun aimsAndATypedLengthCarryTheirValues() {
+        val commands =
+            listOf(
+                EngineCommand.Aim(level, from = null, at = PointMm(30.mm, (-40).mm), reach = 300.mm, grid = 100.mm, square = true),
+                EngineCommand.Aim(level, PointMm(0.mm, 0.mm), PointMm(6_420.mm, 260.mm), 300.mm, 100.mm, square = false),
+                EngineCommand.AimMeasured(level, PointMm(6_400.mm, 0.mm), before = PointMm(0.mm, 0.mm), Turn.LEFT, 4_000.mm),
+                EngineCommand.AimMeasured(level, PointMm(0.mm, 0.mm), before = null, Turn.STRAIGHT, 6_400.mm),
+                EngineCommand.SetWallLength(wall, 6_437.mm, fixed = WallEnd.END),
+                EngineCommand.SetWallLength(wall, 6_437.mm),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(commands))
+
+        assertThat(List(request.commandsLength()) { request.commands(it).commandType() })
+            .containsExactly(
+                Command.Aim,
+                Command.Aim,
+                Command.AimMeasured,
+                Command.AimMeasured,
+                Command.SetWallLength,
+                Command.SetWallLength,
+            ).inOrder()
+        val first = request.commands(0).command(AimTable()) as AimTable
+        assertThat(Uuid.fromLongs(first.level().high(), first.level().low())).isEqualTo(level.uuid)
+        assertThat(first.from()).isNull()
+        assertThat(first.at().y()).isEqualTo(-40L)
+        assertThat(first.reach()).isEqualTo(300L)
+        assertThat(first.grid()).isEqualTo(100L)
+        assertThat(first.square()).isTrue()
+        val second = request.commands(1).command(AimTable()) as AimTable
+        assertThat(second.from().x()).isEqualTo(0L)
+        assertThat(second.at().x()).isEqualTo(6_420L)
+        assertThat(second.square()).isFalse()
+        val turned = request.commands(2).command(AimMeasuredTable()) as AimMeasuredTable
+        assertThat(turned.from().x()).isEqualTo(6_400L)
+        assertThat(turned.before().x()).isEqualTo(0L)
+        assertThat(turned.turn()).isEqualTo(TurnCode.Left)
+        assertThat(turned.length()).isEqualTo(4_000L)
+        val straight = request.commands(3).command(AimMeasuredTable()) as AimMeasuredTable
+        assertThat(straight.before()).isNull()
+        assertThat(straight.turn()).isEqualTo(TurnCode.Straight)
+        val sized = request.commands(4).command(SetWallLengthTable()) as SetWallLengthTable
+        assertThat(Uuid.fromLongs(sized.wall().high(), sized.wall().low())).isEqualTo(wall.uuid)
+        assertThat(sized.length()).isEqualTo(6_437L)
+        assertThat(sized.fixed()).isEqualTo(FixedEndCode.End)
+        // With no end named the engine reads which one stays off the plan.
+        assertThat((request.commands(5).command(SetWallLengthTable()) as SetWallLengthTable).fixed()).isEqualTo(FixedEndCode.Joined)
     }
 
     @Test

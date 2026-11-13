@@ -11,9 +11,11 @@ import uz.otves.schema.ErrorCode
 import uz.otves.schema.Response
 import java.nio.ByteBuffer
 import kotlin.uuid.Uuid
+import uz.otves.schema.Aimed as AimedTable
 import uz.otves.schema.CommandKind as CommandKindCode
 import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.ElementChange as ChangeTable
+import uz.otves.schema.Guide as GuideStruct
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
 import uz.otves.schema.LocationLine as LocationLineCode
@@ -138,6 +140,39 @@ class ResponseDecoderTest {
         buffer.put(buffer.position() + 4, 'X'.code.toByte())
 
         assertThrows(IllegalStateException::class.java) { ResponseDecoder.decode(buffer) }
+    }
+
+    @Test
+    fun anAimComesBackWithItsPointLengthAndGuides() {
+        val builder = FlatBufferBuilder(256)
+        AimedTable.startGuidesVector(builder, 1)
+        GuideStruct.createGuide(builder, 0, 0, 0, 4000)
+        val guides = builder.endVector()
+        AimedTable.startAimed(builder)
+        AimedTable.addPoint(builder, PointStruct.createPointMm(builder, 0, 4000))
+        AimedTable.addLength(builder, 6000)
+        AimedTable.addGuides(builder, guides)
+        AimedTable.addMeets(builder, true)
+        val aimed = AimedTable.endAimed(builder)
+        ResultTable.startCommandResult(builder)
+        ResultTable.addAimed(builder, aimed)
+        val result = ResultTable.endCommandResult(builder)
+        val results = Response.createResultsVector(builder, intArrayOf(result))
+        Response.startResponse(builder)
+        Response.addVersion(builder, 1L)
+        Response.addResults(builder, results)
+        builder.finish(Response.endResponse(builder), "OTVS")
+
+        val decoded = ResponseDecoder.decode(builder.dataBuffer())
+
+        val corner = PointMm(0.mm, 4000.mm)
+        assertThat(decoded.results)
+            .containsExactly(
+                CommandResult.Done(
+                    created = null,
+                    aimed = Aimed(corner, length = 6000.mm, guides = listOf(Guide(PointMm(0.mm, 0.mm), corner)), meets = true),
+                ),
+            )
     }
 
     // A response like the engine's: one created wall, one failure, the wall's value and a deletion.

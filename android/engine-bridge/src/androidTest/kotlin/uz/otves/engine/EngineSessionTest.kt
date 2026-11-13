@@ -66,6 +66,56 @@ class EngineSessionTest {
     }
 
     @Test
+    fun theEngineAimsAWallAndATypedLengthKeepsTheRoomSquare() {
+        val level = session.send(listOf(EngineCommand.AddLevel(Level(0.mm, 3000.mm)))).createdId()
+        val corners = listOf(PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), PointMm(6000.mm, 4000.mm), PointMm(0.mm, 4000.mm))
+        val room =
+            corners.indices.map { index ->
+                val wall = Wall(level, corners[index], corners[(index + 1) % corners.size], 380.mm, 2800.mm)
+                session.send(listOf(EngineCommand.AddWall(wall))).createdId()
+            }
+
+        // A partition from inside the room: the finger is beside the bottom wall and off the grid.
+        val from = PointMm(3000.mm, 2000.mm)
+        val asked =
+            session.send(
+                listOf(
+                    EngineCommand.Aim(level, from, at = PointMm(3060.mm, 450.mm), reach = 300.mm, grid = 100.mm, square = true),
+                    EngineCommand.AimMeasured(level, corners[1], before = corners[0], Turn.LEFT, 4000.mm),
+                ),
+            )
+        assertThat(asked.results)
+            .containsExactly(
+                CommandResult.Done(created = null, aimed = Aimed(PointMm(3000.mm, 0.mm), length = 2000.mm, meets = true)),
+                CommandResult.Done(created = null, aimed = Aimed(corners[2], length = 4000.mm, meets = true)),
+            ).inOrder()
+        assertThat(asked.changes).isEmpty()
+        assertThat(asked.log).isEmpty()
+
+        val longer = session.send(listOf(EngineCommand.SetWallLength(room[0], 6400.mm)))
+        assertThat(longer.results.single()).isEqualTo(CommandResult.Done(created = null))
+        val moved = longer.changes.associate { it.id to it.element as Wall }
+        assertThat(moved.keys).containsExactly(room[0], room[1], room[2])
+        assertThat(moved.getValue(room[1]).start).isEqualTo(PointMm(6400.mm, 0.mm))
+        assertThat(moved.getValue(room[1]).end).isEqualTo(PointMm(6400.mm, 4000.mm))
+        assertThat(longer.log).hasSize(1)
+
+        // A partition drawn from inside the room onto the bottom wall grows from that wall.
+        val partition =
+            session
+                .send(listOf(EngineCommand.AddWall(Wall(level, PointMm(3000.mm, 3000.mm), PointMm(3000.mm, 0.mm), 120.mm, 2800.mm))))
+                .createdId()
+        val grown = session.send(listOf(EngineCommand.SetWallLength(partition, 3500.mm)))
+        assertThat((grown.changes.single().element as Wall).start).isEqualTo(PointMm(3000.mm, 3500.mm))
+
+        val refused = session.send(listOf(EngineCommand.SetWallLength(room[0], 0.mm)))
+        assertThat((refused.results.single() as CommandResult.Failed).error).isEqualTo(EngineError.ZERO_LENGTH)
+
+        val undone = session.send(listOf(EngineCommand.Undo, EngineCommand.Undo, EngineCommand.Undo))
+        assertThat((undone.changes.single { it.id == room[1] }.element as Wall).end).isEqualTo(corners[2])
+    }
+
+    @Test
     fun refusedCommandsComeBackAsTypedErrors() {
         val response =
             session.send(

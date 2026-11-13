@@ -16,6 +16,25 @@ public enum class OpeningKind { WINDOW, DOOR, EMPTY }
 
 public enum class WallEnd { START, END }
 
+/** Which way a wall goes from the wall before it in a run. */
+public enum class Turn { LEFT, STRAIGHT, RIGHT }
+
+/** The aimed point lined up with a wall end: a line from that end to the point. */
+public data class Guide(
+    public val from: PointMm,
+    public val to: PointMm,
+)
+
+/** Where a wall being drawn would end, as the engine sees the plan (engine/geom/editing.h). */
+public data class Aimed(
+    public val point: PointMm,
+    /** From the wall's start along its line; zero for a first point. */
+    public val length: Mm,
+    public val guides: List<Guide> = emptyList(),
+    /** The point is a wall end or lies in a wall, so a wall ending here joins the plan. */
+    public val meets: Boolean = false,
+)
+
 /** A point of geometry the engine derived, in metres: for drawing, never for measuring. */
 public data class PointM(
     public val x: Double,

@@ -7,9 +7,11 @@ import uz.otves.schema.ErrorCode
 import uz.otves.schema.Response
 import java.nio.ByteBuffer
 import kotlin.uuid.Uuid
+import uz.otves.schema.Aimed as AimedTable
 import uz.otves.schema.CommandResult as ResultTable
 import uz.otves.schema.Conditions as ConditionsTable
 import uz.otves.schema.ElementChange as ChangeTable
+import uz.otves.schema.Guide as GuideStruct
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
 import uz.otves.schema.Level as LevelTable
@@ -146,9 +148,30 @@ internal object ResponseDecoder {
 
     private fun result(result: ResultTable): CommandResult =
         when (val error = error(result.error())) {
-            null -> CommandResult.Done(created = result.created()?.let(::id), picked = result.picked()?.let(::id))
-            else -> CommandResult.Failed(error = error, message = result.message().orEmpty())
+            null -> {
+                CommandResult.Done(
+                    created = result.created()?.let(::id),
+                    picked = result.picked()?.let(::id),
+                    aimed = result.aimed()?.let(::aimed),
+                )
+            }
+
+            else -> {
+                CommandResult.Failed(error = error, message = result.message().orEmpty())
+            }
         }
+
+    private fun aimed(aimed: AimedTable): Aimed =
+        Aimed(
+            point = point(aimed.point()),
+            length = Mm(aimed.length()),
+            guides =
+                List(aimed.guidesLength()) {
+                    val guide = aimed.guides(GuideStruct(), it)
+                    Guide(from = point(guide.from()), to = point(guide.to()))
+                },
+            meets = aimed.meets(),
+        )
 
     private fun change(change: ChangeTable): ElementChange {
         val id = id(checkNotNull(change.id()) { "An element change has no id" })
@@ -169,7 +192,7 @@ internal object ResponseDecoder {
     private fun id(uuid: UuidStruct): ElementId = ElementId(uuid(uuid))
 
     private fun point(point: PointStruct?): PointMm {
-        checkNotNull(point) { "A wall has no point" }
+        checkNotNull(point) { "The engine left out a point" }
         return PointMm(Mm(point.x()), Mm(point.y()))
     }
 
@@ -265,6 +288,7 @@ internal object ResponseDecoder {
             ErrorCode.NoWall -> EngineError.NO_WALL
             ErrorCode.DoesNotFit -> EngineError.DOES_NOT_FIT
             ErrorCode.ConditionOutOfRange -> EngineError.CONDITION_OUT_OF_RANGE
+            ErrorCode.BreaksJoin -> EngineError.BREAKS_JOIN
             else -> EngineError.UNKNOWN
         }
 }

@@ -34,6 +34,9 @@ public enum class EngineError {
     DOES_NOT_FIT,
     CONDITION_OUT_OF_RANGE,
 
+    /** A wall joined to a resized one would vanish, turn back on itself or come off the wall it stands against. */
+    BREAKS_JOIN,
+
     /** A code from a newer engine than this app knows. */
     UNKNOWN,
 }
@@ -43,6 +46,8 @@ public sealed interface CommandResult {
         public val created: ElementId?,
         /** What a [EngineCommand.Pick] found. */
         public val picked: ElementId? = null,
+        /** The answer to an [EngineCommand.Aim] or [EngineCommand.AimMeasured]. */
+        public val aimed: Aimed? = null,
     ) : CommandResult
 
     /** [message] is English context for logs, not for the screen. */
