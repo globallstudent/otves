@@ -122,6 +122,42 @@ private fun handName(hand: Hand): String =
         },
     )
 
+// An opening's own sizes: its width, its height and, for one that is no door, how high over
+// the floor it starts. A size nobody types stays as it was.
+@Composable
+internal fun OpeningPad(
+    entry: OpeningEntry,
+    actions: EditorActions,
+) {
+    val colors = OtvesTheme.colors
+    Panel {
+        PanelHeader(stringResource(R.string.opening_size_title)) {
+            PanelAction(stringResource(R.string.length_cancel), actions.onCancelOpening)
+        }
+        Row(modifier = Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(R.string.size_width, R.string.size_height, R.string.size_sill).take(entry.was.size).forEachIndexed { index, label ->
+                val active = index == entry.active
+                Surface(
+                    onClick = { actions.onOpeningField(index) },
+                    shape = PanelShape,
+                    color = if (active) colors.field else colors.surface,
+                    modifier = Modifier.weight(1f).semantics { selected = active },
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, color = colors.inkSecondary)
+                        Text(
+                            text = grouped(entry.sizes[index]),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = if (entry.digits[index].isEmpty()) colors.inkTertiary else colors.ink,
+                        )
+                    }
+                }
+            }
+        }
+        NumberKeys(actions, stringResource(R.string.inspector_done), actions.onConfirmOpening, enabled = entry.sizes != entry.was)
+    }
+}
+
 // How thick a layer of a wall type is, typed for insulation and for a gap.
 @Composable
 internal fun LayerPad(

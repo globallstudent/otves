@@ -224,6 +224,20 @@ internal data class PartitionEntry(
     val refused: Boolean = false,
 )
 
+/**
+ * The selected opening's sizes being typed, in millimetres: its width, its height and, for one
+ * that is no door, how high over the floor it starts. A size with no digits keeps what it [was].
+ */
+internal data class OpeningEntry(
+    val opening: ElementId,
+    val was: List<Mm>,
+    val digits: List<String> = was.map { "" },
+    val active: Int = 0,
+) {
+    val sizes: List<Mm>
+        get() = digits.mapIndexed { index, typed -> typed.toLongOrNull()?.let(::Mm) ?: was[index] }
+}
+
 /** The thickness of a wall type's layer being typed, in millimetres; it [was] this thick. */
 internal data class LayerEntry(
     val layer: ElementId,
@@ -309,6 +323,7 @@ internal data class EditorUiState(
     /** The wall type whose layers are open to be changed (docs/adr/0014). */
     val kindEdited: ElementId? = null,
     val layerEntry: LayerEntry? = null,
+    val openingEntry: OpeningEntry? = null,
     /** The names a room can have are open, for the selected space. */
     val roomKindsOpen: Boolean = false,
     /** What the job is estimated under; unset values follow the norms. */
@@ -332,8 +347,8 @@ internal data class EditorUiState(
     /** A number pad is open: until the number is entered, touches on the plan only move it. */
     val typing: Boolean
         get() =
-            entry != null || partition != null || room != null || layerEntry != null || sizeEntry != null || priceEntry != null ||
-                measure != null
+            entry != null || partition != null || room != null || layerEntry != null || openingEntry != null || sizeEntry != null ||
+                priceEntry != null || measure != null
 
     /** How thick the walls drawn next are: as their type, or else as chosen. */
     val drawnThickness: Mm
@@ -954,6 +969,10 @@ internal class EditorViewModel(
         if (state.value.partition != null) return partitioned(typed)
         if (state.value.room != null) return roomed(typed)
         if (state.value.layerEntry != null) return layered(typed)
+        // A window may start at the floor: a lone zero stays.
+        if (state.value.openingEntry != null) {
+            return opened { digits -> (digits + digit).let { if (it.all { key -> key == '0' }) "0" else typed(digits) } }
+        }
         if (state.value.sizeEntry != null) return sized(typed)
         if (state.value.priceEntry != null) {
             return priced { digits -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_PRICE_DIGITS } ?: digits }
@@ -1004,6 +1023,7 @@ internal class EditorViewModel(
         if (state.value.partition != null) return partitioned { it.dropLast(1) }
         if (state.value.room != null) return roomed { it.dropLast(1) }
         if (state.value.layerEntry != null) return layered { it.dropLast(1) }
+        if (state.value.openingEntry != null) return opened { it.dropLast(1) }
         if (state.value.sizeEntry != null) return sized { it.dropLast(1) }
         if (state.value.priceEntry != null) return priced { it.dropLast(1) }
         if (state.value.entry == null) return measured { it.copy(digits = it.digits.dropLast(1)) }
@@ -1224,6 +1244,43 @@ internal class EditorViewModel(
         val part = state.value.selected as? Selected.OpeningPart ?: return
         send(gesture(resize(part.id, part.opening, size)))
     }
+
+    /** Opens the keys for the selected opening's own sizes: a door has no height over the floor. */
+    fun editOpening() {
+        val part = state.value.selected as? Selected.OpeningPart ?: return
+        val opening = part.opening
+        val was = listOfNotNull(opening.width, opening.height, opening.sill.takeIf { opening.kind != OpeningKind.DOOR })
+        state.update { it.copy(openingEntry = OpeningEntry(part.id, was)) }
+    }
+
+    /** Which of the opening's sizes the keys go to. */
+    fun chooseOpeningSize(index: Int) = state.update { current -> current.copy(openingEntry = current.openingEntry?.copy(active = index)) }
+
+    fun cancelOpening() = state.update { it.copy(openingEntry = null) }
+
+    /** Gives the opening the typed sizes about its centre, as one undo step. */
+    fun confirmOpening() {
+        val entry = state.value.openingEntry ?: return
+        state.update { it.copy(openingEntry = null) }
+        val part = (state.value.selected as? Selected.OpeningPart)?.takeIf { it.id == entry.opening } ?: return
+        val sizes = entry.sizes
+        if (sizes == entry.was) return
+        val sill = sizes.getOrNull(2)?.takeIf { it != part.opening.sill }
+        send(
+            gesture(
+                resize(part.id, part.opening, OpeningSize(sizes[0], sizes[1])) +
+                    listOfNotNull(sill?.let { EngineCommand.SetOpeningSill(part.id, it) }),
+            ),
+        )
+    }
+
+    // Changes the digits of the opening's size being typed.
+    private fun opened(change: (String) -> String) =
+        state.update { current ->
+            val entry = current.openingEntry ?: return@update current
+            val digits = entry.digits.mapIndexed { index, typed -> if (index == entry.active) change(typed) else typed }
+            current.copy(openingEntry = entry.copy(digits = digits))
+        }
 
     fun removeSelected() {
         val command =

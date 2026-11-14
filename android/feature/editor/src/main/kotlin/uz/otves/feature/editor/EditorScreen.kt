@@ -118,6 +118,10 @@ fun EditorRoute(
                 onWallThickness = viewModel::setWallThickness,
                 onOpeningKind = viewModel::setOpeningKind,
                 onOpeningSize = viewModel::setOpeningSize,
+                onEditOpening = viewModel::editOpening,
+                onOpeningField = viewModel::chooseOpeningSize,
+                onCancelOpening = viewModel::cancelOpening,
+                onConfirmOpening = viewModel::confirmOpening,
                 onDelete = viewModel::removeSelected,
                 onTakeoff = viewModel::showTakeoff,
                 onEditLength = viewModel::editLength,
@@ -205,6 +209,10 @@ internal data class EditorActions(
     val onWallThickness: (Mm) -> Unit = {},
     val onOpeningKind: (OpeningKind) -> Unit = {},
     val onOpeningSize: (OpeningSize) -> Unit = {},
+    val onEditOpening: () -> Unit = {},
+    val onOpeningField: (Int) -> Unit = {},
+    val onCancelOpening: () -> Unit = {},
+    val onConfirmOpening: () -> Unit = {},
     val onDelete: () -> Unit = {},
     val onTakeoff: (open: Boolean) -> Unit = {},
     val onEditLength: (ElementId) -> Unit = {},
@@ -332,6 +340,7 @@ internal fun EditorScreen(
             val partition = state.partition
             val room = state.room
             val layerEntry = state.layerEntry
+            val openingEntry = state.openingEntry
             val edited = state.kinds.find { it.id == state.kindEdited }
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 when {
@@ -339,6 +348,7 @@ internal fun EditorScreen(
                     partition != null -> PartitionPad(partition, actions)
                     room != null -> RoomPad(room, actions)
                     layerEntry != null -> LayerPad(layerEntry, actions)
+                    openingEntry != null -> OpeningPad(openingEntry, actions)
                     sizeEntry != null -> SizePad(sizeEntry, actions)
                     priceEntry != null -> PricePad(priceEntry, state, actions)
                     measure != null -> MeasurePad(measure, state, actions)

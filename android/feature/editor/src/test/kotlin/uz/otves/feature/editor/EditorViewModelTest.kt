@@ -1734,6 +1734,66 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun anOpeningTakesSizesOfTheBuildersOwn() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.buildWall()
+        viewModel.selectTool(Tool.WINDOW)
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+        val window =
+            checkNotNull(
+                viewModel.uiState.value.drawing.polygons
+                    .single { it.fill == FillKind.GAP }
+                    .element,
+            )
+        viewModel.selectTool(Tool.SELECT)
+        engine.pickNext = window
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+        val before = (viewModel.uiState.value.selected as Selected.OpeningPart).opening
+
+        // A window has a width, a height and a height over the floor; each stands until typed.
+        viewModel.editOpening()
+        assertThat(viewModel.uiState.value.openingEntry).isEqualTo(OpeningEntry(window, listOf(before.width, before.height, before.sill)))
+        assertThat(viewModel.uiState.value.typing).isTrue()
+
+        // Nothing typed changes nothing.
+        viewModel.confirmOpening()
+        assertThat(viewModel.uiState.value.openingEntry).isNull()
+        assertThat(engine.sent.last()).doesNotContain(EngineCommand.BeginGesture)
+
+        // The height, and a window that starts at the floor.
+        viewModel.editOpening()
+        viewModel.chooseOpeningSize(1)
+        "1400".forEach { viewModel.typeDigit(it.digitToInt()) }
+        viewModel.chooseOpeningSize(2)
+        viewModel.typeDigit(0)
+        assertThat(
+            viewModel.uiState.value.openingEntry
+                ?.sizes,
+        ).containsExactly(before.width, 1_400.mm, 0.mm).inOrder()
+        viewModel.confirmOpening()
+
+        assertThat(engine.sent.last())
+            .containsExactly(
+                EngineCommand.BeginGesture,
+                EngineCommand.MoveOpening(window, before.offset),
+                EngineCommand.ResizeOpening(window, before.width, 1_400.mm),
+                EngineCommand.SetOpeningSill(window, 0.mm),
+                EngineCommand.EndGesture,
+            ).inOrder()
+        val after = (viewModel.uiState.value.selected as Selected.OpeningPart).opening
+        assertThat(after.height).isEqualTo(1_400.mm)
+        assertThat(after.sill).isEqualTo(0.mm)
+
+        // A door has no height over the floor to type.
+        viewModel.setOpeningKind(OpeningKind.DOOR)
+        viewModel.editOpening()
+        assertThat(
+            viewModel.uiState.value.openingEntry
+                ?.was,
+        ).hasSize(2)
+    }
+
+    @Test
     fun anotherKindIsOneStepWithItsUsualSizeAndSillAboutTheSameCentre() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.buildWall()

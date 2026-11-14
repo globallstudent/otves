@@ -220,4 +220,6 @@
     <string name="layer_facing">Қоплама</string>
     <string name="layer_gap_title">Оралиқ</string>
     <string name="layer_thickness_title">Қатлам қалинлиги, мм</string>
+    <string name="opening_size_title">Тешик ўлчами</string>
+    <string name="size_sill">Полдан, мм</string>
 </resources>

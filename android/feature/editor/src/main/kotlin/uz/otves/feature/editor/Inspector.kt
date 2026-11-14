@@ -96,10 +96,13 @@ internal fun Inspector(
                     onSelect = { actions.onOpeningKind(OpeningKind.entries[it]) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // The size the opening has, which opens the keys for one of the builder's own,
+                // then the usual sizes of its kind.
                 InspectorRow(stringResource(R.string.inspector_size)) {
                     val current = OpeningSize(opening.width, opening.height)
-                    sizesFor(opening.kind).forEach { size ->
-                        Pill(sizeName(size), size == current, { actions.onOpeningSize(size) })
+                    Pill(sizeName(current), true, actions.onEditOpening, trailing = OtvesIcons.ChevronDown)
+                    sizesFor(opening.kind).filter { it != current }.forEach { size ->
+                        Pill(sizeName(size), false, { actions.onOpeningSize(size) })
                     }
                 }
                 OpeningRows(selected, state, actions)

@@ -220,4 +220,6 @@
     <string name="layer_facing">Qoplama</string>
     <string name="layer_gap_title">Oraliq</string>
     <string name="layer_thickness_title">Qatlam qalinligi, mm</string>
+    <string name="opening_size_title">Teshik o‘lchami</string>
+    <string name="size_sill">Poldan, mm</string>
 </resources>

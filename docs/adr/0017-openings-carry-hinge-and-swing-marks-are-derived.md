@@ -45,4 +45,4 @@ flowchart LR
 - Job file version 8: `opening` gains `hinge` and `swing`; old doors keep the way they were drawn.
 - Bridge schema: `ListedOpening` and `Drawing.openings` are appended for the schedule.
 - A door of two leaves and a sliding door are not modelled yet.
-- The sill and the height of a window are not typed in the app yet; sizes come from the list.
+- An opening's width, height and height over the floor are typed in its panel; the usual sizes stay beside them.
