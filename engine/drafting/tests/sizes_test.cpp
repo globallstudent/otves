@@ -306,12 +306,16 @@ TEST(DraftSizes, AMarkStandsClearOfTheSizesOfTheRoomsItsOpeningIsBetween) {
   ASSERT_EQ(shown.size(), 1U);
   expect_near(shown[0].at, {.x = 2.95, .y = 1.8 - 0.2});
 
-  // On a sheet both rooms have a chain along the wall, and the lower one its clear size under
-  // that: the mark goes over the number of the upper room's chain.
+  // On a sheet the wall between the rooms is sized once, in the first of two rooms as wide as
+  // each other: the lower one, where the mark stood. It goes to the other face, into the turn
+  // of the door's leaf, which it does not touch.
   plan.sheet = true;
-  const std::vector<Text> printed = texts(draft(plan, kText), TextKind::kDoorMark);
+  const Drawing sheet = draft(plan, kText);
+  EXPECT_EQ(texts(sheet, TextKind::kOpeningWidth).size(), 1U);
+  EXPECT_LT(texts(sheet, TextKind::kOpeningWidth)[0].at.y, 1.8);
+  const std::vector<Text> printed = texts(sheet, TextKind::kDoorMark);
   ASSERT_EQ(printed.size(), 1U);
-  expect_near(printed[0].at, {.x = 2.95, .y = 2.2 + (3.0 * 0.2)});
+  expect_near(printed[0].at, {.x = 2.95, .y = 2.2 + 0.2});
 }
 
 TEST(DraftSizes, ASheetLeavesOutTheLengthsOfTheWallsRoundItsSpaces) {

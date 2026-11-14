@@ -17,6 +17,8 @@
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
+#include "boxes.h"
+
 namespace otves::drafting {
 namespace {
 
@@ -141,6 +143,55 @@ RoomLabel off_swept(RoomLabel label, std::span<const Bounds> swept, bool named, 
   return label;
 }
 
+// How far a label steps across its line to look for a place clear of other texts, in text
+// heights.
+constexpr double kLabelStep = 0.5;
+
+// The label moved across its line off the texts already written: the nearest place where its
+// lines lie on the floor and meet none of them. Where there is none it stays.
+RoomLabel off_texts(const RoomLabel& label, const geom::Space& space, bool named,
+                    std::span<const Text> written, TextSize text) {
+  const Axis axis = label.along.y != 0.0 ? Axis::kY : Axis::kX;
+  const Stretch room = axis == Axis::kY ? label.wide : label.tall;
+  const double rise = (named ? 1.0 : 1.0 / 2) * text.height;
+  const double width = std::min(label.fit, (named ? kNameDigits : kAreaDigits) * text.digit);
+  const double at = along(label.at, axis);
+  const auto moved = [&label, axis](double by) {
+    RoomLabel there = label;
+    (axis == Axis::kY ? there.at.x : there.at.y) += by;
+    return there;
+  };
+  const auto is_free = [&](const RoomLabel& there) {
+    const double level = across(there.at, axis);
+    if (level - rise < room.from || level + rise > room.to) {
+      return false;
+    }
+    // The floor is as wide there as the label.
+    const std::optional<Stretch> floor = pick(stretches(space, axis, level), at);
+    if (!floor || floor->from > at - (width / 2) || floor->to < at + (width / 2)) {
+      return false;
+    }
+    const Box box{
+        .at = there.at, .along = there.along, .half_along = width / 2, .half_across = rise};
+    return std::ranges::none_of(written,
+                                [&](const Text& other) { return meet(box, box_of(other, text)); });
+  };
+  const double step = kLabelStep * text.height;
+  if (step <= 0.0) {
+    return label;
+  }
+  const auto steps = static_cast<int>(room.length() / step);
+  for (int away = 0; away <= steps; ++away) {
+    const double by = away * step;
+    for (const double way : {by, -by}) {
+      if (const RoomLabel there = moved(way); is_free(there)) {
+        return there;
+      }
+    }
+  }
+  return label;
+}
+
 }  // namespace
 
 std::optional<Stretch> stretch_across(const geom::Space& space, double y, double x) {
@@ -244,15 +295,21 @@ void draw_floors(std::span<const RoomSpace> spaces, Drawing& drawing) {
   }
 }
 
-void write_rooms(std::span<const RoomSpace> spaces, const RoomSpace* focused,
-                 std::span<const Bounds> swept, TextSize text, Drawing& drawing) {
+void write_rooms(std::span<const RoomSpace> spaces, const RoomSpace* focused, Avoid avoid,
+                 TextSize text, Drawing& drawing) {
+  // Labels keep off what was written before them, not off each other: each has its own floor.
+  const std::size_t before = drawing.texts.size();
   for (const RoomSpace& room : spaces) {
     const std::optional<RoomLabel> found = label_of(room.space, text);
     if (&room == focused || !found || found->across < text.height) {
       continue;
     }
     const bool named = !room.room.is_nil() && found->across >= 2 * text.height;
-    const std::optional<RoomLabel> label = off_swept(*found, swept, named, text);
+    std::optional<RoomLabel> label = off_swept(*found, avoid.swept, named, text);
+    if (avoid.texts) {
+      label = off_texts(*label, room.space, named,
+                        std::span<const Text>{drawing.texts}.first(before), text);
+    }
     const geom::Vec2 up = geom::perp(label->along) * (text.height / 2);
     if (named) {
       drawing.texts.push_back({.element = room.room,

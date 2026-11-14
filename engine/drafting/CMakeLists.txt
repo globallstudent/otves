@@ -1,4 +1,5 @@
 add_library(otves_drafting
+  src/boxes.cpp
   src/plan.cpp
   src/rooms.cpp
   src/sizes.cpp)

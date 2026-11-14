@@ -26,8 +26,19 @@ flowchart LR
 |---|---|---|
 | Room sizes | Of the space in focus, in place of its name | Of every space, beside its name |
 | Their stroke | `kChain`, the colour of what is selected | `kDimension`, ink |
-| Chain of an opening | Of the selected opening, when no space is in focus | Every side with openings has one |
+| Chain of an opening | Of the selected opening, when no space is in focus | One for each opening: a wall between two rooms is sized in the wider of them |
+| A room's label | At its label point | Written after the sizes, where they leave room for it |
 | Length of a wall round a space | Until somebody has typed or measured it | Never: the space's sizes say it |
+
+## Sizes on a sheet
+
+| Rule | Value |
+|---|---|
+| Order | Rooms from the widest to the narrowest, by the shorter stretch through the label point; a corridor comes last |
+| A side whose openings all stand in a chain already | Gets no chain: the room across the wall has it |
+| A clear size | 2,6 text heights from the top, or the left; further in by 1,3 while it would run through a number |
+| No room that way | By the wall itself, 1,2 text heights in, if no chain runs there and it strikes no number; else through the label point |
+| A label on a number | Moves across its line by half a text height at a time, either way, to the nearest place where it lies on the floor and meets no text; else it stays |
 
 ## What is drawn
 
@@ -66,8 +77,9 @@ Text width is the count of digits times the width of one. «≈» and its space 
 | Along the wall | By the middle of the opening |
 | First place | A text height from the face a leaf does not open to, to the mark's middle |
 | Next places | The same by the other face; then 1,9 and 3 text heights from each face: past a chain whose numbers stand on the wall's side of it, and past the numbers of one whose numbers stand beyond it |
-| A place is taken | When the mark's box meets a text written before it, or a dimension line or a tick runs through it |
-| No free place | The first one is used |
+| A place is taken | When the mark's box meets a text written before it, or a dimension line, a tick, a door's leaf or its swing runs through it |
+| No place is clear of all that | The nearest that is clear of the texts and the dimension lines |
+| No such place either | The first one is used |
 | Reading | As a length: from the left; on an upright wall from the bottom up |
 
 A mark is taken to be five digits wide.

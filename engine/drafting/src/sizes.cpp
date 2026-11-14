@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <numbers>
 #include <optional>
 #include <span>
@@ -303,17 +304,113 @@ void write_opening_sizes(std::span<const RoomSpace> spaces, std::span<const geom
   }
 }
 
-void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
-                 std::span<const geom::PlacedOpening> openings, Stroke stroke, TextSize text,
-                 Drawing& drawing) {
+namespace {
+
+// What a space's sizes are written with: the stroke of their lines and, on a sheet, the
+// openings that already stand in a chain, sorted.
+struct Sizing {
+  Stroke stroke = Stroke::kChain;
+  std::vector<ElementId>* chained = nullptr;
+};
+
+// Whether a chain along the side would say nothing new.
+bool is_chained(std::span<const Gap> gaps, const std::vector<ElementId>* chained) {
+  return chained != nullptr && std::ranges::all_of(gaps, [chained](const Gap& gap) {
+           return std::ranges::binary_search(*chained, gap.opening);
+         });
+}
+
+// What is written of a space so far: its numbers and the lines they stand by.
+struct Written {
+  std::span<const Text> numbers;
+  std::span<const Line> lines;
+};
+
+// Whether one of the lines runs the same way within half a step of a line across the plan (or
+// up it) at `level`, along `stretch`: a chain that the clear size would lie on.
+bool runs_beside(std::span<const Line> lines, bool across, double level, Stretch stretch,
+                 TextSize text) {
+  const auto along = [across](geom::Vec2 point) { return across ? point.x : point.y; };
+  const auto at = [across](geom::Vec2 point) { return across ? point.y : point.x; };
+  return std::ranges::any_of(lines, [&](const Line& line) {
+    return std::abs(at(line.from) - at(line.to)) <= kEpsilon &&
+           std::abs(at(line.from) - level) < kClearStep * text.height / 2 &&
+           std::max(along(line.from), along(line.to)) > stretch.from &&
+           std::min(along(line.from), along(line.to)) < stretch.to;
+  });
+}
+
+// Which clear size is placed, and for what.
+struct Clear {
+  bool across = true;  // across the plan, near the top; else up it, near the left
+  bool sheet = false;  // beside the room's label, which stands at its label point
+};
+
+// Where a clear size's line runs, and the stretch of floor it spans.
+struct ClearLine {
+  double level = 0.0;
+  Stretch stretch;
+};
+
+// A line that would run through a number written before it moves further in, a step at a
+// time. Where that brings it to the label point, a sheet has it by the wall instead, if no
+// chain runs there and it strikes nothing; else it runs through the label point, as it does in
+// a low or narrow space.
+ClearLine clear_line(const geom::Space& space, const RoomLabel& label, Clear clear, Written written,
+                     TextSize text) {
+  const bool across = clear.across;
+  const double middle = across ? label.at.y : label.at.x;
+  const Stretch whole = across ? label.wide : label.tall;
+  // From the top down, or from the left in: `in` is how far from that wall.
+  const auto level_at = [&](double in) {
+    return across ? label.tall.to - in : label.wide.from + in;
+  };
+  const auto stretch_at = [&](double level) {
+    return (across ? stretch_across(space, level, label.at.x)
+                   : stretch_up(space, level, label.at.y))
+        .value_or(whole);
+  };
+  const auto reaches_middle = [&](double level) {
+    return across ? level <= middle : level >= middle;
+  };
+  for (double in = kClearInset * text.height;; in += kClearStep * text.height) {
+    const double level = level_at(in);
+    if (reaches_middle(level) || text.height <= 0.0) {
+      break;
+    }
+    const Stretch stretch = stretch_at(level);
+    if (!strikes(written.numbers, across, level, stretch, text)) {
+      return {.level = level, .stretch = stretch};
+    }
+  }
+  const double by_wall = level_at(kChainInset * text.height);
+  const Stretch there = stretch_at(by_wall);
+  if (clear.sheet && !reaches_middle(by_wall) &&
+      !strikes(written.numbers, across, by_wall, there, text) &&
+      !runs_beside(written.lines, across, by_wall, there, text)) {
+    return {.level = by_wall, .stretch = there};
+  }
+  return {.level = middle, .stretch = whole};
+}
+
+void write_sizes_of(const RoomSpace& room, std::span<const geom::WallInput> walls,
+                    std::span<const geom::PlacedOpening> openings, Sizing sizing, TextSize text,
+                    Drawing& drawing) {
   const geom::Space& space = room.space;
   const std::size_t first = drawing.texts.size();  // the numbers of this space come after
+  const std::size_t first_line = drawing.lines.size();
   for (const geom::Side& side : geom::sides_of(space, walls)) {
     const std::vector<Gap> gaps = gaps_of(side, openings);
-    if (!gaps.empty()) {
-      Chain chain = chain_along(side, gaps, text);
-      chain.stroke = stroke;
-      write(chain, text, drawing);
+    if (gaps.empty() || is_chained(gaps, sizing.chained)) {
+      continue;
+    }
+    Chain chain = chain_along(side, gaps, text);
+    chain.stroke = sizing.stroke;
+    write(chain, text, drawing);
+    if (sizing.chained != nullptr) {
+      for (const Gap& gap : gaps) {
+        sizing.chained->insert(std::ranges::lower_bound(*sizing.chained, gap.opening), gap.opening);
+      }
     }
   }
   const std::optional<RoomLabel> label = label_of(space, text);
@@ -321,45 +418,48 @@ void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
     return;
   }
   // Across near the top and up near the left, each clear of a chain along that side, so the
-  // two lines cross in a corner. A line that would run through a number written before it
-  // moves further in, a step at a time; in a low or narrow space it runs through the middle.
-  const auto numbers = [&drawing, first] {
-    return std::span<const Text>{drawing.texts}.subspan(first);
+  // two lines cross in a corner.
+  const bool sheet = sizing.chained != nullptr;
+  for (const bool across : {true, false}) {
+    const Written written{.numbers = std::span<const Text>{drawing.texts}.subspan(first),
+                          .lines = std::span<const Line>{drawing.lines}.subspan(first_line)};
+    const ClearLine line =
+        clear_line(space, *label, {.across = across, .sheet = sheet}, written, text);
+    Chain chain = clear_size(space, across, line.level, line.stretch);
+    chain.stroke = sizing.stroke;
+    write(chain, text, drawing);
+  }
+}
+
+}  // namespace
+
+void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
+                 std::span<const geom::PlacedOpening> openings, Stroke stroke, TextSize text,
+                 Drawing& drawing) {
+  write_sizes_of(room, walls, openings, {.stroke = stroke, .chained = nullptr}, text, drawing);
+}
+
+void write_sheet_sizes(std::span<const RoomSpace> spaces, std::span<const geom::WallInput> walls,
+                       std::span<const geom::PlacedOpening> openings, TextSize text,
+                       Drawing& drawing) {
+  // How narrow a room is: the shorter of the stretches through its label point.
+  struct Order {
+    const RoomSpace* room = nullptr;
+    double narrow = 0.0;
   };
-  const double inset = kClearInset * text.height;
-  const double step = kClearStep * text.height;
-  double height = label->tall.to - inset;
-  Stretch wide = label->wide;
-  for (;; height -= step) {
-    if (height <= label->at.y) {
-      height = label->at.y;
-      wide = label->wide;
-      break;
-    }
-    wide = stretch_across(space, height, label->at.x).value_or(label->wide);
-    if (!strikes(numbers(), true, height, wide, text)) {
-      break;
-    }
+  std::vector<Order> order;
+  order.reserve(spaces.size());
+  for (const RoomSpace& room : spaces) {
+    const std::optional<RoomLabel> label = label_of(room.space, text);
+    order.push_back({.room = &room,
+                     .narrow = label ? std::min(label->wide.length(), label->tall.length()) : 0.0});
   }
-  Chain level = clear_size(space, true, height, wide);
-  level.stroke = stroke;
-  write(level, text, drawing);
-  double across = label->wide.from + inset;
-  Stretch tall = label->tall;
-  for (;; across += step) {
-    if (across >= label->at.x) {
-      across = label->at.x;
-      tall = label->tall;
-      break;
-    }
-    tall = stretch_up(space, across, label->at.y).value_or(label->tall);
-    if (!strikes(numbers(), false, across, tall, text)) {
-      break;
-    }
+  std::ranges::stable_sort(order, std::ranges::greater{}, &Order::narrow);
+  std::vector<ElementId> chained;
+  for (const Order& next : order) {
+    write_sizes_of(*next.room, walls, openings, {.stroke = Stroke::kDimension, .chained = &chained},
+                   text, drawing);
   }
-  Chain upright = clear_size(space, false, across, tall);
-  upright.stroke = stroke;
-  write(upright, text, drawing);
 }
 
 }  // namespace otves::drafting

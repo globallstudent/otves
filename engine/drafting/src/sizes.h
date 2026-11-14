@@ -22,6 +22,13 @@ void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
                  std::span<const geom::PlacedOpening> openings, Stroke stroke, TextSize text,
                  Drawing& drawing);
 
+// The sizes of every space, for a sheet, in ink. A wall with a room on either side is sized
+// once: the rooms are taken from the widest to the narrowest, and a side all of whose openings
+// already stand in a chain gets none, so a corridor does not repeat the chains of its rooms.
+void write_sheet_sizes(std::span<const RoomSpace> spaces, std::span<const geom::WallInput> walls,
+                       std::span<const geom::PlacedOpening> openings, TextSize text,
+                       Drawing& drawing);
+
 // The chain of the side the selected opening is in: wall, opening, wall along that side of a
 // space, the one a door opens into where there is one (docs/adr/0017). Nothing when `selected`
 // is no opening of the plan or its wall is round no space.
