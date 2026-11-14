@@ -222,4 +222,5 @@
     <string name="layer_thickness_title">Qatlam qalinligi, mm</string>
     <string name="opening_size_title">Teshik o‘lchami</string>
     <string name="size_sill">Poldan, mm</string>
+    <string name="sheet_plan_scale">%1$s, M 1:%2$d</string>
 </resources>

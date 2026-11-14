@@ -233,7 +233,17 @@ class EngineSessionTest {
         val catalog = ContentAssets.catalog(assets)
         assertThat(catalog.units.map { it.size }).contains(brick)
         // The sheet for plans: A4 across, its frame 20 mm from the bound edge and 5 mm from the rest.
-        assertThat(catalog.sheet).isEqualTo(SheetFormat(width = 297.0, height = 210.0, binding = 20.0, edge = 5.0, textHeight = 2.5))
+        assertThat(catalog.sheet)
+            .isEqualTo(
+                SheetFormat(
+                    width = 297.0,
+                    height = 210.0,
+                    binding = 20.0,
+                    edge = 5.0,
+                    textHeight = 2.5,
+                    scales = listOf(50, 75, 100, 200, 400, 500),
+                ),
+            )
     }
 
     @Test

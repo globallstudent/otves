@@ -242,4 +242,5 @@
     <string name="layer_of" translatable="false">%1$s, %2$s</string>
     <string name="opening_size_title">Размер проёма</string>
     <string name="size_sill">От пола, мм</string>
+    <string name="sheet_plan_scale">%1$s, М 1:%2$d</string>
 </resources>

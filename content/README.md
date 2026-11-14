@@ -57,7 +57,7 @@ The engine adds no waste and no rounding; the rule does both. An item is made of
 | `rules/junction_meshes.luau` | `mesh.junction` pieces where two or more load-bearing walls meet on the storeys that ask for them, one per pitch below the top; fails above 9 points, where КМК 3.5.1 meshes are not modelled |
 | `rules/insulation.luau` | Insulation inside the walls by the face it covers, one line per thickness (`insulation.100`); no allowance, no figure for offcuts is researched | — |
 | `catalog/wall_types.json` | Wall make-ups from the outer face in: facing brick, 100 mm insulation and block or brick; bearing walls of 380 brick and 390 block; partitions of 120 brick and 190 block | [ADR 0014](../docs/adr/0014-wall-types-are-job-elements-made-of-layers.md); units of `masonry_units.json` |
-| `catalog/sheet.json` | The sheet for plans: A4 across, the frame 20 mm from the bound edge and 5 mm from the others, text 2.5 mm high | ГОСТ 2.301-68, table 1; ГОСТ 2.104-2006, 5.1, form 1; ГОСТ 2.304-81 |
+| `catalog/sheet.json` | The sheet for plans: A4 across, the frame 20 mm from the bound edge and 5 mm from the others, text 2.5 mm high, the scales a plan is drawn at from 1:50 to 1:500 | ГОСТ 2.301-68, table 1; ГОСТ 2.104-2006, 5.1, form 1; ГОСТ 2.304-81; ГОСТ 2.302-68 |
 | `catalog/masonry_units.json` | 1НФ, 1,4НФ and 2,1НФ (ГОСТ 530-2012), 390 × 190 × 188 block (ГОСТ 6133-2019) | the standards |
 | `catalog/conditions.json` | The values offered for each estimating condition, with the default of `norms/practice` | [ADR 0009](../docs/adr/0009-job-conditions.md) |
 | `catalog/ring_beam.json` | Ring beam heights from 150 mm | КМК 2.01.03-19, 3.5.10 | `seismic`, `practice` |

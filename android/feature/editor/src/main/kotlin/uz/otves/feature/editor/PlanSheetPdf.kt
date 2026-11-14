@@ -56,6 +56,7 @@ internal class PlanSheetPdf(
     private val planWidth = sideLeft - PAD - planLeft
     private val planHeight = frameBottom - PAD - planTop
     private val labelSize = format.textHeight.toFloat() * POINTS_PER_MM
+    private val scales = format.scales
 
     private val caption = text(CAPTION_SIZE, INK, bold = true)
     private val head = text(TEXT_SIZE, SECONDARY)
@@ -101,10 +102,12 @@ internal class PlanSheetPdf(
             sheet = true,
         )
 
-    // Where a storey's plan lies in the plan box: as large as the box allows with room around
-    // the walls for the sizes written outside them, and in its middle.
+    // Where a storey's plan lies in the plan box: at the largest of the sheet's scales that
+    // leaves room around the walls for the sizes written outside them, and in its middle. A plan
+    // too large for every scale is drawn as large as the box allows, at no scale to name.
     private class Placed(
         val frame: PlanFrame,
+        val scale: Int?,
     )
 
     private fun place(storey: Storey): Placed? {
@@ -114,10 +117,12 @@ internal class PlanSheetPdf(
         val bottom = points.minOf { it.y }
         val wide = (points.maxOf { it.x } - left).coerceAtLeast(MIN_EXTENT)
         val tall = (points.maxOf { it.y } - bottom).coerceAtLeast(MIN_EXTENT)
-        val scale = minOf((planWidth - 2 * SIZE_ROOM) / wide, (planHeight - 2 * SIZE_ROOM) / tall).toFloat()
+        val fitted = minOf((planWidth - 2 * SIZE_ROOM) / wide, (planHeight - 2 * SIZE_ROOM) / tall).toFloat()
+        val named = namedScale(scales, fitted)
+        val scale = named?.let(::pointsPerMetre) ?: fitted
         val x = planLeft + (planWidth - (wide * scale).toFloat()) / 2
         val y = planTop + (planHeight + (tall * scale).toFloat()) / 2
-        return Placed(PlanFrame(originX = x - (left * scale).toFloat(), originY = y + (bottom * scale).toFloat(), scale = scale))
+        return Placed(PlanFrame(originX = x - (left * scale).toFloat(), originY = y + (bottom * scale).toFloat(), scale = scale), named)
     }
 
     /**
@@ -164,7 +169,7 @@ internal class PlanSheetPdf(
         y = rooms(canvas, drawing.rooms, y)
         y = openings(canvas, drawing.openings, y + SECTION_GAP)
         legend(canvas, drawing, y + SECTION_GAP)
-        stamp(canvas, state, storeyNumber, date)
+        stamp(canvas, state, storeyNumber, placed.scale, date)
     }
 
     // The room schedule: every space by its name with its floor, and their sum.
@@ -246,6 +251,7 @@ internal class PlanSheetPdf(
         canvas: Canvas,
         state: EditorUiState,
         storeyNumber: Int,
+        scale: Int?,
         date: LocalDate,
     ) {
         val top = frameBottom - STAMP_HEIGHT
@@ -253,7 +259,10 @@ internal class PlanSheetPdf(
         val width = SIDE_WIDTH - 2 * PAD
         val name = state.name.ifBlank { resources.getString(R.string.editor_title) }
         canvas.drawText(fit(name, title, width), sideLeft + PAD, top + PAD + TITLE_SIZE, title)
-        canvas.drawText(resources.getString(R.string.sheet_plan, storeyNumber), sideLeft + PAD, top + PAD + TITLE_SIZE + ROW, body)
+        val plan = resources.getString(R.string.sheet_plan, storeyNumber)
+        // «План 1 этажа, М 1:100»; a plan too large for a scale has none to name.
+        val line = if (scale == null) plan else resources.getString(R.string.sheet_plan_scale, plan, scale)
+        canvas.drawText(line, sideLeft + PAD, top + PAD + TITLE_SIZE + ROW, body)
         // The language of the strings, not of the phone: Russian text gets a Russian date.
         val locale = Locale.forLanguageTag(resources.getString(R.string.editor_date_locale))
         val day = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(locale))
@@ -313,8 +322,6 @@ internal class PlanSheetPdf(
     }
 
     private companion object {
-        // A PDF page is measured in points, 72 to the inch.
-        const val POINTS_PER_MM = 72f / 25.4f
         const val FRAME_WIDTH = 1.2f
 
         // The schedules and the title block stand in a column at the right of the frame.
@@ -346,6 +353,23 @@ internal class PlanSheetPdf(
         const val PAPER = 0xFFFFFFFF.toInt()
     }
 }
+
+/** How many points on the sheet a metre of the plan takes at 1:[scale]. */
+internal fun pointsPerMetre(scale: Int): Float = MM_PER_METRE / scale * POINTS_PER_MM
+
+/**
+ * The scale to draw a plan at: of [scales], each the n of a 1:n and the largest scale first, the
+ * first at which the plan is no larger than [fitted] points a metre lets it be. Null when the
+ * plan is too large for all of them.
+ */
+internal fun namedScale(
+    scales: List<Int>,
+    fitted: Float,
+): Int? = scales.firstOrNull { pointsPerMetre(it) <= fitted }
+
+// A PDF page is measured in points, 72 to the inch.
+private const val POINTS_PER_MM = 72f / 25.4f
+private const val MM_PER_METRE = 1000f
 
 /**
  * Writes the plans into the cache and offers them to the apps that take a PDF. [sheets] asks the

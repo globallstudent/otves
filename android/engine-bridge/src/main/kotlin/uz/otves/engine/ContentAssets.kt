@@ -32,6 +32,7 @@ public data class WallTypeTemplate(
 /**
  * The sheet plans are printed on (content/catalog/sheet.json), in millimetres: its size, how far
  * its frame lies from the edge that is bound and from the other edges, and how high its text is.
+ * A plan is drawn at one of the [scales], each the n of its 1:n, the largest first.
  */
 public data class SheetFormat(
     public val width: Double,
@@ -39,6 +40,7 @@ public data class SheetFormat(
     public val binding: Double,
     public val edge: Double,
     public val textHeight: Double,
+    public val scales: List<Int> = emptyList(),
 )
 
 /** What the app offers the builder to choose from (content/catalog); sizes come from standards. */
@@ -92,6 +94,7 @@ public object ContentAssets {
             binding = frame.getDouble("binding"),
             edge = frame.getDouble("edge"),
             textHeight = sheet.getDouble("text_height"),
+            scales = sheet.optJSONArray("scales")?.let { scales -> (0 until scales.length()).map(scales::getInt).sorted() }.orEmpty(),
         )
     }
 

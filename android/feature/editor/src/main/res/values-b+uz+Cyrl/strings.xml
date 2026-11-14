@@ -222,4 +222,5 @@
     <string name="layer_thickness_title">Қатлам қалинлиги, мм</string>
     <string name="opening_size_title">Тешик ўлчами</string>
     <string name="size_sill">Полдан, мм</string>
+    <string name="sheet_plan_scale">%1$s, М 1:%2$d</string>
 </resources>

@@ -8,7 +8,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 
 | Area | Today | What blocks the goal |
 |---|---|---|
-| Drawing | `drafting::draft` places everything on the plan; one `PlanPainter` paints the screen and the PDF (ADR 0013). The plans go out as PDF sheets: a frame, every room's sizes, the room and opening schedules, a legend and a title block | A sheet is fitted to A4, not drawn at a named scale; sizes on paper are ratios of the text height, not the СПДС offsets |
+| Drawing | `drafting::draft` places everything on the plan; one `PlanPainter` paints the screen and the PDF (ADR 0013). The plans go out as PDF sheets at a standard scale: a frame, every room's sizes, the room and opening schedules, a legend and a title block | A sheet is A4 only; sizes on paper are ratios of the text height, not the СПДС offsets |
 | Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line. A type's layers take other thicknesses, and every wall of the type follows | A layer keeps the material its catalog template gave it; a layer cannot be added or taken out |
 | Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015). A sheet lists them with their areas | A label may still lie under a door's swing in a room too small to move it |
 | Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value; a partition goes across a room at a typed distance from one of its walls; a room is built from its clear size at a touched corner (ADR 0016) | A room built against an outer corner is not flush with it; a room cannot be turned off the plan's axes |
@@ -67,7 +67,7 @@ The engine answers a `Draw` query with a `Drawing` for one level.
 | Handle | the element and, for a dimension, what editing it means |
 
 - `Draw` names the level and how big the label text is on the plan: a line's height and a digit's width in plan millimetres. The engine uses them to place labels and drop the ones that do not fit. `Draw.sheet` says the drawing is for a sheet: every space gets its sizes.
-- The sheet's size, its frame and the height of its text are in `content/catalog/sheet.json` (rule 5), read by the app that lays the page out. Ticks and offsets stay ratios of the text height in `drafting`, on a sheet as on a screen. The СПДС offsets on paper, 10 mm to the first dimension line and 7 mm between lines, are open.
+- The sheet's size, its frame, the height of its text and the scales a plan is drawn at are in `content/catalog/sheet.json` (rule 5), read by the app that lays the page out. A plan is drawn at the largest of those scales it fits at, named in the title block: «М 1:100». Ticks and offsets stay ratios of the text height in `drafting`, on a sheet as on a screen. The СПДС offsets on paper, 10 mm to the first dimension line and 7 mm between lines, are open.
 - One `PlanPainter` over `android.graphics.Canvas` serves Compose and the PDF. It maps `Fill` and `Stroke` to paints and formats numbers; it positions nothing.
 - `Response.outlines` stays, for the plan's extent and the walls' lengths. `Response.openings` has no reader in the app any more.
 
@@ -132,7 +132,7 @@ flowchart LR
 | 4 | Rooms | `geom/spaces`, `Room`, floors and room texts in `drafting` | Room labels, room panel | v7 | G31, G34 | built; a room's sizes come with slice 5 |
 | 5 | Dimensions | Sizes in `drafting`, `SetDimension`, `translate_wall`, `set_distance`, `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | built |
 | 6 | Openings | hinge, swing, marks, `CenterOpening`, the selected opening's chain | Door panel | v8 | G37 | built |
-| 7 | Sheets | `Draw.sheet`, room and opening schedules, marks clear of sizes | Frame, tables, legend, title block, PDF of plans | — | G38 | built; one storey to an A4 page, fitted, not at a named scale |
+| 7 | Sheets | `Draw.sheet`, room and opening schedules, marks clear of sizes | Frame, tables, legend, title block, PDF of plans | — | G38 | built; one storey to an A4 page, at the largest standard scale it fits at |
 
 Slice 1 comes first because it is the smallest end-to-end change: it proves the recipe below before the larger slices use it. Columns, porch, stairs, tracing over a PDF, roof, facades and 3D follow slice 7.
 
