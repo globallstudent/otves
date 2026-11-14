@@ -321,6 +321,26 @@ TEST(DraftSizes, AMarkStandsClearOfTheSizesOfTheRoomsItsOpeningIsBetween) {
   expect_near(printed[0].at, {.x = 2.95, .y = 2.2 + 0.2});
 }
 
+TEST(DraftSizes, AWallsLengthKeepsOffTheChainOfTheSelectedOpening) {
+  // The bottom wall was sketched: nobody has given its length. Its window is selected.
+  std::vector<geom::WallInput> walls = box();
+  walls[0] = wall(1, at(0, 0), at(6000, 0), false);
+  const std::vector<geom::PlacedOpening> openings{window(20, walls[0], 1000_mm)};
+  Plan plan{.walls = walls, .openings = openings, .below = {}};
+
+  // With nothing selected the length stands inside, by the wall's left face.
+  const std::vector<Text> plain = texts(draft(plan, kText), TextKind::kAboutLength);
+  ASSERT_EQ(plain.size(), 1U);
+  expect_near(plain[0].at, {.x = 3.0, .y = 0.2 + 0.05 + 0.1});
+
+  // The window's chain runs along that face: the length goes to the other one, so it is not
+  // read as a size of the chain.
+  plan.selected = id(20);
+  const std::vector<Text> beside = texts(draft(plan, kText), TextKind::kAboutLength);
+  ASSERT_EQ(beside.size(), 1U);
+  expect_near(beside[0].at, {.x = 3.0, .y = -0.2 - 0.05 - 0.1});
+}
+
 TEST(DraftSizes, ASheetLeavesOutTheLengthsOfTheWallsRoundItsSpaces) {
   // Nobody has given the length of any of these walls; the last one closes nothing.
   std::vector<geom::WallInput> walls;

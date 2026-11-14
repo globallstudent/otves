@@ -66,7 +66,7 @@ Painting order is the order of the lists: polygons, lines, arcs, texts. Floors c
 |---|---|
 | First place | The middle of the wall, by its left face, a quarter of a text height clear |
 | Next places | The other face, then 0,3 and 0,7 of the way along, each by the left face first |
-| A place is taken | When the text's middle or either end lies on another wall, or the text comes within a quarter of a text height of one written before it: a room's name or area, a size, another length |
+| A place is taken | When the text's middle or either end lies on another wall, or the text comes within a quarter of a text height of one written before it: a room's name or area, a size, another length; or a dimension line runs through it, so a length is never read as a size of a chain |
 | No free place | The first one is used |
 | Left out | A text wider than four fifths of its wall |
 | Reading | From the left; on an upright wall from the bottom up |

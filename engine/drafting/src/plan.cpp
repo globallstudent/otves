@@ -324,8 +324,8 @@ struct Lengthed {
   }
 };
 
-// Writes each wall's length where it is clear of the other walls and of the texts already
-// written.
+// Writes each wall's length where it is clear of the other walls, of the texts already written
+// and of the dimension lines.
 void write_lengths(std::span<const geom::WallInput> walls,
                    std::span<const geom::WallFootprint> footprints, Lengthed lengthed,
                    TextSize text, Drawing& drawing) {
@@ -353,14 +353,13 @@ void write_lengths(std::span<const geom::WallInput> walls,
                (geom::contains(other.outline, at) || geom::contains(other.outline, at - half) ||
                 geom::contains(other.outline, at + half));
       });
-      // The length keeps a quarter of a text height clear of every text written before it.
+      // The length keeps a quarter of a text height clear of every text written before it,
+      // and off the dimension lines: by a chain it would read as one of the chain's sizes.
       const Box box{.at = at,
                     .along = dir,
                     .half_along = width / 2,
                     .half_across = (text.height / 2) + (kLabelGap * text.height)};
-      const bool on_a_text = std::ranges::any_of(
-          drawing.texts, [&](const Text& written) { return meet(box, box_of(written, text)); });
-      return !on_a_wall && !on_a_text;
+      return !on_a_wall && is_clear(box, drawing, text, Clear::kSizes);
     };
     std::vector<geom::Vec2> places;
     for (const double part : kLabelPlaces) {
