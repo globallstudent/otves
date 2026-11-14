@@ -40,6 +40,8 @@ flowchart LR
 | No room that way | By the wall itself, 1,2 text heights in, if no chain runs there and it strikes no number; else through the label point |
 | A label on a number | Moves across its line by half a text height at a time, either way, to the nearest place where it lies on the floor and meets no text; else it stays |
 
+`tests/golden_plan3_test.cpp` drafts one of the architects' sheets, «План3», and checks the room areas written on it, its sizes, its opening schedule and that no text lies on another.
+
 ## What is drawn
 
 | Part | Primitives |

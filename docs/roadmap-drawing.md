@@ -14,7 +14,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value; a partition goes across a room at a typed distance from one of its walls (ADR 0016) | There is no room tool: a room cannot be entered by its clear sizes |
 | Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred; a sheet lists the marks with their sizes and counts (ADR 0017) | Sill and height are not typed in the app; no two-leaf doors |
 | Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
-| Tests | GoogleTest units, Kotlin unit tests, three instrumented suites | No golden jobs, no property tests, no screenshot tests, no benchmark |
+| Tests | GoogleTest units, Kotlin unit tests, three instrumented suites, one of the reference plans as a golden test of the drawing | No golden take-off, no property tests, no screenshot tests, no benchmark |
 
 ## Target shape
 
@@ -170,7 +170,7 @@ A new element type touches the model tuple, the op variant, `Document::plan` and
 
 | Gate | What it adds to today's CI |
 |---|---|
-| Golden jobs | `testdata/` holds the reference plans as jobs with expected wall lengths, room areas and take-off lines. `План3` must give 25,1, 13,5, 11,2 and 11,5 m² |
+| Golden jobs | `testdata/` holds the reference plans as jobs with expected wall lengths, room areas and take-off lines. `План3` must give 25,1, 13,5, 11,2 and 11,5 m². Built for `План3` as `drafting/tests/golden_plan3_test.cpp`: its walls, rooms and openings give those areas, the sheet's sizes and its opening schedule. Jobs in `testdata/` and take-off lines are open |
 | Property tests | Seeded random plans in GoogleTest: footprints and rooms tile the outline; `straighten` returns the walls a noisy stroke was drawn along |
 | Bridge | Every new command and result in `session_test.cpp`, valid and corrupt |
 | Job file | A migration test per version; an instrumented test that saves and reopens a golden job |

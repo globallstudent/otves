@@ -13,6 +13,7 @@ target_link_libraries(otves_drafting
 
 if(OTVES_BUILD_TESTS)
   otves_add_test(otves_drafting_tests
+    tests/golden_plan3_test.cpp
     tests/plan_test.cpp
     tests/rooms_test.cpp
     tests/sizes_test.cpp)
