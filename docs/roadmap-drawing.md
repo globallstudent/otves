@@ -173,7 +173,7 @@ A new element type touches the model tuple, the op variant, `Document::plan` and
 | Golden jobs | `testdata/` holds the reference plans as jobs with expected wall lengths, room areas and take-off lines. `План3` must give 25,1, 13,5, 11,2 and 11,5 m². Built for `План3` as `drafting/tests/golden_plan3_test.cpp`: its walls, rooms and openings give those areas, the sheet's sizes and its opening schedule. Jobs in `testdata/` and take-off lines are open |
 | Property tests | Seeded random plans in GoogleTest: footprints and rooms tile the outline; `straighten` returns the walls a noisy stroke was drawn along. Built: `FindSpaces.WallsAndFloorsTileAnyGridOfRooms`, `Straighten.ShakyRoomsComeBackAsDrawn` |
 | Bridge | Every new command and result in `session_test.cpp`, valid and corrupt |
-| Job file | A migration test per version; an instrumented test that saves and reopens a golden job |
+| Job file | A migration test per version; an instrumented test that saves and reopens a golden job. Built: `GoldenJobTest` draws `План3` in the real engine on a device, reopens its file in another engine and gets the same model and the same sheet, number for number |
 | Screens | Roborazzi images of `PlanPainter` on a fixed drawing and of each new panel. Not set up yet: the painter was checked by eye on the emulator and on a PDF |
 | Speed | A benchmark derives joins, layers, rooms and the drawing for 500 walls; the budget is one frame. Built as `engine/tools/bench`: 511 walls with as many openings and 240 rooms take 2,0 ms for the screen and 150 ms for a sheet on a desktop core; a house of 60 walls 0,2 ms. `otves_bench 8.3` fails over a frame; CI does not run it yet |
 | Device | The emulator checklist from the last change: draw, type a length, undo, refuse |
