@@ -45,6 +45,7 @@ import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.engine.Drawing
+import uz.otves.engine.DrawnText
 import uz.otves.engine.Issue
 import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
@@ -77,6 +78,7 @@ internal fun PlanCanvas(
     draftThickness: Mm,
     drawing: Boolean,
     sketching: Boolean,
+    sizing: Boolean,
     focus: List<PointMm>,
     fit: Int,
     onTap: (at: PointMm, reach: Mm) -> Unit,
@@ -84,6 +86,7 @@ internal fun PlanCanvas(
     onAimCancel: () -> Unit,
     onCommit: () -> Unit,
     onSketch: (points: List<PointMm>, reach: Mm) -> Unit,
+    onSize: (DrawnText) -> Unit,
     onLabelSize: (LabelSize) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -94,8 +97,10 @@ internal fun PlanCanvas(
     val aimCancel by rememberUpdatedState(onAimCancel)
     val commit by rememberUpdatedState(onCommit)
     val sketch by rememberUpdatedState(onSketch)
+    val size by rememberUpdatedState(onSize)
     val draws by rememberUpdatedState(drawing)
     val sketches by rememberUpdatedState(sketching)
+    val sizes by rememberUpdatedState(sizing)
     // The stroke under the finger, in plan millimetres so it stays put when the plan moves; once
     // the finger lifts it is the trace of what was drawn.
     val stroke = remember { mutableStateListOf<PointMm>() }
@@ -134,6 +139,7 @@ internal fun PlanCanvas(
                         edge = colors.ink.toArgb(),
                         layer = colors.inkTertiary.toArgb(),
                         below = colors.inkTertiary.toArgb(),
+                        dimension = colors.inkTertiary.toArgb(),
                         text = colors.inkSecondary.toArgb(),
                         name = colors.ink.toArgb(),
                         selection = colors.selection.toArgb(),
@@ -147,6 +153,8 @@ internal fun PlanCanvas(
                 rooms = RoomLabels(resources),
             )
         }
+    // The touch handler outlives a painter; it asks the one that painted last.
+    val brush by rememberUpdatedState(painter)
     val tellLabelSize by rememberUpdatedState(onLabelSize)
     LaunchedEffect(painter) {
         var told = 0f
@@ -227,7 +235,9 @@ internal fun PlanCanvas(
                             }
 
                             else -> {
-                                tap(view.toPlan(down.position), view.toPlanLength(touchReach))
+                                // A touch on a number is for the number, not for what lies under it.
+                                val touched = if (sizes) brush.sizeAt(down.position.x, down.position.y, touchReach / 2) else null
+                                if (touched != null) size(touched) else tap(view.toPlan(down.position), view.toPlanLength(touchReach))
                             }
                         }
                     }

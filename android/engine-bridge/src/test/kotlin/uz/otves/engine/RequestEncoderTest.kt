@@ -29,12 +29,14 @@ import uz.otves.schema.PlaceOpening as PlaceOpeningTable
 import uz.otves.schema.RemoveRoom as RemoveRoomTable
 import uz.otves.schema.Room as RoomTable
 import uz.otves.schema.RoomKind as RoomKindCode
+import uz.otves.schema.SetDimension as SetDimensionTable
 import uz.otves.schema.SetRoomKind as SetRoomKindTable
 import uz.otves.schema.SetWallLayer as SetWallLayerTable
 import uz.otves.schema.SetWallLength as SetWallLengthTable
 import uz.otves.schema.SetWallMirrored as SetWallMirroredTable
 import uz.otves.schema.SetWallType as SetWallTypeTable
 import uz.otves.schema.SetWallTypeRole as SetWallTypeRoleTable
+import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Turn as TurnCode
 import uz.otves.schema.WallEnd as WallEndCode
 import uz.otves.schema.WallLayer as WallLayerTable
@@ -268,6 +270,39 @@ class RequestEncoderTest {
         assertThat(Uuid.fromLongs(draw.level().high(), draw.level().low())).isEqualTo(level.uuid)
         assertThat(draw.textHeight()).isEqualTo(400L)
         assertThat(draw.digitWidth()).isEqualTo(210L)
+        // No space is in focus unless the app names a point.
+        assertThat(draw.focus()).isNull()
+    }
+
+    @Test
+    fun aDrawingNamesTheSpaceInFocusAndATypedSizeGoesBackAsItsTextCame() {
+        val window = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000003"))
+        val pier = DrawnText(window, TextKind.PIER, 1_800, PointM(1.1, 0.6), PointM(1.0, 0.0), from = 5_800.mm, forward = false)
+        val commands =
+            listOf(
+                EngineCommand.Draw(level, 400.mm, 210.mm, focus = PointMm(3_000.mm, (-2_000).mm)),
+                EngineCommand.SetDimension(pier, 1_250.mm),
+                EngineCommand.SetDimension(pier.copy(kind = TextKind.OPENING_WIDTH), 900.mm),
+                EngineCommand.SetDimension(pier.copy(kind = TextKind.ROOM_AREA, element = null), 900.mm),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(commands))
+
+        val draw = request.commands(0).command(DrawTable()) as DrawTable
+        assertThat(draw.focus().x()).isEqualTo(3_000L)
+        assertThat(draw.focus().y()).isEqualTo(-2_000L)
+        assertThat(request.commands(1).commandType()).isEqualTo(Command.SetDimension)
+        val sized = request.commands(1).command(SetDimensionTable()) as SetDimensionTable
+        assertThat(sized.kind()).isEqualTo(TextKindCode.Pier)
+        assertThat(Uuid.fromLongs(sized.element().high(), sized.element().low())).isEqualTo(window.uuid)
+        assertThat(sized.from()).isEqualTo(5_800L)
+        assertThat(sized.forward()).isFalse()
+        assertThat(sized.value()).isEqualTo(1_250L)
+        assertThat((request.commands(2).command(SetDimensionTable()) as SetDimensionTable).kind()).isEqualTo(TextKindCode.OpeningWidth)
+        // A text that is no size goes out as one the engine refuses.
+        val refused = request.commands(3).command(SetDimensionTable()) as SetDimensionTable
+        assertThat(refused.kind()).isEqualTo(TextKindCode.Overall)
+        assertThat(refused.element()).isNull()
     }
 
     @Test

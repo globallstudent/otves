@@ -133,6 +133,8 @@ fun EditorRoute(
                 onAddKind = viewModel::addKind,
                 onRoomKinds = viewModel::showRoomKinds,
                 onRoomKind = viewModel::nameRoom,
+                onSize = viewModel::editSize,
+                onSizeWall = viewModel::chooseSizeWall,
                 onLocationLine = viewModel::setLocationLine,
                 onFlipWall = viewModel::flipWall,
                 onMaterials = viewModel::showMaterials,
@@ -199,6 +201,8 @@ internal data class EditorActions(
     val onAddKind: (WallTypeTemplate) -> Unit = {},
     val onRoomKinds: (open: Boolean) -> Unit = {},
     val onRoomKind: (RoomKind) -> Unit = {},
+    val onSize: (DrawnText) -> Unit = {},
+    val onSizeWall: (swapped: Boolean) -> Unit = {},
     val onLocationLine: (LocationLine) -> Unit = {},
     val onFlipWall: () -> Unit = {},
     val onMaterials: (open: Boolean) -> Unit = {},
@@ -226,12 +230,14 @@ internal fun EditorScreen(
     actions: EditorActions,
     modifier: Modifier = Modifier,
 ) {
-    // Counts requests to show the whole plan: the button, a job opening, the end of a measured run
-    // or of a pass over sketched walls, which both move the plan to keep a wall above the keys.
+    // Counts requests to show the whole plan: the button, a job opening, the end of a measured run,
+    // of a pass over sketched walls or of a typed size, which all move the plan to keep a wall
+    // above the keys.
     var fit by remember { mutableIntStateOf(0) }
     val measuring = state.measure != null
     val refining = state.entry?.refining == true
-    LaunchedEffect(measuring, refining, state.ready) { if (!measuring && !refining && state.ready) fit++ }
+    val sizing = state.entry?.size != null
+    LaunchedEffect(measuring, refining, sizing, state.ready) { if (!measuring && !refining && !sizing && state.ready) fit++ }
     val listOpen = state.takeoffOpen || state.materialOpen || state.kindsOpen || state.roomKindsOpen
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
         Box(modifier = Modifier.safeDrawingPadding()) {
@@ -247,6 +253,7 @@ internal fun EditorScreen(
                 draftThickness = state.drawnThickness,
                 drawing = state.tool == Tool.WALL && !state.typing && !listOpen,
                 sketching = state.tool == Tool.PENCIL && !state.typing && !listOpen,
+                sizing = state.tool == Tool.SELECT && !state.typing && !listOpen,
                 fit = fit,
                 // The wall being measured or sized stays in view above the number pad.
                 focus =
@@ -260,6 +267,7 @@ internal fun EditorScreen(
                 onAimCancel = actions.onAimCancel,
                 onCommit = actions.onCommit,
                 onSketch = actions.onSketch,
+                onSize = actions.onSize,
                 onLabelSize = actions.onLabelSize,
                 modifier = Modifier.fillMaxSize(),
             )

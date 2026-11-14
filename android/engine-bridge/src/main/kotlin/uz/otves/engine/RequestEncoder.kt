@@ -45,6 +45,7 @@ import uz.otves.schema.ResizeOpening as ResizeOpeningTable
 import uz.otves.schema.Room as RoomTable
 import uz.otves.schema.Script as ScriptTable
 import uz.otves.schema.SetCondition as SetConditionTable
+import uz.otves.schema.SetDimension as SetDimensionTable
 import uz.otves.schema.SetLevelElevation as SetLevelElevationTable
 import uz.otves.schema.SetLevelFooting as SetLevelFootingTable
 import uz.otves.schema.SetLevelHeight as SetLevelHeightTable
@@ -62,6 +63,7 @@ import uz.otves.schema.SetWallThickness as SetWallThicknessTable
 import uz.otves.schema.SetWallType as SetWallTypeTable
 import uz.otves.schema.SetWallTypeRole as SetWallTypeRoleTable
 import uz.otves.schema.SetWallUnit as SetWallUnitTable
+import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Turn as TurnCode
 import uz.otves.schema.Undo as UndoTable
 import uz.otves.schema.Uuid as UuidStruct
@@ -403,7 +405,19 @@ internal object RequestEncoder {
                 DrawTable.addLevel(this, uuid(command.level))
                 DrawTable.addTextHeight(this, command.textHeight.value)
                 DrawTable.addDigitWidth(this, command.digitWidth.value)
+                command.focus?.let { DrawTable.addFocus(this, point(it)) }
                 Command.Draw to DrawTable.endDraw(this)
+            }
+
+            is EngineCommand.SetDimension -> {
+                SetDimensionTable.startSetDimension(this)
+                SetDimensionTable.addKind(this, code(command.size.kind))
+                command.size.element?.let { SetDimensionTable.addElement(this, uuid(it)) }
+                SetDimensionTable.addFrom(this, command.size.from.value)
+                SetDimensionTable.addForward(this, command.size.forward)
+                SetDimensionTable.addValue(this, command.value.value)
+                command.size.other?.let { SetDimensionTable.addOther(this, uuid(it)) }
+                Command.SetDimension to SetDimensionTable.endSetDimension(this)
             }
 
             EngineCommand.BeginGesture -> {
@@ -530,6 +544,17 @@ internal object RequestEncoder {
         OpeningTable.addKind(this, code(opening.kind))
         return OpeningTable.endOpening(this)
     }
+
+    // A text that is no handle goes out as a kind the engine refuses.
+    private fun code(kind: TextKind): Int =
+        when (kind) {
+            TextKind.LENGTH -> TextKindCode.Length
+            TextKind.ABOUT_LENGTH -> TextKindCode.AboutLength
+            TextKind.PIER -> TextKindCode.Pier
+            TextKind.OPENING_WIDTH -> TextKindCode.OpeningWidth
+            TextKind.CLEAR -> TextKindCode.Clear
+            TextKind.OVERALL, TextKind.ROOM_NAME, TextKind.ROOM_AREA, TextKind.UNKNOWN -> TextKindCode.Overall
+        }
 
     private fun code(role: WallRole): Int =
         when (role) {

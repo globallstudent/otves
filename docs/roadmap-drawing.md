@@ -11,7 +11,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Drawing | `drafting::draft` places lengths and opening symbols; one `PlanPainter` paints the screen and the PDF (ADR 0013) | Only wall lengths and opening symbols are drawn yet |
 | Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line | A type starts from a catalog template; its layers cannot be edited yet |
 | Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015) | No room schedule; a room's clear sizes cannot be typed yet |
-| Dimensions | One length per wall, along its location line | Plans give clear room sizes and chains along walls |
+| Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value (ADR 0016) | A wall cannot be placed at a typed distance yet, and there is no room tool |
 | Openings | Offset, size, sill, kind | No hinge side, swing, marks or schedule |
 | Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
 | Tests | GoogleTest units, Kotlin unit tests, three instrumented suites | No golden jobs, no property tests, no screenshot tests, no benchmark |
@@ -67,7 +67,7 @@ The engine answers a `Draw` query with a `Drawing` for one level.
 | Handle | the element and, for a dimension, what editing it means |
 
 - `Draw` names the level and how big the label text is on the plan: a line's height and a digit's width in plan millimetres. The engine uses them to place labels and drop the ones that do not fit. The purpose (screen or sheet) joins it in slice 7.
-- Tick sizes, text heights and offsets of SPDS go to `content/norms/drafting.luau` (rule 5) with the dimension chains of slice 5; until then the only numbers are layout ratios in `drafting`.
+- Tick sizes, text heights and offsets of SPDS go to `content/norms/drafting.luau` (rule 5) with the sheets of slice 7: on a screen sizes scale with the label text, so until then the only numbers are layout ratios in `drafting`.
 - One `PlanPainter` over `android.graphics.Canvas` serves Compose and the PDF. It maps `Fill` and `Stroke` to paints and formats numbers; it positions nothing.
 - `Response.outlines` stays, for the plan's extent and the walls' lengths. `Response.openings` has no reader in the app any more.
 
@@ -96,9 +96,10 @@ The engine answers a `Draw` query with a `Drawing` for one level.
 
 ### 0016: dimensions
 
-- A dimension primitive carries a handle: wall length, clear distance between two walls, opening width, opening distance from a corner.
-- `SetDistance` moves one of two walls so the faces stand a typed distance apart. `geom::translate_wall` returns the end moves, as `resize_wall` does.
-- `geom::across` gives a partition from a wall face to the opposite wall at a typed distance. `geom::room_walls` gives the walls of a room entered by clear size and reuses walls already there.
+- The engine writes the sizes as lines and texts of the drawing: the plan's overall size outside, and for the space in focus its clear sizes and a chain along each side with openings. Offsets are ratios of the text height.
+- A number is a handle: its text says what a typed value changes, and `SetDimension` sends the handle back with the value. An opening's width resizes it, a piece of wall moves the opening it leads to, a clear size moves one of its two walls.
+- `geom::translate_wall` moves a wall across the plan with what is joined to it, as `resize_wall` does along it; `geom::set_distance` finds the move that puts two walls a clear distance apart.
+- Still to come: `geom::across`, a partition from a wall face to the opposite wall at a typed distance, and `geom::room_walls`, the walls of a room entered by clear size, reusing walls already there.
 
 ### 0012: the pencil
 
@@ -128,7 +129,7 @@ flowchart LR
 | 2 | Display list | `engine/drafting`, `Draw` | `PlanPainter`; delete placement code | — | — | built |
 | 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; layers of a type are not edited yet |
 | 4 | Rooms | `geom/spaces`, `Room`, floors and room texts in `drafting` | Room labels, room panel | v7 | G31, G34 | built; a room's sizes come with slice 5 |
-| 5 | Dimensions | chains, `SetDistance`, `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | |
+| 5 | Dimensions | Sizes in `drafting`, `SetDimension`, `translate_wall`, `set_distance`; `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | sizes and typed sizes built; wall by distance and the room tool open |
 | 6 | Openings | hinge, swing, marks, schedules | Door panel | v8 | G37 | |
 | 7 | Sheets | sheet purpose in `Draw`, schedules | Frame, tables, legend, PDF | — | G38 | |
 

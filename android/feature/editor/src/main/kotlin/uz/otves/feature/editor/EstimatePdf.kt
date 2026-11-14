@@ -51,6 +51,7 @@ internal class EstimatePdf(
                     edge = INK,
                     layer = SECONDARY,
                     below = Color.TRANSPARENT,
+                    dimension = SECONDARY,
                     text = SECONDARY,
                     name = INK,
                     selection = Color.TRANSPARENT,

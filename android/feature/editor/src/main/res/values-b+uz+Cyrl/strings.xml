@@ -175,4 +175,12 @@
     <string name="room_metres_value">%1$s м</string>
     <string name="issue_room_without_space">Хона номи деворлар ёпилмаган жойда турибди</string>
     <string name="issue_room_shares_space">Битта хонада иккита ном бор</string>
+    <string name="size_pier">Девор бўлаги</string>
+    <string name="size_opening_width">Тешик эни</string>
+    <string name="size_clear">Хона ўлчами</string>
+    <string name="size_moves">Суриладиган девор</string>
+    <string name="size_wall_right">Ўнг</string>
+    <string name="size_wall_left">Чап</string>
+    <string name="size_wall_top">Юқори</string>
+    <string name="size_wall_bottom">Пастки</string>
 </resources>

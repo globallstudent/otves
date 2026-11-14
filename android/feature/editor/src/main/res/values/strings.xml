@@ -187,4 +187,12 @@
     <string name="room_metres_value">%1$s м</string>
     <string name="issue_room_without_space">Название помещения стоит там, где стены не замкнуты</string>
     <string name="issue_room_shares_space">В одном помещении два названия</string>
+    <string name="size_pier">Простенок</string>
+    <string name="size_opening_width">Ширина проёма</string>
+    <string name="size_clear">Размер комнаты</string>
+    <string name="size_moves">Двигать стену</string>
+    <string name="size_wall_right">Правую</string>
+    <string name="size_wall_left">Левую</string>
+    <string name="size_wall_top">Верхнюю</string>
+    <string name="size_wall_bottom">Нижнюю</string>
 </resources>

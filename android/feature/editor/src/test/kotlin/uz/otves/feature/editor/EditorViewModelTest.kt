@@ -1116,6 +1116,93 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun aSelectedSpaceIsDrawnWithItsSizesAndALetGoOneWithItsName() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.selectTool(Tool.SELECT)
+        engine.floor = floor
+        val at = PointMm(3_000.mm, 2_000.mm)
+        assertThat(engine.drawn.last().focus).isNull()
+
+        viewModel.tap(at, reach)
+        assertThat(engine.drawn.last().focus).isEqualTo(at)
+
+        // A step asks the drawing with the space still in focus.
+        viewModel.nameRoom(RoomKind.HALL)
+        assertThat(engine.drawn.last().focus).isEqualTo(at)
+
+        val asked = engine.drawn.size
+        viewModel.deselect()
+        assertThat(engine.drawn).hasSize(asked + 1)
+        assertThat(engine.drawn.last().focus).isNull()
+        assertThat(viewModel.uiState.value.selected).isNull()
+        // Letting go of nothing asks nothing.
+        viewModel.deselect()
+        assertThat(engine.drawn).hasSize(asked + 1)
+    }
+
+    @Test
+    fun aSizeOnThePlanIsTypedAndGoesBackToTheEngineAsItCame() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        val window = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000030"))
+        val pier = DrawnText(window, TextKind.PIER, 1_800, PointM(1.1, 0.6), PointM(1.0, 0.0), from = 200.mm, forward = true)
+
+        viewModel.editSize(pier)
+        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(window, was = 1_800.mm, size = pier))
+        assertThat(viewModel.uiState.value.typing).isTrue()
+
+        "1250".forEach { viewModel.typeDigit(it.digitToInt()) }
+        viewModel.confirmLength()
+
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetDimension(pier, 1_250.mm))
+        assertThat(viewModel.uiState.value.entry).isNull()
+
+        // The plan's overall size and a room's name are not sizes to type.
+        viewModel.editSize(pier.copy(kind = TextKind.OVERALL))
+        viewModel.editSize(pier.copy(kind = TextKind.ROOM_NAME))
+        viewModel.editSize(pier.copy(element = null))
+        assertThat(viewModel.uiState.value.entry).isNull()
+    }
+
+    @Test
+    fun aRoomsSizeMovesTheWallTheBuilderChooses() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        val left = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000031"))
+        val right = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000032"))
+        val across = DrawnText(right, TextKind.CLEAR, 5_620, PointM(3.0, 3.4), PointM(1.0, 0.0), other = left)
+
+        // As drawn, the wall at the far end moves.
+        viewModel.editSize(across)
+        "5000".forEach { viewModel.typeDigit(it.digitToInt()) }
+        viewModel.confirmLength()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetDimension(across, 5_000.mm))
+
+        // Asked to, the near one moves and the far one stays.
+        viewModel.editSize(across)
+        viewModel.chooseSizeWall(swapped = true)
+        "5000".forEach { viewModel.typeDigit(it.digitToInt()) }
+        viewModel.confirmLength()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetDimension(across.copy(element = left, other = right), 5_000.mm))
+
+        // A size with no wall at one end is only read.
+        viewModel.editSize(across.copy(other = null))
+        assertThat(viewModel.uiState.value.entry).isNull()
+    }
+
+    @Test
+    fun aWallsLengthTappedOnThePlanIsTypedAsFromItsPanel() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        val wall = viewModel.buildWall()
+        val length = DrawnText(wall, TextKind.LENGTH, 6_000, PointM(3.0, 0.4), PointM(1.0, 0.0))
+
+        viewModel.editSize(length)
+        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(wall, was = 6_000.mm))
+
+        "5400".forEach { viewModel.typeDigit(it.digitToInt()) }
+        viewModel.confirmLength()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(wall, 5_400.mm))
+    }
+
+    @Test
     fun aStrokeOfThePencilGoesToTheEngineAsDrawn() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.selectTool(Tool.PENCIL)

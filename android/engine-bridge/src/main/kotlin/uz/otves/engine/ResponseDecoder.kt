@@ -217,12 +217,15 @@ internal object ResponseDecoder {
                 List(drawing.textsLength()) {
                     val text = drawing.texts(it)
                     DrawnText(
-                        text.element()?.let(::id),
-                        textKind(text.kind()),
-                        text.value(),
-                        metres(text.at()),
-                        metres(text.along()),
-                        text.fit(),
+                        element = text.element()?.let(::id),
+                        kind = textKind(text.kind()),
+                        value = text.value(),
+                        at = metres(text.at()),
+                        along = metres(text.along()),
+                        fit = text.fit(),
+                        from = Mm(text.from()),
+                        forward = text.forward(),
+                        other = text.other()?.let(::id),
                     )
                 },
         )
@@ -253,6 +256,8 @@ internal object ResponseDecoder {
             StrokeCode.Frame -> StrokeKind.FRAME
             StrokeCode.Leaf -> StrokeKind.LEAF
             StrokeCode.Layer -> StrokeKind.LAYER
+            StrokeCode.Dimension -> StrokeKind.DIMENSION
+            StrokeCode.Chain -> StrokeKind.CHAIN
             else -> StrokeKind.UNKNOWN
         }
 
@@ -262,6 +267,10 @@ internal object ResponseDecoder {
             TextKindCode.AboutLength -> TextKind.ABOUT_LENGTH
             TextKindCode.RoomName -> TextKind.ROOM_NAME
             TextKindCode.RoomArea -> TextKind.ROOM_AREA
+            TextKindCode.Overall -> TextKind.OVERALL
+            TextKindCode.Clear -> TextKind.CLEAR
+            TextKindCode.Pier -> TextKind.PIER
+            TextKindCode.OpeningWidth -> TextKind.OPENING_WIDTH
             else -> TextKind.UNKNOWN
         }
 

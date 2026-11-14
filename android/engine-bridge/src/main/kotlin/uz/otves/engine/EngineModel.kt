@@ -99,6 +99,12 @@ public enum class StrokeKind {
     /** Where two layers of a wall meet. */
     LAYER,
 
+    /** A dimension line, its ticks and the lines that lead to it. */
+    DIMENSION,
+
+    /** The same for the sizes of the space in focus. */
+    CHAIN,
+
     /** A stroke from a newer engine than this app knows; it is not painted. */
     UNKNOWN,
 }
@@ -115,6 +121,18 @@ public enum class TextKind {
 
     /** A space's floor: the value is its area in cm². */
     ROOM_AREA,
+
+    /** The plan's size from outer face to outer face, in millimetres (docs/adr/0016). */
+    OVERALL,
+
+    /** The clear size of the space in focus, between two of its walls. */
+    CLEAR,
+
+    /** A piece of wall between a corner or an opening and the next opening. */
+    PIER,
+
+    /** An opening's width. */
+    OPENING_WIDTH,
 
     /** A text from a newer engine than this app knows; it is not written. */
     UNKNOWN,
@@ -150,6 +168,12 @@ public data class DrawnArc(
  * to the left or straight down. The [value] is millimetres unless the [kind] says otherwise.
  * [fit] is the room there is for the text along its direction, in metres: a text wider than that
  * is left out. Zero for a text the engine fitted itself.
+ *
+ * A size is a handle (docs/adr/0016): [EngineCommand.SetDimension] gives it a typed value.
+ * [element] is then what the value changes, and for a piece of wall [from] and [forward] say
+ * where its fixed end lies; the app only hands them back. A clear size lies between two walls:
+ * [element] at its far end, to the right or the top of the plan, moves, and [other] stays; the
+ * app may swap them to move the other wall.
  */
 public data class DrawnText(
     public val element: ElementId?,
@@ -158,7 +182,20 @@ public data class DrawnText(
     public val at: PointM,
     public val along: PointM,
     public val fit: Double = 0.0,
-)
+    public val from: Mm = Mm(0),
+    public val forward: Boolean = false,
+    public val other: ElementId? = null,
+) {
+    /** Whether a typed value changes the model through this text. */
+    public val isHandle: Boolean
+        get() =
+            element != null &&
+                when (kind) {
+                    TextKind.LENGTH, TextKind.ABOUT_LENGTH, TextKind.PIER, TextKind.OPENING_WIDTH -> true
+                    TextKind.CLEAR -> other != null
+                    TextKind.OVERALL, TextKind.ROOM_NAME, TextKind.ROOM_AREA, TextKind.UNKNOWN -> false
+                }
+}
 
 /**
  * The space under a picked point (docs/adr/0015): the floor the walls close there, with the

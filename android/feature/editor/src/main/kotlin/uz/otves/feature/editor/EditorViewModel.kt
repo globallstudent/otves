@@ -23,6 +23,7 @@ import uz.otves.engine.CommandResult
 import uz.otves.engine.Condition
 import uz.otves.engine.Conditions
 import uz.otves.engine.Drawing
+import uz.otves.engine.DrawnText
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
@@ -42,6 +43,7 @@ import uz.otves.engine.Room
 import uz.otves.engine.RoomKind
 import uz.otves.engine.Space
 import uz.otves.engine.Takeoff
+import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
@@ -188,7 +190,9 @@ internal data class PriceEntry(
 /**
  * A wall's exact length being typed: the digits so far, in millimetres. While the sketched walls of
  * a storey get their lengths one after another, this is wall [step] of [of]; no digits then keep
- * the length the sketch gave.
+ * the length the sketch gave. With a [size], the digits are for that size of the plan instead
+ * (docs/adr/0016) and [wall] is what it measures. A clear size lies between two walls; when
+ * [swapped], the wall at its near end moves instead of the one at its far end.
  */
 internal data class LengthEntry(
     val wall: ElementId,
@@ -196,6 +200,8 @@ internal data class LengthEntry(
     val digits: String = "",
     val step: Int = 0,
     val of: Int = 0,
+    val size: DrawnText? = null,
+    val swapped: Boolean = false,
 ) {
     val refining: Boolean
         get() = of > 0
@@ -622,7 +628,9 @@ internal class EditorViewModel(
             sizes.map { size -> if (size == null || !drawings.hasNext()) null else drawings.next() }
         }
 
-    private fun draw(level: ElementId) = EngineCommand.Draw(level, label.height, label.digit)
+    // The selected space is drawn with its sizes in place of its name.
+    private fun draw(level: ElementId) =
+        EngineCommand.Draw(level, label.height, label.digit, focus = (state.value.selected as? Selected.SpacePart)?.at)
 
     // Asks the shown storey's drawing again. The model does not change, so nothing is recorded.
     private suspend fun redraw() {
@@ -792,13 +800,12 @@ internal class EditorViewModel(
                         tool = tool,
                         sizeEntry = null,
                         drawn = null,
-                        selected = null,
                         materialOpen = false,
                         kindsOpen = false,
                         roomKindsOpen = false,
-                        refused = null,
                     ).withRun()
             }
+            select(null)
         }
 
     /** Opens the number pad for a wall's exact length. */
@@ -806,6 +813,29 @@ internal class EditorViewModel(
         val dimension = state.value.dimensions.find { it.id == wall } ?: return
         state.update { it.copy(entry = LengthEntry(wall, was = dimension.length)) }
     }
+
+    /**
+     * Opens the number pad for a size written on the plan (docs/adr/0016): the typed value goes
+     * to what the size measures. A wall's length is typed as [editLength] has it.
+     */
+    fun editSize(size: DrawnText) {
+        val element = size.element?.takeIf { size.isHandle } ?: return
+        if (size.kind == TextKind.LENGTH || size.kind == TextKind.ABOUT_LENGTH) return editLength(element)
+        state.update { it.copy(entry = LengthEntry(element, was = Mm(size.value), size = size)) }
+    }
+
+    /** Which of a clear size's two walls a typed value moves: the one at its near end when [swapped]. */
+    fun chooseSizeWall(swapped: Boolean) =
+        state.update { current ->
+            // The wall that will move is the one the plan marks.
+            current.copy(
+                entry =
+                    current.entry?.let { entry ->
+                        val moves = if (swapped) entry.size?.other else entry.size?.element
+                        entry.copy(swapped = swapped, wall = moves ?: entry.wall)
+                    },
+            )
+        }
 
     /** A key of the number pad: for the length being corrected, else for the measured wall. */
     fun typeDigit(digit: Int) {
@@ -874,8 +904,11 @@ internal class EditorViewModel(
         val entry = state.value.entry ?: return
         state.update { it.copy(entry = null) }
         val length = entry.digits.toLongOrNull()?.let(::Mm) ?: entry.was.takeIf { entry.refining } ?: return
+        // The wall that moves is the size's element; the other of its two walls stays.
+        val size = entry.size?.let { if (entry.swapped) it.copy(element = it.other, other = it.element) else it }
+        val sized = size?.let { EngineCommand.SetDimension(it, length) } ?: EngineCommand.SetWallLength(entry.wall, length)
         act {
-            execute(listOf(EngineCommand.SetWallLength(entry.wall, length)))
+            execute(listOf(sized))
             if (entry.refining) {
                 refined += entry.wall
                 state.update { it.copy(entry = it.nextRough(entry.step + 1, entry.of)) }
@@ -913,7 +946,11 @@ internal class EditorViewModel(
 
     fun redo() = send(listOf(EngineCommand.Redo))
 
-    fun deselect() = state.update { it.copy(selected = null, materialOpen = false, kindsOpen = false, roomKindsOpen = false) }
+    fun deselect() =
+        act {
+            state.update { it.copy(materialOpen = false, kindsOpen = false, roomKindsOpen = false) }
+            select(null)
+        }
 
     fun setWallThickness(thickness: Mm) {
         val wall = state.value.selected as? Selected.WallPart ?: return
@@ -973,8 +1010,17 @@ internal class EditorViewModel(
             val result = session.ask(listOf(EngineCommand.Pick(onLevel, at, reach))).singleOrNull() as? CommandResult.Done
             // An element first; where nothing built is near, the floor under the finger.
             val picked = result?.picked?.let(::selection) ?: result?.space?.let { Selected.SpacePart(at, it) }
-            state.update { it.copy(selected = picked, refused = null) }
+            select(picked)
         }
+    }
+
+    // Selects [picked]. The plan is drawn again when the space in focus changes: a selected
+    // space shows its sizes, and one let go its name.
+    private suspend fun select(picked: Selected?) {
+        val focus = { selected: Selected? -> (selected as? Selected.SpacePart)?.at }
+        val before = focus(state.value.selected)
+        state.update { it.copy(selected = picked, refused = null) }
+        if (focus(picked) != before) redraw()
     }
 
     // Asks the engine where a wall would end. The model does not change, so nothing is recorded.

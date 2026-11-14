@@ -274,6 +274,18 @@ public sealed interface EngineCommand {
         public val level: ElementId,
         public val textHeight: Mm,
         public val digitWidth: Mm,
+        /** The space that holds this point is drawn with its sizes in place of its name. */
+        public val focus: PointMm? = null,
+    ) : EngineCommand
+
+    /**
+     * Gives the size a drawing's text showed a typed [value] (docs/adr/0016): an opening's width,
+     * the piece of wall that leads to an opening, or a wall's length. One undo step. Fails with
+     * [EngineError.DOES_NOT_FIT] when the opening would leave its wall.
+     */
+    public data class SetDimension(
+        public val size: DrawnText,
+        public val value: Mm,
     ) : EngineCommand
 
     /** Commands until [EndGesture] fold into one undo step, as a drag does. */

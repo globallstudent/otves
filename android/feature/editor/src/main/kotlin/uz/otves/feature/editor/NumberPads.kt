@@ -23,7 +23,9 @@ import uz.otves.core.designsystem.SegmentedControl
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
+import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
+import kotlin.math.abs
 import kotlin.uuid.Uuid
 
 // A wall's exact length in millimetres, typed on large keys as it is read off the tape.
@@ -36,9 +38,15 @@ internal fun LengthPad(
     val refining = entry.refining
     val was = if (refining) "${stringResource(R.string.length_about_mark)} ${grouped(entry.was)}" else grouped(entry.was)
     Panel {
-        PanelHeader(
-            if (refining) stringResource(R.string.sketch_wall_of, entry.step, entry.of) else stringResource(R.string.length_title),
-        ) {
+        val title =
+            when {
+                refining -> stringResource(R.string.sketch_wall_of, entry.step, entry.of)
+                entry.size?.kind == TextKind.PIER -> stringResource(R.string.size_pier)
+                entry.size?.kind == TextKind.OPENING_WIDTH -> stringResource(R.string.size_opening_width)
+                entry.size?.kind == TextKind.CLEAR -> stringResource(R.string.size_clear)
+                else -> stringResource(R.string.length_title)
+            }
+        PanelHeader(title) {
             PanelAction(stringResource(if (refining) R.string.takeoff_close else R.string.length_cancel), actions.onCancelLength)
         }
         TypedLength(entry.digits, standing = entry.was.takeIf { refining }) {
@@ -47,6 +55,22 @@ internal fun LengthPad(
                 style = MaterialTheme.typography.bodyLarge,
                 color = OtvesTheme.colors.inkSecondary,
             )
+        }
+        // A room's size lies between two walls: the builder says which of them gives way.
+        entry.size?.takeIf { it.kind == TextKind.CLEAR }?.let { size ->
+            val across = abs(size.along.x) > abs(size.along.y)
+            InspectorRow(stringResource(R.string.size_moves)) {
+                Pill(
+                    stringResource(if (across) R.string.size_wall_right else R.string.size_wall_top),
+                    !entry.swapped,
+                    { actions.onSizeWall(false) },
+                )
+                Pill(
+                    stringResource(if (across) R.string.size_wall_left else R.string.size_wall_bottom),
+                    entry.swapped,
+                    { actions.onSizeWall(true) },
+                )
+            }
         }
         NumberKeys(
             actions,

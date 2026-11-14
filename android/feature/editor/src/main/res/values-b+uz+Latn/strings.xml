@@ -175,4 +175,12 @@
     <string name="room_metres_value">%1$s m</string>
     <string name="issue_room_without_space">Xona nomi devorlar yopilmagan joyda turibdi</string>
     <string name="issue_room_shares_space">Bitta xonada ikkita nom bor</string>
+    <string name="size_pier">Devor bo‘lagi</string>
+    <string name="size_opening_width">Teshik eni</string>
+    <string name="size_clear">Xona o‘lchami</string>
+    <string name="size_moves">Suriladigan devor</string>
+    <string name="size_wall_right">O‘ng</string>
+    <string name="size_wall_left">Chap</string>
+    <string name="size_wall_top">Yuqori</string>
+    <string name="size_wall_bottom">Pastki</string>
 </resources>

@@ -21,6 +21,11 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | anchor | точка названия | nom nuqtasi | The point that says which space a room names; it stays put when walls move |
 | island | отдельно стоящая стена | alohida turgan devor | What stands free inside a space; its footprint comes off the floor |
 | floor area | площадь пола | pol maydoni | A space's outline less its islands, in m²; written to 0,1 m² |
+| overall size | габаритный размер | gabarit o‘lcham | The plan from outer face to outer face, written outside it |
+| clear size | размер в свету | sof o‘lcham | The distance between the faces two walls turn to each other; a room's sizes are clear sizes |
+| dimension chain | размерная цепочка | o‘lcham zanjiri | Sizes one after another along a side of a room: wall, opening, wall |
+| pier | простенок | devor bo‘lagi | The piece of wall between a corner or an opening and the next opening |
+| handle | — | — | A number on the plan that says what a typed value changes (ADR 0016) |
 | sketch | набросок | qoralama | A stroke drawn with a finger and read as walls (ADR 0012) |
 | drawing | чертёж | chizma | One level as a display list: polygons, lines, arcs and texts the engine placed and the app paints (ADR 0013) |
 | exact length | точный размер | aniq o‘lcham | A wall length that was typed or measured; a sketched wall's is written with «≈» until then |

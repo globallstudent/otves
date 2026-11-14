@@ -19,6 +19,7 @@ import uz.otves.engine.PointM
 import uz.otves.engine.Space
 import uz.otves.engine.StrokeKind
 import uz.otves.engine.TextKind
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.hypot
@@ -37,6 +38,8 @@ internal data class PlanPalette(
     /** The lines of a layer of insulation, and the line where two layers meet. */
     val layer: Int,
     val below: Int,
+    /** A dimension line outside the plan, its ticks and the lines that lead to it. */
+    val dimension: Int,
     val text: Int,
     /** A room's name, the text that says most. */
     val name: Int,
@@ -57,6 +60,12 @@ internal data class PlanFrame(
 
     fun y(point: PointM): Float = originY - (point.y * scale).toFloat()
 }
+
+/** A size the painter wrote, and where: the text and the box it fills on the canvas. */
+internal data class PaintedSize(
+    val size: DrawnText,
+    val bounds: RectF,
+)
 
 /** How big the label text is on the plan at a zoom: the height of a line and the width of a digit. */
 internal data class LabelSize(
@@ -105,6 +114,15 @@ internal class PlanPainter(
             color = palette.name
             typeface = Typeface.create(Typeface.DEFAULT, NAME_WEIGHT, false)
         }
+    private val chain =
+        TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.textSize = textSize
+            color = palette.selection
+            typeface = Typeface.create(Typeface.DEFAULT, LABEL_WEIGHT, false)
+        }
+
+    // The sizes written by the last paint that a typed value can change.
+    private val handles = mutableListOf<PaintedSize>()
     private val path = Path()
     private val oval = RectF()
     private val box = RectF()
@@ -130,6 +148,7 @@ internal class PlanPainter(
         faulty: Set<ElementId> = emptySet(),
         marked: Space? = null,
     ) {
+        handles.clear()
         val (gaps, solids) = drawing.polygons.partition { it.fill == FillKind.GAP }
         val (floors, bodies) = solids.partition { it.fill == FillKind.FLOOR }
         floors.forEach { polygon(canvas, it, frame) }
@@ -158,6 +177,20 @@ internal class PlanPainter(
             if (chosen) outline(canvas, palette.selection)
         }
     }
+
+    /**
+     * The size written nearest to a touch at ([x], [y]) on the canvas of the last paint, among
+     * those a typed value can change. A touch counts within [reach] of a number's box.
+     */
+    fun sizeAt(
+        x: Float,
+        y: Float,
+        reach: Float,
+    ): DrawnText? =
+        handles
+            .filter { x in it.bounds.left - reach..it.bounds.right + reach && y in it.bounds.top - reach..it.bounds.bottom + reach }
+            .minByOrNull { hypot(it.bounds.centerX() - x, it.bounds.centerY() - y) }
+            ?.size
 
     private fun polygon(
         canvas: Canvas,
@@ -200,6 +233,8 @@ internal class PlanPainter(
             StrokeKind.WALL_EDGE, StrokeKind.FRAME, StrokeKind.LEAF -> palette.edge
             StrokeKind.BELOW -> palette.below
             StrokeKind.LAYER -> palette.layer
+            StrokeKind.DIMENSION -> palette.dimension
+            StrokeKind.CHAIN -> palette.selection
             StrokeKind.NONE, StrokeKind.UNKNOWN -> null
         }
 
@@ -306,9 +341,18 @@ internal class PlanPainter(
                 TextKind.ABOUT_LENGTH -> "$about ${label.value}"
                 TextKind.ROOM_NAME -> rooms.name(label.value) ?: return
                 TextKind.ROOM_AREA -> rooms.area(label.value)
+                TextKind.OVERALL, TextKind.CLEAR, TextKind.PIER, TextKind.OPENING_WIDTH -> grouped(label.value)
                 TextKind.UNKNOWN -> return
             }
-        val pen = if (label.kind == TextKind.ROOM_NAME) name else text
+        val pen =
+            when (label.kind) {
+                TextKind.ROOM_NAME -> name
+
+                // The sizes of the selected space are in its colour.
+                TextKind.CLEAR, TextKind.PIER, TextKind.OPENING_WIDTH -> chain
+
+                else -> text
+            }
         val width = pen.measureText(written)
         // The engine says how much room a text has; one that is wider is left out.
         if (label.fit > 0.0 && width > label.fit * frame.scale) return
@@ -318,6 +362,23 @@ internal class PlanPainter(
         canvas.withRotation(turn, x, y) {
             drawText(written, x - width / 2, y - (pen.ascent() + pen.descent()) / 2, pen)
         }
+        if (label.isHandle) handles += PaintedSize(label, box(x, y, width, pen.fontSpacing, label.along))
+    }
+
+    // The upright box round a text [width] by [height] with its middle at ([x], [y]), written
+    // along [along] on the plan.
+    private fun box(
+        x: Float,
+        y: Float,
+        width: Float,
+        height: Float,
+        along: PointM,
+    ): RectF {
+        val across = abs(along.x).toFloat()
+        val up = abs(along.y).toFloat()
+        val halfWide = (width * across + height * up) / 2
+        val halfHigh = (width * up + height * across) / 2
+        return RectF(x - halfWide, y - halfHigh, x + halfWide, y + halfHigh)
     }
 
     // The direction from [centre] to [point] on the plan, in degrees counter-clockwise from +x.
