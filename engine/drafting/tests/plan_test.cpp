@@ -395,8 +395,8 @@ TEST(Draft, AMarkReadsAlongItsWallFromTheBottomUp) {
   const std::vector<Marked> job{{.id = id(3), .opening = openings[0].opening},
                                 {.id = id(4), .opening = openings[1].opening}};
 
-  const Drawing drawing =
-      draft({.walls = walls, .openings = openings, .below = {}, .marked = job}, kText);
+  const Drawing drawing = draft(
+      {.walls = walls, .openings = openings, .below = {}, .marked = job, .sheet = true}, kText);
 
   std::vector<Text> written;
   std::ranges::copy_if(drawing.texts, std::back_inserter(written),
@@ -439,10 +439,11 @@ TEST(Draft, AMarkStandsBesideItsOpeningOnTheSideItDoesNotOpenTo) {
                                 {.id = id(2), .opening = openings[0].opening},
                                 {.id = id(3), .opening = openings[1].opening}};
 
-  const Drawing drawing =
-      draft({.walls = walls, .openings = openings, .below = {}, .marked = job}, kText);
+  const Plan plan{.walls = walls, .openings = openings, .below = {}, .marked = job, .sheet = true};
+  const Drawing drawing = draft(plan, kText);
   const std::vector<Text> written = marks_in(drawing);
 
+  // A sheet has every opening's mark.
   ASSERT_EQ(written.size(), 2U);
   // The door opens to the wall's left, up the plan: its mark stands a text height off the
   // right face, by the door's middle.
@@ -462,6 +463,16 @@ TEST(Draft, AMarkStandsBesideItsOpeningOnTheSideItDoesNotOpenTo) {
   EXPECT_EQ(drawing.openings[1].width, 800_mm);
   EXPECT_EQ(drawing.openings[2].number, 2);
   EXPECT_EQ(drawing.openings[2].count, 1);
+  // A screen has the selected opening's mark alone, in the same place, and none when no
+  // opening is selected.
+  Plan screen = plan;
+  screen.sheet = false;
+  EXPECT_TRUE(marks_in(draft(screen, kText)).empty());
+  screen.selected = id(3);
+  const std::vector<Text> shown = marks_in(draft(screen, kText));
+  ASSERT_EQ(shown.size(), 1U);
+  EXPECT_EQ(shown[0].element, id(3));
+  expect_near(shown[0].at, written[1].at);
   // An opening the job does not list has no mark.
   EXPECT_TRUE(marks_in(draft({.walls = walls, .openings = openings, .below = {}}, kText)).empty());
 }

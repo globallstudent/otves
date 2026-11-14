@@ -49,7 +49,7 @@ sequenceDiagram
 
 `SetDimension` gives a size on the plan a typed value ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)): it carries the handle of the text that showed the size. An opening's width runs as `ResizeOpening`, a piece of wall as `MoveOpening`, a wall's length as `SetWallLength`, and a clear size as the `MoveWallEnd` commands of `geom::set_distance`, in one undo step. Each is checked before anything runs.
 
-`SetOpeningHinge` and `SetOpeningSwing` say how a door hangs. `CenterOpening` runs as `MoveOpening`: to the middle of the side of the room the opening is in, or of its wall when no room is there. `Draw` takes the selected element, and marks every opening of the level by its size among all the job's openings ([ADR 0017](../../docs/adr/0017-openings-carry-hinge-and-swing-marks-are-derived.md)).
+`SetOpeningHinge` and `SetOpeningSwing` say how a door hangs. `CenterOpening` runs as `MoveOpening`: to the middle of the side of the room the opening is in, or of its wall when no room is there. `Draw` takes the selected element. An opening is marked by its size among all the job's openings: the selected one on a screen, every one on a sheet ([ADR 0017](../../docs/adr/0017-openings-carry-hinge-and-swing-marks-are-derived.md)).
 
 `AddWallAcross` builds a wall across the room that holds a point, a typed distance from the wall on one hand of it ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)). `geom::across` says where it runs; it is added as `AddWall`, exact and along its nearer face, and the request's wall gives what it is made of.
 

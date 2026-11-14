@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <optional>
 #include <span>
 #include <tuple>
 #include <utility>
@@ -241,16 +242,17 @@ bool is_clear(const Box& box, const Drawing& drawing, TextSize text, Clear of) {
   return !on_a_text && !on_a_line && !on_a_swing;
 }
 
-// Each opening's mark, beside its middle and along its wall: by the face its leaf does not open
-// to, or else by the other one, the nearest place that is clear of the sizes written there and
-// of the doors' leaves; where no place is, the nearest that is clear of the sizes.
+// Each opening's mark, or the mark of `only` when one is named, beside the opening's middle and
+// along its wall: by the face its leaf does not open to, or else by the other one, the nearest
+// place that is clear of the sizes written there and of the doors' leaves; where no place is,
+// the nearest that is clear of the sizes.
 void write_marks(std::span<const geom::PlacedOpening> openings, std::span<const Mark> marks,
-                 TextSize text, Drawing& drawing) {
+                 std::optional<ElementId> only, TextSize text, Drawing& drawing) {
   std::vector<geom::PlacedOpening> ordered(openings.begin(), openings.end());
   std::ranges::sort(ordered, {}, &geom::PlacedOpening::id);
   for (const geom::PlacedOpening& placed : ordered) {
     const auto mark = std::ranges::lower_bound(marks, placed.id, {}, &Mark::opening);
-    if (mark == marks.end() || mark->opening != placed.id) {
+    if (mark == marks.end() || mark->opening != placed.id || (only && *only != placed.id)) {
       continue;
     }
     const auto [near_right, far_right, far_left, near_left] =
@@ -484,7 +486,9 @@ Drawing draft(const Plan& plan, TextSize text) {
       write_opening_sizes(spaces, walls, plan.openings, plan.selected, size, drawing);
     }
   }
-  write_marks(plan.openings, mark_openings(plan.marked), size, drawing);
+  // A sheet has every opening's mark; a screen shows the selected opening's alone.
+  write_marks(plan.openings, mark_openings(plan.marked),
+              plan.sheet ? std::nullopt : std::optional{plan.selected}, size, drawing);
   if (!spaces.empty()) {
     write_overall(joins.footprints, size, drawing);
   }

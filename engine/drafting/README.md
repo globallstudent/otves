@@ -27,6 +27,7 @@ flowchart LR
 | Room sizes | Of the space in focus, in place of its name | Of every space, beside its name |
 | Their stroke | `kChain`, the colour of what is selected | `kDimension`, ink |
 | Chain of an opening | Of the selected opening, when no space is in focus | One for each opening: a wall between two rooms is sized in the wider of them |
+| Marks | Of the selected opening | Of every opening |
 | A room's label | At its label point | Written after the sizes, where they leave room for it |
 | Length of a wall round a space | Until somebody has typed or measured it | Never: the space's sizes say it |
 
@@ -53,7 +54,7 @@ flowchart LR
 | Opening | The gap through its wall and two jambs |
 | Window | The gap, its two faces and the glazing line down the middle of the wall |
 | Door | The gap, the leaf standing open at right angles on the edge it hangs on and the face it opens to, and its swing ([ADR 0017](../../docs/adr/0017-openings-carry-hinge-and-swing-marks-are-derived.md)) |
-| Mark | Beside each opening that has one and along its wall; the number goes out with a kind that names windows, doors or empty openings |
+| Mark | Beside the opening and along its wall, for the selected opening or, on a sheet, for each; the number goes out with a kind that names windows, doors or empty openings |
 | Wall length | A number beside the wall and along it, marked when nobody has typed or measured it |
 | Room | Its name, as its kind's code, over its floor area in cm²; the area alone in a space with no name |
 

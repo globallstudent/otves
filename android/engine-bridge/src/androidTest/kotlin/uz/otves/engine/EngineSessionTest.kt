@@ -179,12 +179,17 @@ class EngineSessionTest {
         assertThat(drawing.lines.map { it.stroke }).containsExactly(StrokeKind.WALL_EDGE, StrokeKind.WALL_EDGE, StrokeKind.LEAF).inOrder()
         assertThat(drawing.arcs.single().centre).isEqualTo(PointM(1.05, 0.19))
         val length = drawing.texts.single { it.kind == TextKind.LENGTH }
-        // The door is the first of its kind: ДВ-1.
-        assertThat(drawing.texts.single { it.isMark }.kind).isEqualTo(TextKind.DOOR_MARK)
-        assertThat(drawing.texts.single { it.isMark }.value).isEqualTo(1L)
+        // No opening is selected, so the drawing has no mark.
+        assertThat(drawing.texts.none { it.isMark }).isTrue()
         assertThat(length.value).isEqualTo(6000L)
         assertThat(length.at.x).isWithin(1e-9).of(3.0)
         assertThat(length.along).isEqualTo(PointM(1.0, 0.0))
+
+        // Drawn as selected, the door has its mark: the first of its kind, ДВ-1.
+        val selected = session.send(listOf(EngineCommand.Draw(level, 300.mm, 150.mm, selected = placed.created)))
+        val mark = checkNotNull((selected.results.single() as CommandResult.Done).drawing).texts.single { it.isMark }
+        assertThat(mark.kind).isEqualTo(TextKind.DOOR_MARK)
+        assertThat(mark.value).isEqualTo(1L)
 
         val nowhere = session.send(listOf(EngineCommand.Draw(ElementId(Uuid.random()), 300.mm, 150.mm)))
         assertThat((nowhere.results.single() as CommandResult.Failed).error).isEqualTo(EngineError.NOT_FOUND)

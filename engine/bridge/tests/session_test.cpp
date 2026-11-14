@@ -1046,18 +1046,16 @@ TEST(Session, ADrawingIsTheLevelAsADisplayListAndChangesNothing) {
   EXPECT_EQ(drawing->polygons()->Get(5)->fill(), schema::Fill::Gap);
   EXPECT_EQ(drawing->lines()->size(), 15U);
   EXPECT_EQ(drawing->arcs()->size(), 0U);
-  // The walls were drawn to their lengths and close a space, so its sizes speak for them. The
-  // window has the first mark of its kind.
-  ASSERT_EQ(drawing->texts()->size(), 4U);
+  // The walls were drawn to their lengths and close a space, so its sizes speak for them. No
+  // opening is selected, so the window's mark is not written.
+  ASSERT_EQ(drawing->texts()->size(), 3U);
   EXPECT_EQ(drawing->texts()->Get(0)->kind(), schema::TextKind::RoomArea);
-  EXPECT_EQ(drawing->texts()->Get(1)->kind(), schema::TextKind::WindowMark);
-  EXPECT_EQ(drawing->texts()->Get(1)->value(), 1);
-  EXPECT_EQ(drawing->texts()->Get(2)->kind(), schema::TextKind::Overall);
-  EXPECT_EQ(drawing->texts()->Get(2)->element(), nullptr);
-  EXPECT_EQ(drawing->texts()->Get(2)->value(), 6380);
-  EXPECT_DOUBLE_EQ(drawing->texts()->Get(2)->at()->x(), 3.0);
-  EXPECT_DOUBLE_EQ(drawing->texts()->Get(2)->along()->x(), 1.0);
-  EXPECT_EQ(drawing->texts()->Get(3)->value(), 4380);
+  EXPECT_EQ(drawing->texts()->Get(1)->kind(), schema::TextKind::Overall);
+  EXPECT_EQ(drawing->texts()->Get(1)->element(), nullptr);
+  EXPECT_EQ(drawing->texts()->Get(1)->value(), 6380);
+  EXPECT_DOUBLE_EQ(drawing->texts()->Get(1)->at()->x(), 3.0);
+  EXPECT_DOUBLE_EQ(drawing->texts()->Get(1)->along()->x(), 1.0);
+  EXPECT_EQ(drawing->texts()->Get(2)->value(), 4380);
 
   EXPECT_EQ(asked.results()->Get(1)->error(), schema::ErrorCode::NotFound);
   EXPECT_EQ(asked.results()->Get(2)->error(), schema::ErrorCode::CorruptData);
@@ -1954,7 +1952,7 @@ TEST(Session, OpeningsOfOneSizeShareAMarkAndASizeKeepsItsNumber) {
                            .place(level, {4500, 0})
                            .place(level, {6000, 2000}, 900, schema::OpeningKind::Door)
                            .place(level, {3000, 4000}, 1200)
-                           .draw(level)
+                           .draw_sheet(level)
                            .bytes());
   const schema::Drawing* drawing = placed.results()->Get(4)->drawing();
   ASSERT_NE(drawing, nullptr);
@@ -1966,8 +1964,8 @@ TEST(Session, OpeningsOfOneSizeShareAMarkAndASizeKeepsItsNumber) {
   // With the first two gone the 1 200 window is the oldest of the windows: it is ОК-1 now.
   const ElementId first = to_id(placed.results()->Get(0)->created());
   const ElementId second = to_id(placed.results()->Get(1)->created());
-  const auto& fewer =
-      respond(session, Request{}.remove_opening(first).remove_opening(second).draw(level).bytes());
+  const auto& fewer = respond(
+      session, Request{}.remove_opening(first).remove_opening(second).draw_sheet(level).bytes());
   EXPECT_EQ(sizes(*fewer.results()->Get(2)->drawing(), schema::TextKind::WindowMark),
             std::vector<std::int64_t>{1});
 }

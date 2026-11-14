@@ -300,8 +300,11 @@ TEST(DraftSizes, AMarkStandsClearOfTheSizesOfTheRoomsItsOpeningIsBetween) {
   const std::vector<Marked> job{{.id = id(20), .opening = openings[0].opening}};
   Plan plan{.walls = walls, .openings = openings, .below = {}, .marked = job};
 
-  // On a screen with nothing in focus no size is in its way: a text height off the face the
-  // door does not open to.
+  // On a screen a mark is the selected opening's. The door's chain is written in the room it
+  // opens into, so no size is in the mark's way: a text height off the face the door does not
+  // open to.
+  EXPECT_TRUE(texts(draft(plan, kText), TextKind::kDoorMark).empty());
+  plan.selected = id(20);
   const std::vector<Text> shown = texts(draft(plan, kText), TextKind::kDoorMark);
   ASSERT_EQ(shown.size(), 1U);
   expect_near(shown[0].at, {.x = 2.95, .y = 1.8 - 0.2});

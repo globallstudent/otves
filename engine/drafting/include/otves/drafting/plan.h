@@ -191,7 +191,8 @@ struct Plan {
   // Every opening of the job: marks run through all its levels. An opening of the level that
   // is not among them has no mark.
   std::span<const Marked> marked{};  // NOLINT(readability-redundant-member-init)
-  // The selected element; an opening is drawn with the chain of the side it is in.
+  // The selected element; an opening is drawn with the chain of the side it is in and with
+  // its mark, the only mark a drawing that is not a sheet has.
   ElementId selected{};  // NOLINT(readability-redundant-member-init)
   // For a sheet: every space is drawn with its sizes beside its name.
   bool sheet = false;
