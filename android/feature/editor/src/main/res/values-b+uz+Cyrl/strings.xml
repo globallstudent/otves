@@ -212,4 +212,7 @@
     <string name="partition_from_right">Ўнгдан</string>
     <string name="partition_build">Қуриш</string>
     <string name="partition_refused">Бу масофада пардевор сиғмайди</string>
+    <string name="room_by_size">Ўлчам бўйича хона</string>
+    <string name="editor_hint_room">Хона бурчаги бўладиган жойга босинг</string>
+    <string name="room_refused">Бундай ўлчамли хона бу ерга сиғмайди</string>
 </resources>

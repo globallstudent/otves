@@ -11,6 +11,7 @@ import java.nio.ByteBuffer
 import uz.otves.schema.AddLevel as AddLevelTable
 import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddRoom as AddRoomTable
+import uz.otves.schema.AddRoomWalls as AddRoomWallsTable
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.AddWallAcross as AddWallAcrossTable
@@ -319,6 +320,27 @@ internal object RequestEncoder {
                 AddWallAcrossTable.addFrom(this, code(command.from))
                 AddWallAcrossTable.addDistance(this, command.distance.value)
                 Command.AddWallAcross to AddWallAcrossTable.endAddWallAcross(this)
+            }
+
+            is EngineCommand.AddRoomWalls -> {
+                // The engine sets each wall's points and the line they lie on.
+                WallTable.startWall(this)
+                WallTable.addLevel(this, uuid(command.level))
+                WallTable.addThickness(this, command.thickness.value)
+                WallTable.addHeight(this, command.height.value)
+                unit(command.unit)
+                command.type?.let { WallTable.addType(this, uuid(it)) }
+                val wall = WallTable.endWall(this)
+                AddRoomWallsTable.startAddRoomWalls(this)
+                AddRoomWallsTable.addWall(this, wall)
+                AddRoomWallsTable.addAt(this, point(command.at))
+                AddRoomWallsTable.addReach(this, command.reach.value)
+                AddRoomWallsTable.addGrid(this, command.grid.value)
+                AddRoomWallsTable.addWidth(this, command.width.value)
+                AddRoomWallsTable.addDepth(this, command.depth.value)
+                AddRoomWallsTable.addRight(this, command.right)
+                AddRoomWallsTable.addUp(this, command.up)
+                Command.AddRoomWalls to AddRoomWallsTable.endAddRoomWalls(this)
             }
 
             is EngineCommand.RemoveOpening -> {

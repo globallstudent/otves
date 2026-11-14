@@ -117,6 +117,9 @@ private fun RunActions(
         if (state.draft != null) {
             Pill(stringResource(R.string.measure_start), false, actions.onMeasure)
             Pill(stringResource(R.string.inspector_done), false, actions.onFinishWall)
+        } else if (state.tool == Tool.WALL) {
+            // A room is entered by its clear size from a corner the next touch gives.
+            Pill(stringResource(R.string.room_by_size), state.roomPlacing, actions.onRoom)
         }
     }
 }

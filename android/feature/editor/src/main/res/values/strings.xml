@@ -227,4 +227,11 @@
     <string name="partition_from_right">Справа</string>
     <string name="partition_build">Построить</string>
     <string name="partition_refused">На таком расстоянии перегородка не помещается</string>
+    <string name="room_by_size">Комната по размерам</string>
+    <string name="editor_hint_room">Нажмите там, где угол комнаты</string>
+    <string name="room_refused">Комната с такими размерами здесь не помещается</string>
+    <string name="room_way_right_up" translatable="false">↗</string>
+    <string name="room_way_left_up" translatable="false">↖</string>
+    <string name="room_way_left_down" translatable="false">↙</string>
+    <string name="room_way_right_down" translatable="false">↘</string>
 </resources>

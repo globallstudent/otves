@@ -226,6 +226,25 @@ class EditorViewModelTest {
                         )
                     }
 
+                    // A room in a corner: the two walls that close it, from the corner touched.
+                    command is EngineCommand.AddRoomWalls -> {
+                        val far = PointMm(command.at.x + command.width, command.at.y + command.depth)
+                        val made =
+                            listOf(PointMm(far.x, command.at.y) to far, far to PointMm(command.at.x, far.y)).map { (from, to) ->
+                                val id = ElementId(Uuid.fromLongs(++next, 0))
+                                val wall =
+                                    Wall(command.level, from, to, command.thickness, command.height, LocationLine.LEFT_FACE, command.unit)
+                                elements[id] = wall
+                                changes += ElementChange(id, wall)
+                                id
+                            }
+                        steps.addLast {
+                            made.forEach(elements::remove)
+                            made.map { ElementChange(it, null) }
+                        }
+                        results += CommandResult.Done(null)
+                    }
+
                     command is EngineCommand.AddSketch -> {
                         val made =
                             command.points.zipWithNext { from, to ->
@@ -1149,6 +1168,67 @@ class EditorViewModelTest {
         assertThat(viewModel.uiState.value.partition).isNull()
         assertThat(viewModel.uiState.value.outlines).hasSize(1)
         assertThat(viewModel.uiState.value.canUndo).isTrue()
+    }
+
+    @Test
+    fun aRoomIsBuiltFromItsTypedSizeAtTheCornerTouched() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.selectTool(Tool.WALL)
+        viewModel.toggleRoom()
+        assertThat(viewModel.uiState.value.roomPlacing).isTrue()
+        val at = PointMm(300.mm, 350.mm)
+
+        viewModel.tap(at, reach)
+
+        // The touch gave the room's corner: it started no wall.
+        assertThat(viewModel.uiState.value.room).isEqualTo(RoomEntry(at, reach))
+        assertThat(viewModel.uiState.value.roomPlacing).isFalse()
+        assertThat(viewModel.uiState.value.draft).isNull()
+        assertThat(viewModel.uiState.value.typing).isTrue()
+
+        // The width, then the depth.
+        "1600".forEach { viewModel.typeDigit(it.digitToInt()) }
+        viewModel.confirmRoom()
+        assertThat(
+            viewModel.uiState.value.room
+                ?.active,
+        ).isEqualTo(1)
+        "2000".forEach { viewModel.typeDigit(it.digitToInt()) }
+        viewModel.turnRoom(right = false, up = true)
+
+        // A room the engine refuses stays on the keys, to be corrected there.
+        engine.refuseNext = EngineError.DOES_NOT_FIT
+        viewModel.confirmRoom()
+        assertThat(
+            viewModel.uiState.value.room
+                ?.refused,
+        ).isTrue()
+        assertThat(viewModel.uiState.value.refused).isNull()
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
+
+        viewModel.turnRoom(right = true, up = true)
+        assertThat(
+            viewModel.uiState.value.room
+                ?.refused,
+        ).isFalse()
+        viewModel.confirmRoom()
+
+        // The walls are like the ones the wall tool draws; the engine says where they run.
+        val sent = engine.sent.last().single() as EngineCommand.AddRoomWalls
+        assertThat(sent.level).isEqualTo(level)
+        assertThat(sent.at).isEqualTo(at)
+        assertThat(sent.reach).isEqualTo(reach)
+        assertThat(sent.width).isEqualTo(1_600.mm)
+        assertThat(sent.depth).isEqualTo(2_000.mm)
+        assertThat(sent.right).isTrue()
+        assertThat(sent.up).isTrue()
+        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.thickness)
+        assertThat(viewModel.uiState.value.room).isNull()
+        assertThat(viewModel.uiState.value.outlines).hasSize(2)
+
+        // Both walls are one step to undo.
+        viewModel.undo()
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
     }
 
     @Test

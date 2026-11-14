@@ -181,6 +181,30 @@ public sealed interface EngineCommand {
         public val type: ElementId? = null,
     ) : EngineCommand
 
+    /**
+     * Builds the walls of a room [width] by [depth] clear, with one corner where [at] was touched
+     * (docs/adr/0016): the corner of what is built nearest the touch within [reach], else a point
+     * of a face within reach, else the touch on the [grid]. The room lies to the [right] of that
+     * corner and [up] the plan from it, or the other ways. A side along a wall already there
+     * gets none. The walls are of [type], or with none [thickness] thick and laid from [unit];
+     * they are [height] high and exact, and are added in one undo step. Fails, changing
+     * nothing, with [EngineError.DOES_NOT_FIT] or [EngineError.OFF_PLAN].
+     */
+    public data class AddRoomWalls(
+        public val level: ElementId,
+        public val at: PointMm,
+        public val reach: Mm,
+        public val grid: Mm,
+        public val width: Mm,
+        public val depth: Mm,
+        public val right: Boolean,
+        public val up: Boolean,
+        public val thickness: Mm,
+        public val height: Mm,
+        public val unit: UnitSize? = null,
+        public val type: ElementId? = null,
+    ) : EngineCommand
+
     public data class RemoveOpening(
         public val opening: ElementId,
     ) : EngineCommand

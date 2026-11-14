@@ -224,6 +224,29 @@ internal data class PartitionEntry(
     val refused: Boolean = false,
 )
 
+/**
+ * A room to build from its clear size (docs/adr/0016): the sizes being typed in millimetres,
+ * across the plan and then up it, which of them the keys go to, and which way the room lies
+ * from the corner the builder touched [at]. The engine [refused] the room typed last; the keys
+ * stay open for another.
+ */
+internal data class RoomEntry(
+    val at: PointMm,
+    val reach: Mm,
+    val digits: List<String> = listOf("", ""),
+    val active: Int = 0,
+    val right: Boolean = true,
+    val up: Boolean = true,
+    val refused: Boolean = false,
+) {
+    /** The width and the depth once both are typed. */
+    val sizes: Pair<Mm, Mm>?
+        get() {
+            val typed = digits.map { it.toLongOrNull() ?: 0 }
+            return if (typed.all { it > 0 }) Mm(typed[0]) to Mm(typed[1]) else null
+        }
+}
+
 @Immutable
 internal data class EditorUiState(
     val ready: Boolean = false,
@@ -251,6 +274,9 @@ internal data class EditorUiState(
     val drawn: ElementId? = null,
     val entry: LengthEntry? = null,
     val partition: PartitionEntry? = null,
+    /** The wall tool waits for a touch where a room's corner goes. */
+    val roomPlacing: Boolean = false,
+    val room: RoomEntry? = null,
     /** The builder's prices by take-off item, for one unit of each. */
     val prices: Map<String, Money> = emptyMap(),
     val priceEntry: PriceEntry? = null,
@@ -295,7 +321,7 @@ internal data class EditorUiState(
 ) {
     /** A number pad is open: until the number is entered, touches on the plan only move it. */
     val typing: Boolean
-        get() = entry != null || partition != null || sizeEntry != null || priceEntry != null || measure != null
+        get() = entry != null || partition != null || room != null || sizeEntry != null || priceEntry != null || measure != null
 
     /** How thick the walls drawn next are: as their type, or else as chosen. */
     val drawnThickness: Mm
@@ -461,6 +487,11 @@ internal class EditorViewModel(
             val current = state.value
             val level = current.level ?: return@act
             if (current.tool != Tool.WALL || current.typing) return@act
+            // A touch that gives a room's corner starts no wall: the keys for its size open.
+            if (current.roomPlacing) {
+                state.update { it.copy(roomPlacing = false, room = RoomEntry(at, reach)) }
+                return@act
+            }
             val from = run?.tip()
             // While this waited the finger moved on, and only where it is now matters.
             if (from != null && touch != aims) return@act
@@ -830,6 +861,7 @@ internal class EditorViewModel(
                 it
                     .copy(
                         tool = tool,
+                        roomPlacing = false,
                         sizeEntry = null,
                         drawn = null,
                         materialOpen = false,
@@ -873,6 +905,7 @@ internal class EditorViewModel(
     fun typeDigit(digit: Int) {
         val typed = { digits: String -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_LENGTH_DIGITS } ?: digits }
         if (state.value.partition != null) return partitioned(typed)
+        if (state.value.room != null) return roomed(typed)
         if (state.value.sizeEntry != null) return sized(typed)
         if (state.value.priceEntry != null) {
             return priced { digits -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_PRICE_DIGITS } ?: digits }
@@ -921,6 +954,7 @@ internal class EditorViewModel(
 
     fun eraseDigit() {
         if (state.value.partition != null) return partitioned { it.dropLast(1) }
+        if (state.value.room != null) return roomed { it.dropLast(1) }
         if (state.value.sizeEntry != null) return sized { it.dropLast(1) }
         if (state.value.priceEntry != null) return priced { it.dropLast(1) }
         if (state.value.entry == null) return measured { it.copy(digits = it.digits.dropLast(1)) }
@@ -928,6 +962,64 @@ internal class EditorViewModel(
     }
 
     fun cancelLength() = state.update { it.copy(entry = null) }
+
+    /** The wall tool's next touch says where a room's corner goes, or no longer does. */
+    fun toggleRoom() = state.update { it.copy(roomPlacing = !it.roomPlacing && it.tool == Tool.WALL && it.draft == null) }
+
+    /** Which of the room's two sizes the keys go to. */
+    fun chooseRoomSize(index: Int) = state.update { current -> current.copy(room = current.room?.copy(active = index)) }
+
+    /** Which way the room lies from its corner. */
+    fun turnRoom(
+        right: Boolean,
+        up: Boolean,
+    ) = state.update { current -> current.copy(room = current.room?.copy(right = right, up = up, refused = false)) }
+
+    fun cancelRoom() = state.update { it.copy(room = null) }
+
+    // Changes the digits of the room's size being typed.
+    private fun roomed(change: (String) -> String) =
+        state.update { current ->
+            val entry = current.room ?: return@update current
+            val digits = entry.digits.mapIndexed { index, typed -> if (index == entry.active) change(typed) else typed }
+            current.copy(room = entry.copy(digits = digits, refused = false))
+        }
+
+    /**
+     * After the width, goes on to the depth; with both, builds the room's walls like the walls
+     * the wall tool draws. The engine says where they run and which walls already there the
+     * room shares; a room it refuses stays on the keys to be corrected.
+     */
+    fun confirmRoom() =
+        act {
+            val current = state.value
+            val entry = current.room ?: return@act
+            val level = current.level ?: return@act
+            val (width, depth) =
+                entry.sizes ?: run {
+                    state.update { it.copy(room = entry.copy(active = entry.digits.indexOfFirst(String::isEmpty).coerceAtLeast(0))) }
+                    return@act
+                }
+            val walls =
+                EngineCommand.AddRoomWalls(
+                    level = level,
+                    at = entry.at,
+                    reach = entry.reach,
+                    grid = Grid,
+                    width = width,
+                    depth = depth,
+                    right = entry.right,
+                    up = entry.up,
+                    // A wall of a type has no thickness or unit of its own.
+                    thickness = if (current.kind == null) current.thickness else 0.mm,
+                    height = WallHeight,
+                    unit = current.material.takeIf { current.kind == null },
+                    type = current.kind,
+                )
+            execute(listOf(walls))
+            val refused = state.value.refused != null
+            state.update { it.copy(room = if (refused) entry.copy(refused = true) else null, refused = null) }
+        }
 
     /** Opens the keys for a wall across the selected room, a typed distance from one of its walls. */
     fun startPartition() {

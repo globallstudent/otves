@@ -212,4 +212,7 @@
     <string name="partition_from_right">O‘ngdan</string>
     <string name="partition_build">Qurish</string>
     <string name="partition_refused">Bu masofada pardevor sig‘maydi</string>
+    <string name="room_by_size">O‘lcham bo‘yicha xona</string>
+    <string name="editor_hint_room">Xona burchagi bo‘ladigan joyga bosing</string>
+    <string name="room_refused">Bunday o‘lchamli xona bu yerga sig‘maydi</string>
 </resources>

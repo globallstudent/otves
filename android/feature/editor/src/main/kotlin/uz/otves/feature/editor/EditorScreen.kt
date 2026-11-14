@@ -141,6 +141,11 @@ fun EditorRoute(
                 onPartitionWall = viewModel::choosePartitionWall,
                 onCancelPartition = viewModel::cancelPartition,
                 onConfirmPartition = viewModel::confirmPartition,
+                onRoom = viewModel::toggleRoom,
+                onRoomSize = viewModel::chooseRoomSize,
+                onRoomWay = viewModel::turnRoom,
+                onCancelRoom = viewModel::cancelRoom,
+                onConfirmRoom = viewModel::confirmRoom,
                 onFlipHinge = viewModel::flipHinge,
                 onFlipSwing = viewModel::flipSwing,
                 onCenterOpening = viewModel::centerOpening,
@@ -219,6 +224,11 @@ internal data class EditorActions(
     val onPartitionWall: (Hand) -> Unit = {},
     val onCancelPartition: () -> Unit = {},
     val onConfirmPartition: () -> Unit = {},
+    val onRoom: () -> Unit = {},
+    val onRoomSize: (Int) -> Unit = {},
+    val onRoomWay: (right: Boolean, up: Boolean) -> Unit = { _, _ -> },
+    val onCancelRoom: () -> Unit = {},
+    val onConfirmRoom: () -> Unit = {},
     val onFlipHinge: () -> Unit = {},
     val onFlipSwing: () -> Unit = {},
     val onCenterOpening: () -> Unit = {},
@@ -310,10 +320,12 @@ internal fun EditorScreen(
             val sizeEntry = state.sizeEntry
             val priceEntry = state.priceEntry
             val partition = state.partition
+            val room = state.room
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 when {
                     entry != null -> LengthPad(entry, actions)
                     partition != null -> PartitionPad(partition, actions)
+                    room != null -> RoomPad(room, actions)
                     sizeEntry != null -> SizePad(sizeEntry, actions)
                     priceEntry != null -> PricePad(priceEntry, state, actions)
                     measure != null -> MeasurePad(measure, state, actions)
@@ -372,9 +384,11 @@ private fun Notice(state: EditorUiState) {
             state.refused != null -> refusalText(state.refused)
 
             // The number pad says what is being entered.
-            state.measure != null -> null
+            state.typing -> null
 
             drawing -> stringResource(R.string.editor_hint_next)
+
+            state.roomPlacing -> stringResource(R.string.editor_hint_room)
 
             joinIssue != null -> issueText(joinIssue.kind)
 

@@ -122,6 +122,62 @@ private fun handName(hand: Hand): String =
         },
     )
 
+// A room by its clear size: its width across the plan and its depth up it, typed one after the
+// other, and which way it lies from the corner the builder touched.
+@Composable
+internal fun RoomPad(
+    entry: RoomEntry,
+    actions: EditorActions,
+) {
+    val colors = OtvesTheme.colors
+    Panel {
+        PanelHeader(stringResource(R.string.room_by_size)) {
+            PanelAction(stringResource(R.string.length_cancel), actions.onCancelRoom)
+        }
+        Row(modifier = Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(R.string.size_width, R.string.size_depth).forEachIndexed { index, label ->
+                val active = index == entry.active
+                Surface(
+                    onClick = { actions.onRoomSize(index) },
+                    shape = PanelShape,
+                    color = if (active) colors.field else colors.surface,
+                    modifier = Modifier.weight(1f).semantics { selected = active },
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium, color = colors.inkSecondary)
+                        Text(
+                            text = entry.digits[index].toLongOrNull()?.let(::grouped) ?: "0",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = if (entry.digits[index].isEmpty()) colors.inkTertiary else colors.ink,
+                        )
+                    }
+                }
+            }
+        }
+        if (entry.refused) {
+            Text(stringResource(R.string.room_refused), style = MaterialTheme.typography.bodyMedium, color = colors.warning)
+        }
+        // From the corner: up and to the right, up and to the left, down and to the left, down
+        // and to the right.
+        val ways = listOf(true to true, false to true, false to false, true to false)
+        SegmentedControl(
+            options =
+                listOf(R.string.room_way_right_up, R.string.room_way_left_up, R.string.room_way_left_down, R.string.room_way_right_down)
+                    .map { stringResource(it) },
+            selected = ways.indexOf(entry.right to entry.up),
+            onSelect = { actions.onRoomWay(ways[it].first, ways[it].second) },
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+        val typed = entry.sizes != null
+        NumberKeys(
+            actions,
+            stringResource(if (typed) R.string.partition_build else R.string.measure_next),
+            actions.onConfirmRoom,
+            enabled = entry.digits[entry.active].isNotEmpty(),
+        )
+    }
+}
+
 // Walls entered one after another from readings: the length, then which way it goes from the wall
 // before. The plan shows the wall before it is built.
 @Composable

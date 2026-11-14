@@ -10,6 +10,7 @@ import uz.otves.schema.Request
 import kotlin.uuid.Uuid
 import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddRoom as AddRoomTable
+import uz.otves.schema.AddRoomWalls as AddRoomWallsTable
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.AddWallAcross as AddWallAcrossTable
@@ -307,6 +308,39 @@ class RequestEncoderTest {
         assertThat(across.wall().start()).isNull()
         val typed = (request.commands(1).command(AddWallAcrossTable()) as AddWallAcrossTable).wall()
         assertThat(Uuid.fromLongs(typed.type().high(), typed.type().low())).isEqualTo(type.uuid)
+    }
+
+    @Test
+    fun aRoomByItsSizeCarriesTheTouchTheSizesAndTheWayItLies() {
+        val room =
+            EngineCommand.AddRoomWalls(
+                level = level,
+                at = PointMm(300.mm, 350.mm),
+                reach = 300.mm,
+                grid = 100.mm,
+                width = 1_600.mm,
+                depth = 2_000.mm,
+                right = false,
+                up = true,
+                thickness = 120.mm,
+                height = 2_800.mm,
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(room)))
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.AddRoomWalls)
+        val sent = request.commands(0).command(AddRoomWallsTable()) as AddRoomWallsTable
+        assertThat(sent.at().x()).isEqualTo(300L)
+        assertThat(sent.at().y()).isEqualTo(350L)
+        assertThat(sent.reach()).isEqualTo(300L)
+        assertThat(sent.grid()).isEqualTo(100L)
+        assertThat(sent.width()).isEqualTo(1_600L)
+        assertThat(sent.depth()).isEqualTo(2_000L)
+        assertThat(sent.right()).isFalse()
+        assertThat(sent.up()).isTrue()
+        assertThat(sent.wall().thickness()).isEqualTo(120L)
+        // The engine places the walls: the request carries no points for them.
+        assertThat(sent.wall().start()).isNull()
     }
 
     @Test
