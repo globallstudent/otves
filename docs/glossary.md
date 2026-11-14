@@ -16,6 +16,11 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | facing | облицовка | qoplama | The outer masonry layer; hatched at 45° on the plan |
 | insulation | утеплитель | issiqlik qatlami | A layer counted by face area for each thickness; cross-hatched on the plan |
 | mirrored wall | развёрнутая стена | aylantirilgan devor | A wall whose outer face is its left, looking from start to end |
+| space | помещение | xona | A part of the plan closed by walls on every side, bounded by their inner faces (ADR 0015) |
+| room | название помещения | xona nomi | A name for a space: an anchor point and what the room is used as |
+| anchor | точка названия | nom nuqtasi | The point that says which space a room names; it stays put when walls move |
+| island | отдельно стоящая стена | alohida turgan devor | What stands free inside a space; its footprint comes off the floor |
+| floor area | площадь пола | pol maydoni | A space's outline less its islands, in m²; written to 0,1 m² |
 | sketch | набросок | qoralama | A stroke drawn with a finger and read as walls (ADR 0012) |
 | drawing | чертёж | chizma | One level as a display list: polygons, lines, arcs and texts the engine placed and the app paints (ADR 0013) |
 | exact length | точный размер | aniq o‘lcham | A wall length that was typed or measured; a sketched wall's is written with «≈» until then |

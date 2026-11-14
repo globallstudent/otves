@@ -1,6 +1,7 @@
 package uz.otves.data.project
 
 import com.google.common.truth.Truth.assertThat
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.mm
@@ -10,6 +11,8 @@ import uz.otves.engine.LocationLine
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointMm
+import uz.otves.engine.Room
+import uz.otves.engine.RoomKind
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
 import uz.otves.engine.WallLayer
@@ -20,6 +23,7 @@ import kotlin.uuid.Uuid
 import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.RoomKind as RoomKindCode
 import uz.otves.schema.WallRole as WallRoleCode
 
 class RowMappingTest {
@@ -57,6 +61,18 @@ class RowMappingTest {
         assertThat(wool.row(layer).element()).isEqualTo(layer to wool)
         assertThat(typed.row(wall).element()).isEqualTo(wall to typed)
         assertThat(typed.row(wall).typeId).isEqualTo("019a5f00-0000-7000-8000-000000000007")
+    }
+
+    @Test
+    fun aRoomComesBackFromItsRowWithItsKindAsTheSchemaCodesIt() {
+        val room = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000009"))
+        val bedroom = Room(level, PointMm(2_000.mm, (-1_500).mm), RoomKind.BEDROOM)
+
+        assertThat(bedroom.row(room).element()).isEqualTo(room to bedroom)
+        assertThat(bedroom.row(room).kind).isEqualTo(RoomKindCode.Bedroom)
+        assertThat(bedroom.row(room).levelId).isEqualTo("019a5f00-0000-7000-8000-000000000001")
+        // A kind this app does not know is a job from a newer one.
+        assertThrows(CorruptJobException::class.java) { bedroom.row(room).copy(kind = 200).element() }
     }
 
     @Test

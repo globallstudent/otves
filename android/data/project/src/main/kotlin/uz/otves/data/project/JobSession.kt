@@ -12,6 +12,7 @@ import uz.otves.engine.EngineResponse
 import uz.otves.engine.Issue
 import uz.otves.engine.Level
 import uz.otves.engine.Opening
+import uz.otves.engine.Room
 import uz.otves.engine.Takeoff
 import uz.otves.engine.Wall
 import uz.otves.engine.WallLayer
@@ -28,6 +29,9 @@ public interface JobModel {
     public val openings: Map<ElementId, Opening>
     public val wallTypes: Map<ElementId, WallType>
     public val wallLayers: Map<ElementId, WallLayer>
+
+    /** The names of rooms, each for the space of its level that holds its anchor. */
+    public val rooms: Map<ElementId, Room>
 
     /** What the job is estimated under; null until a condition is set. */
     public val conditions: Conditions?
@@ -143,6 +147,7 @@ public class JobSession(
         override val openings = mutableMapOf<ElementId, Opening>()
         override val wallTypes = mutableMapOf<ElementId, WallType>()
         override val wallLayers = mutableMapOf<ElementId, WallLayer>()
+        override val rooms = mutableMapOf<ElementId, Room>()
         private var conditionsId: ElementId? = null
         override var conditions: Conditions? = null
         override var outlines: List<WallOutline> = emptyList()
@@ -180,6 +185,10 @@ public class JobSession(
                         wallLayers[change.id] = element
                     }
 
+                    is Room -> {
+                        rooms[change.id] = element
+                    }
+
                     is Conditions -> {
                         conditionsId = change.id
                         conditions = element
@@ -203,6 +212,7 @@ public class JobSession(
                 conditions = null
             }
             levels.remove(id) ?: walls.remove(id) ?: openings.remove(id) ?: wallTypes.remove(id) ?: wallLayers.remove(id)
+                ?: rooms.remove(id)
         }
 
         // Ids grow with time, so they order the storeys made at one elevation.

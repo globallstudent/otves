@@ -75,6 +75,9 @@ public enum class FillKind {
     FACING,
     INSULATION,
 
+    /** A space the walls close. */
+    FLOOR,
+
     /** A fill from a newer engine than this app knows; it is not painted. */
     UNKNOWN,
 }
@@ -107,6 +110,12 @@ public enum class TextKind {
     /** A length nobody has typed or measured. */
     ABOUT_LENGTH,
 
+    /** A room's name: the value is its [RoomKind]'s code in the schema. */
+    ROOM_NAME,
+
+    /** A space's floor: the value is its area in cm². */
+    ROOM_AREA,
+
     /** A text from a newer engine than this app knows; it is not written. */
     UNKNOWN,
 }
@@ -138,14 +147,35 @@ public data class DrawnArc(
 
 /**
  * A number written with its middle at [at], along the unit direction [along], which never points
- * to the left or straight down.
+ * to the left or straight down. The [value] is millimetres unless the [kind] says otherwise.
+ * [fit] is the room there is for the text along its direction, in metres: a text wider than that
+ * is left out. Zero for a text the engine fitted itself.
  */
 public data class DrawnText(
     public val element: ElementId?,
     public val kind: TextKind,
-    public val value: Mm,
+    public val value: Long,
     public val at: PointM,
     public val along: PointM,
+    public val fit: Double = 0.0,
+)
+
+/**
+ * The space under a picked point (docs/adr/0015): the floor the walls close there, with the
+ * [room] that names it, if one does. Areas are in m² and lengths in metres.
+ */
+public data class Space(
+    public val room: ElementId?,
+    /** What that room is used as. */
+    public val kind: RoomKind,
+    /** The floor, less what stands free inside. */
+    public val area: Double,
+    /** Along the outline and round what stands free inside. */
+    public val perimeter: Double,
+    /** Counter-clockwise on the plan. */
+    public val outline: List<PointM>,
+    /** What stands free inside, each clockwise. */
+    public val islands: List<List<PointM>> = emptyList(),
 )
 
 /**
@@ -188,6 +218,12 @@ public enum class IssueKind {
 
     /** The norm asks for meshes where the storey's load-bearing walls meet; names the level only. */
     JUNCTION_MESHES_MISSING,
+
+    /** A room's anchor lies where the walls close no space. */
+    ROOM_WITHOUT_SPACE,
+
+    /** A room's anchor lies in a space an older room names. */
+    ROOM_SHARES_SPACE,
 
     /** A kind from a newer engine than this app knows. */
     UNKNOWN,
@@ -329,6 +365,41 @@ public data class LayerSpec(
     public val thickness: Mm,
     public val unit: UnitSize? = null,
 )
+
+/** What a room is used as; the app writes the name in the builder's language. */
+public enum class RoomKind {
+    ROOM,
+    LIVING_ROOM,
+    KITCHEN_LIVING,
+    KITCHEN,
+    DINING,
+    BEDROOM,
+    CHILDREN,
+    STUDY,
+    HALL,
+    CORRIDOR,
+
+    /** A bath and a toilet in one room. */
+    BATHROOM,
+    BATH,
+    TOILET,
+    BOILER,
+    STORAGE,
+    WARDROBE,
+    VERANDA,
+    GARAGE,
+    TAMBOUR,
+}
+
+/**
+ * A name for a space the walls of [level] close (docs/adr/0015): the space that holds [anchor] is
+ * this room.
+ */
+public data class Room(
+    public val level: ElementId,
+    public val anchor: PointMm,
+    public val kind: RoomKind = RoomKind.ROOM,
+) : EngineElement
 
 /** A window, door or empty opening, placed along its wall from the start and up from the base. */
 public data class Opening(

@@ -23,9 +23,11 @@ import uz.otves.schema.LogEntry as LogEntryTable
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.OpeningOutline as OpeningOutlineTable
+import uz.otves.schema.PickedSpace as SpaceTable
 import uz.otves.schema.PointM as PointMStruct
 import uz.otves.schema.PointMm as PointStruct
 import uz.otves.schema.QuantityLine as LineTable
+import uz.otves.schema.Room as RoomTable
 import uz.otves.schema.Stroke as StrokeCode
 import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Unit as UnitCode
@@ -123,6 +125,8 @@ internal object ResponseDecoder {
                     IssueKindCode.MaterialNotChosen -> IssueKind.MATERIAL_NOT_CHOSEN
                     IssueKindCode.RingBeamMissing -> IssueKind.RING_BEAM_MISSING
                     IssueKindCode.JunctionMeshesMissing -> IssueKind.JUNCTION_MESHES_MISSING
+                    IssueKindCode.RoomWithoutSpace -> IssueKind.ROOM_WITHOUT_SPACE
+                    IssueKindCode.RoomSharesSpace -> IssueKind.ROOM_SHARES_SPACE
                     else -> IssueKind.UNKNOWN
                 },
             element = issue.element()?.let(::id),
@@ -162,6 +166,7 @@ internal object ResponseDecoder {
                     picked = result.picked()?.let(::id),
                     aimed = result.aimed()?.let(::aimed),
                     drawing = result.drawing()?.let(::drawing),
+                    space = result.space()?.let(::space),
                 )
             }
 
@@ -169,6 +174,22 @@ internal object ResponseDecoder {
                 CommandResult.Failed(error = error, message = result.message().orEmpty())
             }
         }
+
+    private fun space(space: SpaceTable): Space =
+        Space(
+            room = space.room()?.let(::id),
+            kind = roomKind(space.kind()),
+            area = space.area(),
+            perimeter = space.perimeter(),
+            outline = List(space.outlineLength()) { metres(space.outline(PointMStruct(), it)) },
+            islands =
+                List(space.islandsLength()) {
+                    val ring = space.islands(it)
+                    List(ring.pointsLength()) { index -> metres(ring.points(PointMStruct(), index)) }
+                },
+        )
+
+    private fun roomKind(code: Int): RoomKind = roomKindOf(code.toLong()) ?: error("The engine sent an unknown room kind $code")
 
     private fun drawing(drawing: DrawingTable): Drawing =
         Drawing(
@@ -195,7 +216,14 @@ internal object ResponseDecoder {
             texts =
                 List(drawing.textsLength()) {
                     val text = drawing.texts(it)
-                    DrawnText(text.element()?.let(::id), textKind(text.kind()), Mm(text.value()), metres(text.at()), metres(text.along()))
+                    DrawnText(
+                        text.element()?.let(::id),
+                        textKind(text.kind()),
+                        text.value(),
+                        metres(text.at()),
+                        metres(text.along()),
+                        text.fit(),
+                    )
                 },
         )
 
@@ -213,6 +241,7 @@ internal object ResponseDecoder {
             FillCode.Gap -> FillKind.GAP
             FillCode.Facing -> FillKind.FACING
             FillCode.Insulation -> FillKind.INSULATION
+            FillCode.Floor -> FillKind.FLOOR
             else -> FillKind.UNKNOWN
         }
 
@@ -231,6 +260,8 @@ internal object ResponseDecoder {
         when (code) {
             TextKindCode.Length -> TextKind.LENGTH
             TextKindCode.AboutLength -> TextKind.ABOUT_LENGTH
+            TextKindCode.RoomName -> TextKind.ROOM_NAME
+            TextKindCode.RoomArea -> TextKind.ROOM_AREA
             else -> TextKind.UNKNOWN
         }
 
@@ -257,6 +288,7 @@ internal object ResponseDecoder {
                 Element.Conditions -> conditions(change.element(ConditionsTable()) as ConditionsTable)
                 Element.WallType -> WallType(wallRole((change.element(WallTypeTable()) as WallTypeTable).role()))
                 Element.WallLayer -> wallLayer(change.element(WallLayerTable()) as WallLayerTable)
+                Element.Room -> room(change.element(RoomTable()) as RoomTable)
                 else -> error("The engine sent an unknown element type ${change.elementType()}")
             }
         return ElementChange(id = id, element = element)
@@ -327,6 +359,13 @@ internal object ResponseDecoder {
                 },
             thickness = Mm(layer.thickness()),
             unit = if (layer.unitLength() > 0) UnitSize(Mm(layer.unitLength()), Mm(layer.unitWidth()), Mm(layer.unitHeight())) else null,
+        )
+
+    private fun room(room: RoomTable): Room =
+        Room(
+            level = id(checkNotNull(room.level()) { "A room has no level" }),
+            anchor = point(room.anchor()),
+            kind = roomKind(room.kind()),
         )
 
     private fun wallRole(code: Int): WallRole =

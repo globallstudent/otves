@@ -63,6 +63,7 @@ import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
+import uz.otves.engine.RoomKind
 import uz.otves.engine.StrokeKind
 import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
@@ -130,6 +131,8 @@ fun EditorRoute(
                 onKinds = viewModel::showKinds,
                 onKind = viewModel::chooseKind,
                 onAddKind = viewModel::addKind,
+                onRoomKinds = viewModel::showRoomKinds,
+                onRoomKind = viewModel::nameRoom,
                 onLocationLine = viewModel::setLocationLine,
                 onFlipWall = viewModel::flipWall,
                 onMaterials = viewModel::showMaterials,
@@ -194,6 +197,8 @@ internal data class EditorActions(
     /** The wall type for the selected wall or for new walls; null draws walls with no type. */
     val onKind: (ElementId?) -> Unit = {},
     val onAddKind: (WallTypeTemplate) -> Unit = {},
+    val onRoomKinds: (open: Boolean) -> Unit = {},
+    val onRoomKind: (RoomKind) -> Unit = {},
     val onLocationLine: (LocationLine) -> Unit = {},
     val onFlipWall: () -> Unit = {},
     val onMaterials: (open: Boolean) -> Unit = {},
@@ -227,7 +232,7 @@ internal fun EditorScreen(
     val measuring = state.measure != null
     val refining = state.entry?.refining == true
     LaunchedEffect(measuring, refining, state.ready) { if (!measuring && !refining && state.ready) fit++ }
-    val listOpen = state.takeoffOpen || state.materialOpen || state.kindsOpen
+    val listOpen = state.takeoffOpen || state.materialOpen || state.kindsOpen || state.roomKindsOpen
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
         Box(modifier = Modifier.safeDrawingPadding()) {
             // The wall whose length is typed is marked as a selected one is.
@@ -236,6 +241,7 @@ internal fun EditorScreen(
                 plan = state.drawing,
                 outlines = state.outlines,
                 selected = sized?.id ?: state.selected?.id,
+                marked = (state.selected as? Selected.SpacePart)?.space,
                 issues = state.issues,
                 draft = state.draft,
                 draftThickness = state.drawnThickness,
@@ -283,6 +289,7 @@ internal fun EditorScreen(
                     priceEntry != null -> PricePad(priceEntry, state, actions)
                     measure != null -> MeasurePad(measure, state, actions)
                     state.kindsOpen -> WallKindsPanel(state, actions)
+                    state.roomKindsOpen -> RoomKindsPanel(state, actions)
                     state.materialOpen -> MaterialPanel(state, actions)
                     selected != null -> Inspector(selected, state, actions)
                     state.takeoffOpen && state.conditionsOpen -> ConditionsPanel(state, actions)
@@ -432,7 +439,7 @@ private fun EditorScreenPreview() {
                                     DrawnLine(window, StrokeKind.WALL_EDGE, gap[1], gap[2]),
                                     DrawnLine(window, StrokeKind.FRAME, PointM(2.25, 0.0), PointM(3.75, 0.0)),
                                 ),
-                            texts = listOf(DrawnText(wall, TextKind.LENGTH, 6_400.mm, PointM(3.2, 0.42), PointM(1.0, 0.0))),
+                            texts = listOf(DrawnText(wall, TextKind.LENGTH, 6_400, PointM(3.2, 0.42), PointM(1.0, 0.0))),
                         ),
                     outlines = listOf(WallOutline(wall, level, body, length = 6_400.mm)),
                     dimensions = listOf(Dimension(wall, drawn, 6_400.mm)),

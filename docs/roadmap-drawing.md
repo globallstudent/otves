@@ -10,7 +10,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 |---|---|---|
 | Drawing | `drafting::draft` places lengths and opening symbols; one `PlanPainter` paints the screen and the PDF (ADR 0013) | Only wall lengths and opening symbols are drawn yet |
 | Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line | A type starts from a catalog template; its layers cannot be edited yet |
-| Rooms | None | No names, areas or room schedule |
+| Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015) | No room schedule; a room's clear sizes cannot be typed yet |
 | Dimensions | One length per wall, along its location line | Plans give clear room sizes and chains along walls |
 | Openings | Offset, size, sill, kind | No hinge side, swing, marks or schedule |
 | Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
@@ -51,7 +51,7 @@ Each is a one-way door, so each gets an ADR before its code.
 | 0012 | A sketch becomes walls in the engine | Straightening is geometry; it must snap by the rules `aim` uses |
 | 0013 | The engine drafts the plan, Kotlin paints it | One drawing for screen and PDF; label placement leaves Kotlin |
 | 0014 | Wall types are job elements made of layers | A type edited once changes every wall of it; ops stay property-level |
-| 0015 | Rooms are holes in the walls, named by an anchor | Areas follow the walls without a second model |
+| 0015 | Rooms are the spaces the walls close, named by an anchor | Areas follow the walls without a second model |
 | 0016 | A dimension is a handle on the model | Tapping a size sends one command; joined walls follow |
 | 0017 | Openings carry hinge and swing; marks are derived | A schedule that cannot drift from the plan |
 
@@ -88,10 +88,11 @@ The engine answers a `Draw` query with a `Drawing` for one level.
 
 ### 0015: rooms
 
-- A room is a hole in the union of a level's wall footprints. Openings do not cut footprints, so a doorway never opens a room.
-- `Room` is an element with `level`, `anchor` and `kind` (a code the app translates). The hole that holds the anchor takes the name. A hole without one is drawn with its area only.
-- Two anchors in one hole and an anchor in no hole are issues.
-- The ADR decides between Clipper2 (BSL-1.0, in vcpkg) and own code for the union. Dangling walls, columns and sharp corners argue for the library.
+- A space is a bounded face of a level's wall graph: joints of wall ends and the points where an end stands against a wall, as the joins read them. Its outline is the inner faces of its walls. Openings do not cut it, so a doorway never opens a room.
+- What stands free inside a space, a wall or a closed group of walls, is an island: its footprint comes off the floor.
+- `Room` is an element with `level`, `anchor` and `kind` (a code the app translates). The space that holds the anchor takes the name. A space without one is drawn with its area only.
+- Two anchors in one space and an anchor in no space are issues.
+- The spaces come from the engine's own code, not from Clipper2: topology on whole millimetres gives the same bits on every platform, and a T joint cannot leak one room into the next.
 
 ### 0016: dimensions
 
@@ -126,7 +127,7 @@ flowchart LR
 | 1 | Pencil | `geom/sketch`, `AddSketch`, `Wall.exact` | Pencil tool, refine lengths | v5 | G39–G42 | built |
 | 2 | Display list | `engine/drafting`, `Draw` | `PlanPainter`; delete placement code | — | — | built |
 | 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; layers of a type are not edited yet |
-| 4 | Rooms | `geom/rooms`, `Room` | Room labels, room panel | v7 | G31, G34 | |
+| 4 | Rooms | `geom/spaces`, `Room`, floors and room texts in `drafting` | Room labels, room panel | v7 | G31, G34 | built; a room's sizes come with slice 5 |
 | 5 | Dimensions | chains, `SetDistance`, `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | |
 | 6 | Openings | hinge, swing, marks, schedules | Door panel | v8 | G37 | |
 | 7 | Sheets | sheet purpose in `Draw`, schedules | Frame, tables, legend, PDF | — | G38 | |
@@ -175,7 +176,7 @@ A new element type touches the model tuple, the op variant, `Document::plan` and
 | Speed | A benchmark derives joins, layers, rooms and the drawing for 500 walls; the budget is one frame |
 | Device | The emulator checklist from the last change: draw, type a length, undo, refuse |
 
-Rules that already hold stay: clang-tidy over every file, ASan and TSan presets, Spotless, lint, a green run after every push. Roborazzi, Robolectric, a benchmark library and Clipper2 are new dependencies; each is pinned at its latest stable version when its slice starts.
+Rules that already hold stay: clang-tidy over every file, ASan and TSan presets, Spotless, lint, a green run after every push. Roborazzi, Robolectric and a benchmark library are new dependencies; each is pinned at its latest stable version when its slice starts.
 
 ## Risks
 
@@ -183,11 +184,11 @@ Rules that already hold stay: clang-tidy over every file, ASan and TSan presets,
 |---|---|
 | Text width is unknown to the engine | Per-character width factors in `drafting`; the painter never moves a label, it may only hide one |
 | `Draw` on every drag frame | Derive one level, not the job; the benchmark guards it |
-| Union of footprints leaves slivers | Integer coordinates in the union; property tests on random plans |
+| Walls that cross without being split read as one room on both sides | The join reports the crossing as an overlap; a property test checks that walls and floors tile random plans |
 | Layer order on a wall drawn the other way | `mirrored`, set by the room and pencil tools from the loop's direction |
 | Marks renumber when a size is added | Marks follow the oldest opening of each size |
 | Scope | A slice ships alone; nothing waits for slice 7 |
 
 ## Open question
 
-Are room areas shown to 0,1 m², as the one-sheet plans do, or 0,01 m², as the АР set does? Slice 4 starts with 0,1 m².
+Are room areas shown to 0,1 m², as the one-sheet plans do, or 0,01 m², as the АР set does? The engine gives areas in cm²; the app writes 0,1 m² for now.

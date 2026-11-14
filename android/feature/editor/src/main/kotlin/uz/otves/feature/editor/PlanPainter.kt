@@ -16,6 +16,7 @@ import uz.otves.engine.DrawnPolygon
 import uz.otves.engine.DrawnText
 import uz.otves.engine.FillKind
 import uz.otves.engine.PointM
+import uz.otves.engine.Space
 import uz.otves.engine.StrokeKind
 import uz.otves.engine.TextKind
 import kotlin.math.atan2
@@ -30,11 +31,15 @@ internal data class PlanPalette(
     val unchosen: Int,
     /** What an opening leaves of its wall: the paper under the plan. */
     val gap: Int,
+    /** The floor of a space the walls close. */
+    val floor: Int,
     val edge: Int,
     /** The lines of a layer of insulation, and the line where two layers meet. */
     val layer: Int,
     val below: Int,
     val text: Int,
+    /** A room's name, the text that says most. */
+    val name: Int,
     val selection: Int,
     val warning: Int,
 )
@@ -74,6 +79,8 @@ internal class PlanPainter(
     textSize: Float,
     /** The mark before a length nobody has given: «≈». */
     private val about: String,
+    /** What the texts of rooms say. */
+    private val rooms: RoomLabels,
 ) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val line =
@@ -92,6 +99,12 @@ internal class PlanPainter(
             color = palette.text
             typeface = Typeface.create(Typeface.DEFAULT, LABEL_WEIGHT, false)
         }
+    private val name =
+        TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.textSize = textSize
+            color = palette.name
+            typeface = Typeface.create(Typeface.DEFAULT, NAME_WEIGHT, false)
+        }
     private val path = Path()
     private val oval = RectF()
     private val box = RectF()
@@ -104,9 +117,10 @@ internal class PlanPainter(
         )
 
     /**
-     * Paints [drawing] in the order of its lists. The wall that is [selected] is marked before the
-     * openings' gaps are painted, so they stay cut out of it; a selected opening and the ones in
-     * [faulty] are outlined over everything.
+     * Paints [drawing] in the order of its lists. The space that is [marked] is tinted over the
+     * floors and under the walls. The wall that is [selected] is marked before the openings' gaps
+     * are painted, so they stay cut out of it; a selected opening and the ones in [faulty] are
+     * outlined over everything.
      */
     fun paint(
         canvas: Canvas,
@@ -114,8 +128,12 @@ internal class PlanPainter(
         frame: PlanFrame,
         selected: ElementId? = null,
         faulty: Set<ElementId> = emptySet(),
+        marked: Space? = null,
     ) {
-        val (gaps, bodies) = drawing.polygons.partition { it.fill == FillKind.GAP }
+        val (gaps, solids) = drawing.polygons.partition { it.fill == FillKind.GAP }
+        val (floors, bodies) = solids.partition { it.fill == FillKind.FLOOR }
+        floors.forEach { polygon(canvas, it, frame) }
+        if (marked != null) tint(canvas, marked, frame)
         bodies.forEach { polygon(canvas, it, frame) }
         // A wall of several layers is marked once, by its outline.
         bodies.filter { it.element != null && it.element == selected && it.stroke == StrokeKind.WALL_EDGE }.forEach { polygon ->
@@ -155,6 +173,8 @@ internal class PlanPainter(
                 FillKind.UNCHOSEN, FillKind.FACING, FillKind.INSULATION -> palette.unchosen
 
                 FillKind.GAP -> palette.gap
+
+                FillKind.FLOOR -> palette.floor
 
                 FillKind.NONE, FillKind.UNKNOWN -> null
             }
@@ -218,6 +238,26 @@ internal class PlanPainter(
         step: Float,
     ): Float = origin + ceil((from - origin) / step) * step
 
+    // The floor of the selected space in a wash of the selection colour, with what stands free
+    // inside it left out.
+    private fun tint(
+        canvas: Canvas,
+        space: Space,
+        frame: PlanFrame,
+    ) {
+        path.rewind()
+        path.fillType = Path.FillType.EVEN_ODD
+        (listOf(space.outline) + space.islands).forEach { ring ->
+            ring.forEachIndexed { index, point ->
+                if (index == 0) path.moveTo(frame.x(point), frame.y(point)) else path.lineTo(frame.x(point), frame.y(point))
+            }
+            path.close()
+        }
+        fill.color = palette.selection and FLOOR_TINT
+        canvas.drawPath(path, fill)
+        path.fillType = Path.FillType.WINDING
+    }
+
     // The traced path's outline in the bold line.
     private fun outline(
         canvas: Canvas,
@@ -260,18 +300,23 @@ internal class PlanPainter(
         label: DrawnText,
         frame: PlanFrame,
     ) {
-        val digits = label.value.value.toString()
         val written =
             when (label.kind) {
-                TextKind.LENGTH -> digits
-                TextKind.ABOUT_LENGTH -> "$about $digits"
+                TextKind.LENGTH -> label.value.toString()
+                TextKind.ABOUT_LENGTH -> "$about ${label.value}"
+                TextKind.ROOM_NAME -> rooms.name(label.value) ?: return
+                TextKind.ROOM_AREA -> rooms.area(label.value)
                 TextKind.UNKNOWN -> return
             }
+        val pen = if (label.kind == TextKind.ROOM_NAME) name else text
+        val width = pen.measureText(written)
+        // The engine says how much room a text has; one that is wider is left out.
+        if (label.fit > 0.0 && width > label.fit * frame.scale) return
         val x = frame.x(label.at)
         val y = frame.y(label.at)
         val turn = -Math.toDegrees(atan2(label.along.y, label.along.x)).toFloat()
         canvas.withRotation(turn, x, y) {
-            drawText(written, x - text.measureText(written) / 2, y - (text.ascent() + text.descent()) / 2, text)
+            drawText(written, x - width / 2, y - (pen.ascent() + pen.descent()) / 2, pen)
         }
     }
 
@@ -288,6 +333,12 @@ internal class PlanPainter(
 
         // Medium, as the theme's label text.
         const val LABEL_WEIGHT = 500
+
+        // Semi-bold: a room's name stands out from the numbers round it.
+        const val NAME_WEIGHT = 600
+
+        // An eighth of the selection colour over the floor it marks.
+        const val FLOOR_TINT = 0x20FFFFFF
 
         // A quarter of the selection colour over the wall it marks.
         const val SELECTION_FILL = 0x40FFFFFF

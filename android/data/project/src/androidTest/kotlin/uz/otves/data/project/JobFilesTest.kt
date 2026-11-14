@@ -16,6 +16,8 @@ import uz.otves.engine.Level
 import uz.otves.engine.LogEntry
 import uz.otves.engine.Opening
 import uz.otves.engine.PointMm
+import uz.otves.engine.Room
+import uz.otves.engine.RoomKind
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
 import uz.otves.engine.WallLayer
@@ -113,6 +115,31 @@ class JobFilesTest {
 
             files.open(created.id).use { job ->
                 assertThat(job.load()).isEqualTo(SavedJob(saved - facing + (wool to thicker), clock = 300L, name = "Дом"))
+            }
+        }
+
+    @Test
+    fun theNamesOfRoomsAreKeptRenamedAndTakenAway() =
+        runTest {
+            val created = files.create("Дом")
+            val bedroom = ElementId(Uuid.parse("019a5f00-0000-7000-8000-00000000000a"))
+            val kitchen = ElementId(Uuid.parse("019a5f00-0000-7000-8000-00000000000b"))
+            val study = Room(level, PointMm(2_000.mm, 1_500.mm), RoomKind.STUDY)
+            val saved =
+                mapOf(
+                    level to Level(0.mm, 3000.mm),
+                    bedroom to Room(level, PointMm(2_000.mm, 1_500.mm), RoomKind.BEDROOM),
+                    kitchen to Room(level, PointMm((-4_000).mm, 1_500.mm), RoomKind.KITCHEN),
+                )
+
+            files.open(created.id).use { job ->
+                job.record(response(saved.map { (id, element) -> ElementChange(id, element) }, listOf(entry(1, hlc = 100))))
+                job.record(response(listOf(ElementChange(bedroom, study)), listOf(entry(2, hlc = 200))))
+                job.record(response(listOf(ElementChange(kitchen, null)), listOf(entry(3, hlc = 300))))
+            }
+
+            files.open(created.id).use { job ->
+                assertThat(job.load()).isEqualTo(SavedJob(saved - kitchen + (bedroom to study), clock = 300L, name = "Дом"))
             }
         }
 

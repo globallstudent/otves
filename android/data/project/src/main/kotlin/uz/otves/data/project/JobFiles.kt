@@ -18,6 +18,7 @@ import uz.otves.engine.WallType
 import java.io.File
 import kotlin.random.Random
 import kotlin.uuid.Uuid
+import uz.otves.engine.Room as RoomName
 
 /** A job on this phone. */
 public data class JobSummary(
@@ -162,6 +163,7 @@ public class OpenJob internal constructor(
                 jobs.wallLayers().forEach { this += it.element() }
                 jobs.walls().forEach { this += it.element() }
                 jobs.openings().forEach { this += it.element() }
+                jobs.rooms().forEach { this += it.element() }
                 jobs.conditions().forEach { this += it.element() }
             }
         return SavedJob(elements, clock = jobs.newestStamp() ?: 0L, name = jobs.job()?.name.orEmpty())
@@ -180,6 +182,7 @@ public class OpenJob internal constructor(
                 conditions = changed.mapNotNull { change -> (change.element as? Conditions)?.row(change.id) },
                 wallTypes = changed.mapNotNull { change -> (change.element as? WallType)?.row(change.id) },
                 wallLayers = changed.mapNotNull { change -> (change.element as? WallLayer)?.row(change.id) },
+                rooms = changed.mapNotNull { change -> (change.element as? RoomName)?.row(change.id) },
                 deleted = response.changes.filter { it.element == null }.map { it.id.key() },
                 groups = response.log.map { it.row() },
             )

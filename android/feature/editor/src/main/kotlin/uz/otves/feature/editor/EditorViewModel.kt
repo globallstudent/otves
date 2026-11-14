@@ -38,6 +38,9 @@ import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
+import uz.otves.engine.Room
+import uz.otves.engine.RoomKind
+import uz.otves.engine.Space
 import uz.otves.engine.Takeoff
 import uz.otves.engine.Turn
 import uz.otves.engine.UnitSize
@@ -66,9 +69,10 @@ internal val DoorSizes: List<OpeningSize> =
 /** The sizes offered for an opening of this kind; an empty opening is sized like a door. */
 internal fun sizesFor(kind: OpeningKind): List<OpeningSize> = if (kind == OpeningKind.WINDOW) WindowSizes else DoorSizes
 
-/** The element the select tool picked, with its current value. */
+/** What the select tool picked, with its current value. */
 internal sealed interface Selected {
-    val id: ElementId
+    /** The element; null for a space no room names. */
+    val id: ElementId?
 
     data class WallPart(
         override val id: ElementId,
@@ -79,6 +83,18 @@ internal sealed interface Selected {
         override val id: ElementId,
         val opening: Opening,
     ) : Selected
+
+    /**
+     * A space the walls close (docs/adr/0015), picked at [at]: the floor under that point, with
+     * the room that names it, if one does. It stays selected while a floor lies under the point.
+     */
+    data class SpacePart(
+        val at: PointMm,
+        val space: Space,
+    ) : Selected {
+        override val id: ElementId?
+            get() = space.room
+    }
 }
 
 /**
@@ -233,6 +249,8 @@ internal data class EditorUiState(
     val kind: ElementId? = null,
     /** The wall types are open, for the selected wall or else for new walls. */
     val kindsOpen: Boolean = false,
+    /** The names a room can have are open, for the selected space. */
+    val roomKindsOpen: Boolean = false,
     /** What the job is estimated under; unset values follow the norms. */
     val conditions: Conditions = Conditions(),
     /** The conditions are open in place of the take-off. */
@@ -368,9 +386,16 @@ internal class EditorViewModel(
         val current = state.value
         val onLevel = current.level ?: return
         // A touch beside an open list closes it and does nothing else.
-        if (current.takeoffOpen || current.materialOpen || current.kindsOpen) {
+        if (current.takeoffOpen || current.materialOpen || current.kindsOpen || current.roomKindsOpen) {
             state.update {
-                it.copy(takeoffOpen = false, materialOpen = false, kindsOpen = false, conditionsOpen = false, priceEntry = null)
+                it.copy(
+                    takeoffOpen = false,
+                    materialOpen = false,
+                    kindsOpen = false,
+                    roomKindsOpen = false,
+                    conditionsOpen = false,
+                    priceEntry = null,
+                )
             }
             return
         }
@@ -662,6 +687,21 @@ internal class EditorViewModel(
         if (wall != null && kind != null && wall.wall.type != kind) execute(listOf(EngineCommand.SetWallType(wall.id, kind)))
     }
 
+    /** Opens the names a room can have, for the selected space. */
+    fun showRoomKinds(open: Boolean) = state.update { it.copy(roomKindsOpen = open) }
+
+    /**
+     * Names the selected space, with the point it was picked at as the room's anchor, or gives the
+     * room that names it another name.
+     */
+    fun nameRoom(kind: RoomKind) {
+        val part = state.value.selected as? Selected.SpacePart ?: return
+        val level = state.value.level ?: return
+        state.update { it.copy(roomKindsOpen = false) }
+        val room = part.space.room
+        send(listOf(if (room == null) EngineCommand.AddRoom(Room(level, part.at, kind)) else EngineCommand.SetRoomKind(room, kind)))
+    }
+
     /** Which line of the selected wall its points lie on. */
     fun setLocationLine(line: LocationLine) {
         val wall = state.value.selected as? Selected.WallPart ?: return
@@ -755,6 +795,7 @@ internal class EditorViewModel(
                         selected = null,
                         materialOpen = false,
                         kindsOpen = false,
+                        roomKindsOpen = false,
                         refused = null,
                     ).withRun()
             }
@@ -872,7 +913,7 @@ internal class EditorViewModel(
 
     fun redo() = send(listOf(EngineCommand.Redo))
 
-    fun deselect() = state.update { it.copy(selected = null, materialOpen = false, kindsOpen = false) }
+    fun deselect() = state.update { it.copy(selected = null, materialOpen = false, kindsOpen = false, roomKindsOpen = false) }
 
     fun setWallThickness(thickness: Mm) {
         val wall = state.value.selected as? Selected.WallPart ?: return
@@ -912,7 +953,12 @@ internal class EditorViewModel(
         val command =
             when (val selected = state.value.selected) {
                 is Selected.WallPart -> EngineCommand.RemoveWall(selected.id)
+
                 is Selected.OpeningPart -> EngineCommand.RemoveOpening(selected.id)
+
+                // A space is not removed; the room that names it is.
+                is Selected.SpacePart -> EngineCommand.RemoveRoom(selected.space.room ?: return)
+
                 null -> return
             }
         send(listOf(command))
@@ -924,9 +970,10 @@ internal class EditorViewModel(
         reach: Mm,
     ) {
         act {
-            val result = session.ask(listOf(EngineCommand.Pick(onLevel, at, reach))).singleOrNull()
-            val picked = (result as? CommandResult.Done)?.picked
-            state.update { it.copy(selected = picked?.let(::selection), refused = null) }
+            val result = session.ask(listOf(EngineCommand.Pick(onLevel, at, reach))).singleOrNull() as? CommandResult.Done
+            // An element first; where nothing built is near, the floor under the finger.
+            val picked = result?.picked?.let(::selection) ?: result?.space?.let { Selected.SpacePart(at, it) }
+            state.update { it.copy(selected = picked, refused = null) }
         }
     }
 
@@ -973,22 +1020,29 @@ internal class EditorViewModel(
         showCreated: Boolean = false,
     ): ElementId? {
         val level = state.value.level
-        val outcome = session.execute(commands, questions = listOfNotNull(level?.let(::draw)))
-        val drawing = (outcome.answers.singleOrNull() as? CommandResult.Done)?.drawing
+        // A selected space is found again under its point: the walls round it may have moved.
+        val space = (state.value.selected as? Selected.SpacePart)?.takeIf { level != null }
+        val questions = listOfNotNull(level?.let(::draw), space?.let { EngineCommand.Pick(checkNotNull(level), it.at, 0.mm) })
+        val outcome = session.execute(commands, questions)
+        val answers = outcome.answers.filterIsInstance<CommandResult.Done>()
+        val drawing = answers.firstNotNullOfOrNull { it.drawing }
         apply(
             outcome,
             show = outcome.created.takeIf { showCreated },
             drawn = if (level != null && drawing != null) level to drawing else null,
+            space = answers.firstNotNullOfOrNull { it.space },
         )
         return outcome.created
     }
 
     // Shows what a step left: [show], or else the current storey while it exists; when undo
-    // removed it, the top storey left. [drawn] is a storey's drawing that came with the answer.
+    // removed it, the top storey left. [drawn] is a storey's drawing that came with the answer,
+    // and [space] the floor now under the selected space's point.
     private suspend fun apply(
         outcome: Outcome,
         show: ElementId? = null,
         drawn: Pair<ElementId, Drawing>? = null,
+        space: Space? = null,
     ) {
         // Undo and removal take walls off the run: it goes on from the last one still standing.
         run = run?.let { it.copy(built = it.built.takeWhile { wall -> wall in model.walls }) }
@@ -1004,8 +1058,15 @@ internal class EditorViewModel(
                 canUndo = model.canUndo,
                 canRedo = model.canRedo,
                 refused = outcome.refused,
-                // The selection follows its element's new value and goes when the element does.
-                selected = current.selected?.let { selection(it.id) },
+                // The selection follows its element's new value and goes when the element does; a
+                // space goes when no floor lies under its point any more.
+                selected =
+                    when (val selected = current.selected) {
+                        is Selected.SpacePart -> space?.let { selected.copy(space = it) }
+                        is Selected.WallPart, is Selected.OpeningPart -> selection(checkNotNull(selected.id))
+                        null -> null
+                    },
+                roomKindsOpen = current.roomKindsOpen && space != null,
                 drawn = current.drawn?.takeIf { it in model.walls },
                 conditions = model.conditions ?: Conditions(),
                 kinds = kinds(),

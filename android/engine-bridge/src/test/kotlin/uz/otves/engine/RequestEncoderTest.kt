@@ -8,6 +8,7 @@ import uz.otves.schema.Command
 import uz.otves.schema.Element
 import uz.otves.schema.Request
 import kotlin.uuid.Uuid
+import uz.otves.schema.AddRoom as AddRoomTable
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.AddWallType as AddWallTypeTable
@@ -18,12 +19,17 @@ import uz.otves.schema.FixedEnd as FixedEndCode
 import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
+import uz.otves.schema.MoveRoom as MoveRoomTable
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
 import uz.otves.schema.OpenModel as OpenModelTable
 import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.Pick as PickTable
 import uz.otves.schema.PlaceOpening as PlaceOpeningTable
+import uz.otves.schema.RemoveRoom as RemoveRoomTable
+import uz.otves.schema.Room as RoomTable
+import uz.otves.schema.RoomKind as RoomKindCode
+import uz.otves.schema.SetRoomKind as SetRoomKindTable
 import uz.otves.schema.SetWallLayer as SetWallLayerTable
 import uz.otves.schema.SetWallLength as SetWallLengthTable
 import uz.otves.schema.SetWallMirrored as SetWallMirroredTable
@@ -364,6 +370,45 @@ class RequestEncoderTest {
         assertThat(saved.position()).isEqualTo(2L)
         assertThat(saved.function()).isEqualTo(LayerFunctionCode.Structure)
         assertThat(saved.unitWidth()).isEqualTo(190L)
+    }
+
+    @Test
+    fun aRoomCarriesItsLevelAnchorAndKind() {
+        val room = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000009"))
+        val commands =
+            listOf(
+                EngineCommand.AddRoom(Room(level, PointMm(2_000.mm, (-1_500).mm), RoomKind.BEDROOM)),
+                EngineCommand.MoveRoom(room, PointMm(300.mm, 400.mm)),
+                EngineCommand.SetRoomKind(room, RoomKind.TAMBOUR),
+                EngineCommand.RemoveRoom(room),
+                EngineCommand.OpenModel(mapOf(room to Room(level, PointMm(1.mm, 2.mm), RoomKind.KITCHEN)), clock = 1L),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(commands))
+
+        assertThat(List(request.commandsLength()) { request.commands(it).commandType() })
+            .containsExactly(Command.AddRoom, Command.MoveRoom, Command.SetRoomKind, Command.RemoveRoom, Command.OpenModel)
+            .inOrder()
+        val added = (request.commands(0).command(AddRoomTable()) as AddRoomTable).room()
+        assertThat(Uuid.fromLongs(added.level().high(), added.level().low())).isEqualTo(level.uuid)
+        assertThat(added.anchor().y()).isEqualTo(-1_500L)
+        assertThat(added.kind()).isEqualTo(RoomKindCode.Bedroom)
+        val moved = request.commands(1).command(MoveRoomTable()) as MoveRoomTable
+        assertThat(Uuid.fromLongs(moved.room().high(), moved.room().low())).isEqualTo(room.uuid)
+        assertThat(moved.anchor().x()).isEqualTo(300L)
+        assertThat((request.commands(2).command(SetRoomKindTable()) as SetRoomKindTable).kind()).isEqualTo(RoomKindCode.Tambour)
+        val removed = request.commands(3).command(RemoveRoomTable()) as RemoveRoomTable
+        assertThat(Uuid.fromLongs(removed.room().high(), removed.room().low())).isEqualTo(room.uuid)
+        val opened = request.commands(4).command(OpenModelTable()) as OpenModelTable
+        assertThat(opened.elements(0).elementType()).isEqualTo(Element.Room)
+        assertThat((opened.elements(0).element(RoomTable()) as RoomTable).kind()).isEqualTo(RoomKindCode.Kitchen)
+    }
+
+    @Test
+    fun everyRoomKindHasACodeOfItsOwn() {
+        assertThat(RoomKind.entries.map { it.code }.toSet()).hasSize(RoomKind.entries.size)
+        assertThat(RoomKind.entries.map { roomKindOf(it.code.toLong()) }).containsExactlyElementsIn(RoomKind.entries).inOrder()
+        assertThat(roomKindOf(200)).isNull()
     }
 
     @Test

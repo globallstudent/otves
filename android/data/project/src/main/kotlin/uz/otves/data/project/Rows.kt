@@ -72,6 +72,17 @@ internal data class WallLayerRow(
     @ColumnInfo(name = "unit_height") val unitHeight: Long,
 )
 
+/** A name for the space of a level that holds the point ([x], [y]) (docs/adr/0015). */
+@Entity(tableName = "room", indices = [Index("level_id")])
+internal data class RoomRow(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "level_id") val levelId: String,
+    val x: Long,
+    val y: Long,
+    // What the room is used as: the kind's code in schema/engine.fbs.
+    val kind: Int,
+)
+
 @Entity(tableName = "opening", indices = [Index("wall_id")])
 internal data class OpeningRow(
     @PrimaryKey val id: String,

@@ -170,9 +170,31 @@ public sealed interface EngineCommand {
         public val clock: Long,
     ) : EngineCommand
 
+    /** Names the space that holds the room's anchor (docs/adr/0015). */
+    public data class AddRoom(
+        public val room: Room,
+    ) : EngineCommand
+
+    public data class MoveRoom(
+        public val room: ElementId,
+        public val anchor: PointMm,
+    ) : EngineCommand
+
+    public data class SetRoomKind(
+        public val room: ElementId,
+        public val kind: RoomKind,
+    ) : EngineCommand
+
+    /** Takes the name away; the space stays. */
+    public data class RemoveRoom(
+        public val room: ElementId,
+    ) : EngineCommand
+
     /**
      * What the user tapped on [level]: an opening or wall under [at], else the nearest within
-     * [reach], openings first. Changes nothing; the result's `picked` names the element.
+     * [reach], openings first. Changes nothing; the result's `picked` names the element. When
+     * nothing built is that near, the result's `space` is the space [at] lies in, if the walls
+     * close one there.
      */
     public data class Pick(
         public val level: ElementId,

@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.drawText
@@ -47,6 +48,7 @@ import uz.otves.engine.Drawing
 import uz.otves.engine.Issue
 import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
+import uz.otves.engine.Space
 import uz.otves.engine.WallOutline
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -69,6 +71,7 @@ internal fun PlanCanvas(
     plan: Drawing,
     outlines: List<WallOutline>,
     selected: ElementId?,
+    marked: Space?,
     issues: List<Issue>,
     draft: Draft?,
     draftThickness: Mm,
@@ -117,19 +120,22 @@ internal fun PlanCanvas(
                 .toPx()
         }
     val about = stringResource(R.string.length_about_mark)
+    val resources = LocalResources.current
     val hatchGap = with(density) { HATCH_GAP.dp.toPx() }
     val painter =
-        remember(colors, wallStroke, selectionStroke, hatchGap, labelSize, about) {
+        remember(colors, wallStroke, selectionStroke, hatchGap, labelSize, about, resources) {
             PlanPainter(
                 palette =
                     PlanPalette(
                         wall = colors.inkTertiary.toArgb(),
                         unchosen = colors.surface.toArgb(),
                         gap = colors.canvas.toArgb(),
+                        floor = colors.surface.toArgb(),
                         edge = colors.ink.toArgb(),
                         layer = colors.inkTertiary.toArgb(),
                         below = colors.inkTertiary.toArgb(),
                         text = colors.inkSecondary.toArgb(),
+                        name = colors.ink.toArgb(),
                         selection = colors.selection.toArgb(),
                         warning = colors.warning.toArgb(),
                     ),
@@ -138,6 +144,7 @@ internal fun PlanCanvas(
                 hatch = hatchGap,
                 textSize = labelSize,
                 about = about,
+                rooms = RoomLabels(resources),
             )
         }
     val tellLabelSize by rememberUpdatedState(onLabelSize)
@@ -231,7 +238,7 @@ internal fun PlanCanvas(
             val frame = PlanFrame(view.origin.x, view.origin.y, view.scale)
             // Openings that do not fit are outlined in the warning colour.
             val faulty = issues.mapNotNull { it.element }.toSet()
-            drawIntoCanvas { painter.paint(it.nativeCanvas, plan, frame, selected, faulty) }
+            drawIntoCanvas { painter.paint(it.nativeCanvas, plan, frame, selected, faulty, marked) }
         }
         // Points where walls meet wrongly.
         for (at in issues.mapNotNull { it.at }) {

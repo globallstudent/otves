@@ -53,6 +53,8 @@ public sealed interface CommandResult {
         public val aimed: Aimed? = null,
         /** The answer to an [EngineCommand.Draw]. */
         public val drawing: Drawing? = null,
+        /** The space an [EngineCommand.Pick] found when no element was there. */
+        public val space: Space? = null,
     ) : CommandResult
 
     /** [message] is English context for logs, not for the screen. */

@@ -58,6 +58,9 @@ import uz.otves.engine.PointM
 import uz.otves.engine.PointMm
 import uz.otves.engine.QuantityLine
 import uz.otves.engine.QuantityUnit
+import uz.otves.engine.Room
+import uz.otves.engine.RoomKind
+import uz.otves.engine.Space
 import uz.otves.engine.StrokeKind
 import uz.otves.engine.Takeoff
 import uz.otves.engine.TextKind
@@ -98,16 +101,21 @@ class EditorViewModelTest {
      * geometry (engine/geom has the real thing and its tests): an aim answers the finger's own
      * point unless the test says otherwise, measured walls and typed lengths run along the axes
      * only, a sketch is a wall between each two of its points, and a drawing lists what a storey
-     * holds without saying where. Requests for drawings are kept apart in [drawn], so [sent] reads
-     * as what the builder did.
+     * holds without saying where. The floor the walls close is the one the test gave, named by
+     * the job's oldest room. Requests for drawings are kept apart in [drawn], and looks at the
+     * selected space in [looked], so [sent] reads as what the builder did.
      */
     private class FakeEngine(
         private val ground: ElementId,
     ) : Engine {
         val sent = mutableListOf<List<EngineCommand>>()
         val drawn = mutableListOf<EngineCommand.Draw>()
+        val looked = mutableListOf<EngineCommand.Pick>()
         var refuseNext: EngineError? = null
         var pickNext: ElementId? = null
+
+        /** The floor a pick finds where it finds no element. */
+        var floor: Space? = null
         var issues: List<Issue> = emptyList()
 
         /** What the next aim answers instead of the finger's own point. */
@@ -131,9 +139,12 @@ class EditorViewModelTest {
         ) = PointMm(from.x + Mm(dx * length), from.y + Mm(dy * length))
 
         override suspend fun send(commands: List<EngineCommand>): EngineResponse {
-            val asked = commands.filterNot { it is EngineCommand.Draw }
+            // A pick that reaches nowhere is the view model looking at the space it has selected.
+            val looks = commands.filterIsInstance<EngineCommand.Pick>().filter { it.reach == 0.mm }
+            val asked = commands.filterNot { it is EngineCommand.Draw || it in looks }
             if (asked.isNotEmpty()) sent += asked
             drawn += commands.filterIsInstance<EngineCommand.Draw>()
+            looked += looks
             hold?.await()
             val refusal = refuseNext
             refuseNext = null
@@ -224,7 +235,21 @@ class EditorViewModelTest {
                     }
 
                     command is EngineCommand.Pick -> {
-                        results += CommandResult.Done(null, picked = pickNext)
+                        val named = elements.entries.firstOrNull { it.value is Room }
+                        val space = floor?.copy(room = named?.key, kind = (named?.value as? Room)?.kind ?: RoomKind.ROOM)
+                        results += CommandResult.Done(null, picked = pickNext, space = space.takeIf { pickNext == null })
+                    }
+
+                    command is EngineCommand.AddRoom -> {
+                        create(command.room)
+                    }
+
+                    command is EngineCommand.SetRoomKind -> {
+                        edit(command.room) { (it as Room).copy(kind = command.kind) }
+                    }
+
+                    command is EngineCommand.RemoveRoom -> {
+                        remove(command.room)
                     }
 
                     command is EngineCommand.Draw -> {
@@ -433,7 +458,7 @@ class EditorViewModelTest {
                         DrawnText(
                             id,
                             if (wall.exact) TextKind.LENGTH else TextKind.ABOUT_LENGTH,
-                            wall.end.x - wall.start.x,
+                            (wall.end.x - wall.start.x).value,
                             nowhere,
                             nowhere,
                         )
@@ -821,7 +846,7 @@ class EditorViewModelTest {
             viewModel.uiState.value.drawing.texts
                 .single()
                 .value,
-        ).isEqualTo(6_000.mm)
+        ).isEqualTo(6_000L)
     }
 
     @Test
@@ -993,6 +1018,101 @@ class EditorViewModelTest {
         assertThat(state.kinds.single().thickness).isEqualTo(380.mm)
         assertThat(state.kind).isEqualTo(type)
         assertThat(state.drawnThickness).isEqualTo(380.mm)
+    }
+
+    // A room 5.6 by 3.6 m between its walls.
+    private val floor =
+        Space(
+            room = null,
+            kind = RoomKind.ROOM,
+            area = 20.16,
+            perimeter = 18.4,
+            outline = listOf(PointM(0.2, 0.2), PointM(5.8, 0.2), PointM(5.8, 3.8), PointM(0.2, 3.8)),
+        )
+
+    @Test
+    fun aTapOnAFloorSelectsTheSpaceAndANameMakesItARoom() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.selectTool(Tool.SELECT)
+        engine.floor = floor
+        val at = PointMm(3_000.mm, 2_000.mm)
+
+        viewModel.tap(at, reach)
+
+        assertThat(viewModel.uiState.value.selected).isEqualTo(Selected.SpacePart(at, floor))
+        assertThat(
+            viewModel.uiState.value.selected
+                ?.id,
+        ).isNull()
+
+        // The name is anchored where the builder tapped.
+        viewModel.showRoomKinds(true)
+        viewModel.nameRoom(RoomKind.BEDROOM)
+
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.AddRoom(Room(level, at, RoomKind.BEDROOM)))
+        // The space was looked at again in the same request, and is the room now.
+        assertThat(engine.looked.last()).isEqualTo(EngineCommand.Pick(level, at, 0.mm))
+        val named = viewModel.uiState.value.selected as Selected.SpacePart
+        assertThat(named.space.room).isNotNull()
+        assertThat(named.space.kind).isEqualTo(RoomKind.BEDROOM)
+        assertThat(viewModel.uiState.value.roomKindsOpen).isFalse()
+        assertThat(
+            store.recorded
+                .last()
+                .changes
+                .single()
+                .element,
+        ).isEqualTo(Room(level, at, RoomKind.BEDROOM))
+
+        // Another name renames the room; it is not named twice.
+        viewModel.nameRoom(RoomKind.STUDY)
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetRoomKind(checkNotNull(named.space.room), RoomKind.STUDY))
+        assertThat((viewModel.uiState.value.selected as Selected.SpacePart).space.kind).isEqualTo(RoomKind.STUDY)
+    }
+
+    @Test
+    fun takingTheNameAwayLeavesTheSpaceSelected() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.selectTool(Tool.SELECT)
+        engine.floor = floor
+        viewModel.tap(PointMm(3_000.mm, 2_000.mm), reach)
+        viewModel.nameRoom(RoomKind.KITCHEN)
+        val room =
+            checkNotNull(
+                viewModel.uiState.value.selected
+                    ?.id,
+            )
+
+        viewModel.removeSelected()
+
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.RemoveRoom(room))
+        val left = viewModel.uiState.value.selected as Selected.SpacePart
+        assertThat(left.space.room).isNull()
+        // With no name there is nothing to take away.
+        val requests = engine.sent.size
+        viewModel.removeSelected()
+        assertThat(engine.sent).hasSize(requests)
+    }
+
+    @Test
+    fun aSpaceIsLetGoWhenItsWallsNoLongerCloseOrAnElementIsTapped() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        val wall = viewModel.buildWall()
+        viewModel.selectTool(Tool.SELECT)
+        engine.floor = floor
+        viewModel.tap(PointMm(3_000.mm, 2_000.mm), reach)
+        assertThat(viewModel.uiState.value.selected).isInstanceOf(Selected.SpacePart::class.java)
+
+        // After a step that opens the walls no floor lies under the point any more.
+        engine.floor = null
+        viewModel.setRingBeam(150.mm)
+        assertThat(viewModel.uiState.value.selected).isNull()
+
+        // A tap that finds a wall selects the wall, not the floor beside it.
+        engine.floor = floor
+        engine.pickNext = wall
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+        assertThat(viewModel.uiState.value.selected).isInstanceOf(Selected.WallPart::class.java)
     }
 
     @Test

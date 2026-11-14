@@ -20,8 +20,9 @@ import androidx.room.Upsert
         OpGroupRow::class,
         WallTypeRow::class,
         WallLayerRow::class,
+        RoomRow::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
     // Version 2 adds what the builder chose (docs/adr/0008): new columns, zero in old jobs.
     // Version 3 adds the conditions table (docs/adr/0009), empty in old jobs.
@@ -29,12 +30,14 @@ import androidx.room.Upsert
     // Version 5 adds whether a wall's length is exact (docs/adr/0012), true in old jobs.
     // Version 6 adds wall types and their layers (docs/adr/0014): two tables, empty in old jobs,
     // whose walls have no type.
+    // Version 7 adds the names of rooms (docs/adr/0015): a table, empty in old jobs.
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 6, to = 7),
     ],
 )
 internal abstract class ProjectDatabase : RoomDatabase() {
@@ -49,6 +52,7 @@ internal data class Recorded(
     val conditions: List<ConditionsRow>,
     val wallTypes: List<WallTypeRow>,
     val wallLayers: List<WallLayerRow>,
+    val rooms: List<RoomRow>,
     val deleted: List<String>,
     val groups: List<OpGroupRow>,
 )
@@ -97,6 +101,15 @@ internal abstract class JobDao {
     @Query("DELETE FROM wall_layer WHERE id IN (:ids)")
     abstract suspend fun deleteWallLayers(ids: List<String>)
 
+    @Query("SELECT * FROM room")
+    abstract suspend fun rooms(): List<RoomRow>
+
+    @Upsert
+    abstract suspend fun upsertRooms(rows: List<RoomRow>)
+
+    @Query("DELETE FROM room WHERE id IN (:ids)")
+    abstract suspend fun deleteRooms(ids: List<String>)
+
     @Query("SELECT MAX(hlc) FROM op_group")
     abstract suspend fun newestStamp(): Long?
 
@@ -144,10 +157,12 @@ internal abstract class JobDao {
         upsertWallLayers(change.wallLayers)
         upsertWalls(change.walls)
         upsertOpenings(change.openings)
+        upsertRooms(change.rooms)
         upsertConditions(change.conditions)
         // A deletion does not say what it deleted; an id is in one table at most.
         if (change.deleted.isNotEmpty()) {
             deleteOpenings(change.deleted)
+            deleteRooms(change.deleted)
             deleteWalls(change.deleted)
             deleteLevels(change.deleted)
             deleteConditions(change.deleted)

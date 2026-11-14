@@ -29,7 +29,7 @@ class MigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(6).use { connection ->
+        helper.runMigrationsAndValidate(7).use { connection ->
             // docs/adr/0010: no footing until the builder gives one.
             connection.prepare("SELECT footing_width, footing_depth FROM level").use { level ->
                 assertThat(level.step()).isTrue()
@@ -54,6 +54,11 @@ class MigrationTest {
             connection.prepare("SELECT (SELECT COUNT(*) FROM wall_type) + (SELECT COUNT(*) FROM wall_layer)").use { types ->
                 assertThat(types.step()).isTrue()
                 assertThat(types.getLong(0)).isEqualTo(0L)
+            }
+            // docs/adr/0015: no room has a name yet.
+            connection.prepare("SELECT COUNT(*) FROM room").use { rooms ->
+                assertThat(rooms.step()).isTrue()
+                assertThat(rooms.getLong(0)).isEqualTo(0L)
             }
             connection.prepare("SELECT ring_beam, junction_meshes FROM level").use { level ->
                 assertThat(level.step()).isTrue()

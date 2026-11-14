@@ -12,11 +12,14 @@ import uz.otves.engine.LogEntry
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointMm
+import uz.otves.engine.Room
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
 import uz.otves.engine.WallLayer
 import uz.otves.engine.WallRole
 import uz.otves.engine.WallType
+import uz.otves.engine.code
+import uz.otves.engine.roomKindOf
 import kotlin.uuid.Uuid
 
 // Engine values to rows and back. Enum codes are those of schema/engine.fbs; RowMappingTest
@@ -155,6 +158,23 @@ internal fun WallRow.element(): Pair<ElementId, EngineElement> =
             exact = exact,
             type = typeId?.let(::elementId),
             mirrored = mirrored,
+        )
+
+internal fun Room.row(id: ElementId): RoomRow =
+    RoomRow(
+        id = id.key(),
+        levelId = level.key(),
+        x = anchor.x.value,
+        y = anchor.y.value,
+        kind = kind.code,
+    )
+
+internal fun RoomRow.element(): Pair<ElementId, EngineElement> =
+    elementId(id) to
+        Room(
+            level = elementId(levelId),
+            anchor = PointMm(Mm(x), Mm(y)),
+            kind = roomKindOf(kind.toLong()) ?: throw CorruptJobException("room $id has kind $kind"),
         )
 
 internal fun WallTypeRow.element(): Pair<ElementId, EngineElement> =

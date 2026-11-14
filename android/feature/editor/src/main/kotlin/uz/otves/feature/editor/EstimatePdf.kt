@@ -47,10 +47,12 @@ internal class EstimatePdf(
                     wall = WALL,
                     unchosen = PAPER,
                     gap = PAPER,
+                    floor = PAPER,
                     edge = INK,
                     layer = SECONDARY,
                     below = Color.TRANSPARENT,
                     text = SECONDARY,
+                    name = INK,
                     selection = Color.TRANSPARENT,
                     warning = Color.TRANSPARENT,
                 ),
@@ -59,6 +61,7 @@ internal class EstimatePdf(
             hatch = HATCH_GAP,
             textSize = LABEL_SIZE,
             about = resources.getString(R.string.length_about_mark),
+            rooms = RoomLabels(resources),
         )
 
     // Where a storey's plan lies in its box: as large as the box allows, with room around the

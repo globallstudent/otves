@@ -180,7 +180,7 @@ class EngineSessionTest {
         assertThat(drawing.arcs.single().centre).isEqualTo(PointM(1.05, 0.19))
         val length = drawing.texts.single()
         assertThat(length.kind).isEqualTo(TextKind.LENGTH)
-        assertThat(length.value).isEqualTo(6000.mm)
+        assertThat(length.value).isEqualTo(6000L)
         assertThat(length.at.x).isWithin(1e-9).of(3.0)
         assertThat(length.along).isEqualTo(PointM(1.0, 0.0))
 
@@ -262,6 +262,45 @@ class EngineSessionTest {
 
         val refused = session.send(listOf(EngineCommand.SetWallThickness(built.createdIdOf(0), 250.mm)))
         assertThat((refused.results.single() as CommandResult.Failed).error).isEqualTo(EngineError.TYPE_DECIDES)
+    }
+
+    @Test
+    fun aRoomNamesTheSpaceItsWallsCloseAndIsDrawnWithItsArea() {
+        val level = session.send(listOf(EngineCommand.AddLevel(Level(0.mm, 3000.mm)))).createdId()
+        val corners = listOf(PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), PointMm(6000.mm, 4000.mm), PointMm(0.mm, 4000.mm))
+        val walls = corners.indices.map { Wall(level, corners[it], corners[(it + 1) % corners.size], 400.mm, 2800.mm) }
+        session.send(walls.map(EngineCommand::AddWall))
+        val middle = PointMm(3000.mm, 2000.mm)
+
+        // The walls close a floor of 5.6 by 3.6 m; nothing names it yet.
+        val found = (session.send(listOf(EngineCommand.Pick(level, middle, 100.mm))).results.single() as CommandResult.Done).space
+        assertThat(found?.room).isNull()
+        assertThat(found?.area).isWithin(1e-9).of(20.16)
+        assertThat(found?.outline).hasSize(4)
+
+        val named =
+            session.send(
+                listOf(
+                    EngineCommand.AddRoom(Room(level, middle, RoomKind.BEDROOM)),
+                    EngineCommand.Pick(level, middle, 0.mm),
+                    EngineCommand.Draw(level, 300.mm, 150.mm),
+                ),
+            )
+        val room = named.createdIdOf(0)
+        assertThat(named.changes.single { it.id == room }.element).isEqualTo(Room(level, middle, RoomKind.BEDROOM))
+        val space = (named.results[1] as CommandResult.Done).space
+        assertThat(space?.room).isEqualTo(room)
+        assertThat(space?.kind).isEqualTo(RoomKind.BEDROOM)
+        val drawing = checkNotNull((named.results[2] as CommandResult.Done).drawing)
+        assertThat(drawing.polygons.first().fill).isEqualTo(FillKind.FLOOR)
+        assertThat(drawing.polygons.first().element).isEqualTo(room)
+        assertThat(drawing.texts.single { it.kind == TextKind.ROOM_NAME }.value).isEqualTo(RoomKind.BEDROOM.code.toLong())
+        assertThat(drawing.texts.single { it.kind == TextKind.ROOM_AREA }.value).isEqualTo(201_600L)
+
+        // A second name in the same space is something to fix.
+        val shared = session.send(listOf(EngineCommand.AddRoom(Room(level, PointMm(1000.mm, 1000.mm), RoomKind.STUDY))))
+        assertThat(shared.issues?.map { it.kind }).containsExactly(IssueKind.ROOM_SHARES_SPACE)
+        assertThat(shared.issues?.single()?.element).isEqualTo(shared.createdId())
     }
 
     @Test

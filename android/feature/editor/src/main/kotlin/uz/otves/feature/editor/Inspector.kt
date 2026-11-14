@@ -36,16 +36,48 @@ internal fun Inspector(
     Panel {
         val title =
             when (selected) {
-                is Selected.WallPart -> stringResource(R.string.tool_wall)
-                is Selected.OpeningPart -> kindName(selected.opening.kind)
+                is Selected.WallPart -> {
+                    stringResource(R.string.tool_wall)
+                }
+
+                is Selected.OpeningPart -> {
+                    kindName(selected.opening.kind)
+                }
+
+                is Selected.SpacePart -> {
+                    if (selected.space.room ==
+                        null
+                    ) {
+                        stringResource(R.string.room_title)
+                    } else {
+                        roomKindName(selected.space.kind)
+                    }
+                }
             }
         PanelHeader(title) {
-            PanelAction(stringResource(R.string.inspector_delete), actions.onDelete)
+            when (selected) {
+                is Selected.WallPart, is Selected.OpeningPart -> {
+                    PanelAction(stringResource(R.string.inspector_delete), actions.onDelete)
+                }
+
+                // The walls make the space; only its name can be taken away.
+                is Selected.SpacePart -> {
+                    if (selected.space.room !=
+                        null
+                    ) {
+                        PanelAction(stringResource(R.string.room_remove_name), actions.onDelete)
+                    }
+                }
+            }
             PanelAction(stringResource(R.string.inspector_done), actions.onDeselect)
         }
         when (selected) {
             is Selected.WallPart -> {
                 WallRows(selected, state, actions)
+            }
+
+            is Selected.SpacePart -> {
+                SpaceRows(selected, state, actions)
             }
 
             is Selected.OpeningPart -> {
@@ -72,6 +104,37 @@ internal fun Inspector(
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+// A space is its name, which the builder gives, and its floor, which the walls give.
+@Composable
+private fun SpaceRows(
+    selected: Selected.SpacePart,
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    val space = selected.space
+    state.issues
+        .filter { it.element != null && it.element == space.room }
+        .map { it.kind }
+        .distinct()
+        .forEach { kind ->
+            Text(issueText(kind), style = MaterialTheme.typography.bodyMedium, color = OtvesTheme.colors.warning)
+        }
+    InspectorRow(stringResource(R.string.room_name)) {
+        Pill(
+            label = if (space.room == null) stringResource(R.string.room_name_choose) else roomKindName(space.kind),
+            selected = false,
+            onClick = { actions.onRoomKinds(true) },
+            trailing = OtvesIcons.ChevronDown,
+        )
+    }
+    InspectorRow(stringResource(R.string.room_area)) {
+        Text(areaText(space.area), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 12.dp))
+    }
+    InspectorRow(stringResource(R.string.room_perimeter)) {
+        Text(metresText(space.perimeter), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 12.dp))
     }
 }
 

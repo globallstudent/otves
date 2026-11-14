@@ -32,6 +32,8 @@ internal fun issueText(kind: IssueKind): String =
             IssueKind.MATERIAL_NOT_CHOSEN -> R.string.issue_material
             IssueKind.RING_BEAM_MISSING -> R.string.issue_ring_beam
             IssueKind.JUNCTION_MESHES_MISSING -> R.string.issue_meshes
+            IssueKind.ROOM_WITHOUT_SPACE -> R.string.issue_room_without_space
+            IssueKind.ROOM_SHARES_SPACE -> R.string.issue_room_shares_space
             IssueKind.UNKNOWN -> R.string.issue_unknown
         },
     )

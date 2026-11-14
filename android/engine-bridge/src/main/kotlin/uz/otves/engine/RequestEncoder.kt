@@ -10,6 +10,7 @@ import uz.otves.schema.Request
 import java.nio.ByteBuffer
 import uz.otves.schema.AddLevel as AddLevelTable
 import uz.otves.schema.AddOpening as AddOpeningTable
+import uz.otves.schema.AddRoom as AddRoomTable
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.AddWallType as AddWallTypeTable
@@ -27,6 +28,7 @@ import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.MoveOpening as MoveOpeningTable
+import uz.otves.schema.MoveRoom as MoveRoomTable
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
 import uz.otves.schema.OpenModel as OpenModelTable
 import uz.otves.schema.Opening as OpeningTable
@@ -37,8 +39,10 @@ import uz.otves.schema.PointMm as PointTable
 import uz.otves.schema.Redo as RedoTable
 import uz.otves.schema.RemoveLevel as RemoveLevelTable
 import uz.otves.schema.RemoveOpening as RemoveOpeningTable
+import uz.otves.schema.RemoveRoom as RemoveRoomTable
 import uz.otves.schema.RemoveWall as RemoveWallTable
 import uz.otves.schema.ResizeOpening as ResizeOpeningTable
+import uz.otves.schema.Room as RoomTable
 import uz.otves.schema.Script as ScriptTable
 import uz.otves.schema.SetCondition as SetConditionTable
 import uz.otves.schema.SetLevelElevation as SetLevelElevationTable
@@ -48,6 +52,7 @@ import uz.otves.schema.SetLevelJunctionMeshes as SetLevelJunctionMeshesTable
 import uz.otves.schema.SetLevelRingBeam as SetLevelRingBeamTable
 import uz.otves.schema.SetOpeningKind as SetOpeningKindTable
 import uz.otves.schema.SetOpeningSill as SetOpeningSillTable
+import uz.otves.schema.SetRoomKind as SetRoomKindTable
 import uz.otves.schema.SetWallHeight as SetWallHeightTable
 import uz.otves.schema.SetWallLayer as SetWallLayerTable
 import uz.otves.schema.SetWallLength as SetWallLengthTable
@@ -303,6 +308,30 @@ internal object RequestEncoder {
                 Command.OpenModel to OpenModelTable.createOpenModel(this, elements, command.clock)
             }
 
+            is EngineCommand.AddRoom -> {
+                Command.AddRoom to AddRoomTable.createAddRoom(this, room(command.room))
+            }
+
+            is EngineCommand.MoveRoom -> {
+                MoveRoomTable.startMoveRoom(this)
+                MoveRoomTable.addRoom(this, uuid(command.room))
+                MoveRoomTable.addAnchor(this, point(command.anchor))
+                Command.MoveRoom to MoveRoomTable.endMoveRoom(this)
+            }
+
+            is EngineCommand.SetRoomKind -> {
+                SetRoomKindTable.startSetRoomKind(this)
+                SetRoomKindTable.addRoom(this, uuid(command.room))
+                SetRoomKindTable.addKind(this, command.kind.code)
+                Command.SetRoomKind to SetRoomKindTable.endSetRoomKind(this)
+            }
+
+            is EngineCommand.RemoveRoom -> {
+                RemoveRoomTable.startRemoveRoom(this)
+                RemoveRoomTable.addRoom(this, uuid(command.room))
+                Command.RemoveRoom to RemoveRoomTable.endRemoveRoom(this)
+            }
+
             is EngineCommand.Pick -> {
                 PickTable.startPick(this)
                 PickTable.addLevel(this, uuid(command.level))
@@ -418,7 +447,16 @@ internal object RequestEncoder {
             is Conditions -> Element.Conditions to conditions(element)
             is WallType -> Element.WallType to WallTypeTable.createWallType(this, code(element.role))
             is WallLayer -> Element.WallLayer to layer(element.type, element.position, element.function, element.thickness, element.unit)
+            is Room -> Element.Room to room(element)
         }
+
+    private fun FlatBufferBuilder.room(room: Room): Int {
+        RoomTable.startRoom(this)
+        RoomTable.addLevel(this, uuid(room.level))
+        RoomTable.addAnchor(this, point(room.anchor))
+        RoomTable.addKind(this, room.kind.code)
+        return RoomTable.endRoom(this)
+    }
 
     private fun FlatBufferBuilder.layer(
         type: ElementId?,

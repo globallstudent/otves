@@ -29,9 +29,13 @@ import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.LogEntry as LogEntryTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.OpeningOutline as OpeningOutlineTable
+import uz.otves.schema.PickedSpace as SpaceTable
 import uz.otves.schema.PointM as PointMStruct
 import uz.otves.schema.PointMm as PointStruct
 import uz.otves.schema.QuantityLine as LineTable
+import uz.otves.schema.Ring as RingTable
+import uz.otves.schema.Room as RoomTable
+import uz.otves.schema.RoomKind as RoomKindCode
 import uz.otves.schema.Stroke as StrokeCode
 import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Unit as UnitCode
@@ -259,7 +263,7 @@ class ResponseDecoderTest {
                         ),
                     lines = listOf(DrawnLine(window, StrokeKind.FRAME, PointM(2.0, 0.0), PointM(3.5, 0.0))),
                     arcs = listOf(DrawnArc(element = null, StrokeKind.LEAF, PointM(1.0, 0.19), PointM(1.9, 0.19), PointM(1.0, 1.09))),
-                    texts = listOf(DrawnText(wall, TextKind.ABOUT_LENGTH, 6400.mm, PointM(3.2, 0.415), PointM(1.0, 0.0))),
+                    texts = listOf(DrawnText(wall, TextKind.ABOUT_LENGTH, 6400, PointM(3.2, 0.415), PointM(1.0, 0.0))),
                 ),
             )
     }
@@ -316,6 +320,105 @@ class ResponseDecoderTest {
                 ElementChange(wall, Wall(level, PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), 0.mm, 2800.mm, type = type, mirrored = true)),
             ).inOrder()
         assertThat((decoded.results.single() as CommandResult.Failed).error).isEqualTo(EngineError.TYPE_DECIDES)
+    }
+
+    @Test
+    fun aPickedSpaceARoomAndItsTextsComeBackTyped() {
+        val room = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000009"))
+        val builder = FlatBufferBuilder(1024)
+        RingTable.startPointsVector(builder, 3)
+        PointMStruct.createPointM(builder, 2.0, 3.0)
+        PointMStruct.createPointM(builder, 3.0, 2.0)
+        PointMStruct.createPointM(builder, 2.0, 2.0)
+        val island = RingTable.createRing(builder, builder.endVector())
+        val islands = SpaceTable.createIslandsVector(builder, intArrayOf(island))
+        SpaceTable.startOutlineVector(builder, 4)
+        PointMStruct.createPointM(builder, 0.19, 3.81)
+        PointMStruct.createPointM(builder, 5.81, 3.81)
+        PointMStruct.createPointM(builder, 5.81, 0.19)
+        PointMStruct.createPointM(builder, 0.19, 0.19)
+        val outline = builder.endVector()
+        SpaceTable.startPickedSpace(builder)
+        SpaceTable.addRoom(builder, builder.uuid(room))
+        SpaceTable.addKind(builder, RoomKindCode.Study)
+        SpaceTable.addArea(builder, 19.8444)
+        SpaceTable.addPerimeter(builder, 21.9)
+        SpaceTable.addOutline(builder, outline)
+        SpaceTable.addIslands(builder, islands)
+        val space = SpaceTable.endPickedSpace(builder)
+        ResultTable.startCommandResult(builder)
+        ResultTable.addSpace(builder, space)
+        val picked = ResultTable.endCommandResult(builder)
+
+        TextTable.startDrawnText(builder)
+        TextTable.addElement(builder, builder.uuid(room))
+        TextTable.addKind(builder, TextKindCode.RoomName)
+        TextTable.addValue(builder, RoomKindCode.Study.toLong())
+        TextTable.addAt(builder, PointMStruct.createPointM(builder, 3.0, 2.15))
+        TextTable.addAlong(builder, PointMStruct.createPointM(builder, 1.0, 0.0))
+        TextTable.addFit(builder, 4.5)
+        val name = TextTable.endDrawnText(builder)
+        PolygonTable.startDrawnPolygon(builder)
+        PolygonTable.addElement(builder, builder.uuid(room))
+        PolygonTable.addFill(builder, FillCode.Floor)
+        val floor = PolygonTable.endDrawnPolygon(builder)
+        val polygons = DrawingTable.createPolygonsVector(builder, intArrayOf(floor))
+        val texts = DrawingTable.createTextsVector(builder, intArrayOf(name))
+        DrawingTable.startDrawing(builder)
+        DrawingTable.addPolygons(builder, polygons)
+        DrawingTable.addTexts(builder, texts)
+        val drawing = DrawingTable.endDrawing(builder)
+        ResultTable.startCommandResult(builder)
+        ResultTable.addDrawing(builder, drawing)
+        val drawn = ResultTable.endCommandResult(builder)
+
+        RoomTable.startRoom(builder)
+        RoomTable.addLevel(builder, builder.uuid(level))
+        RoomTable.addAnchor(builder, PointStruct.createPointMm(builder, 1_000, 2_000))
+        RoomTable.addKind(builder, RoomKindCode.Study)
+        val value = RoomTable.endRoom(builder)
+        ChangeTable.startElementChange(builder)
+        ChangeTable.addId(builder, builder.uuid(room))
+        ChangeTable.addElementType(builder, Element.Room)
+        ChangeTable.addElement(builder, value)
+        val change = ChangeTable.endElementChange(builder)
+        IssueTable.startIssue(builder)
+        IssueTable.addKind(builder, IssueKindCode.RoomSharesSpace)
+        IssueTable.addElement(builder, builder.uuid(room))
+        IssueTable.addLevel(builder, builder.uuid(level))
+        IssueTable.addAt(builder, PointStruct.createPointMm(builder, 1_000, 2_000))
+        val issue = IssueTable.endIssue(builder)
+        val results = Response.createResultsVector(builder, intArrayOf(picked, drawn))
+        val changes = Response.createChangesVector(builder, intArrayOf(change))
+        val issues = Response.createIssuesVector(builder, intArrayOf(issue))
+        Response.startResponse(builder)
+        Response.addVersion(builder, 1L)
+        Response.addResults(builder, results)
+        Response.addChanges(builder, changes)
+        Response.addIssues(builder, issues)
+        builder.finish(Response.endResponse(builder), "OTVS")
+
+        val decoded = ResponseDecoder.decode(builder.dataBuffer())
+
+        assertThat((decoded.results[0] as CommandResult.Done).space)
+            .isEqualTo(
+                Space(
+                    room = room,
+                    kind = RoomKind.STUDY,
+                    area = 19.8444,
+                    perimeter = 21.9,
+                    outline = listOf(PointM(0.19, 0.19), PointM(5.81, 0.19), PointM(5.81, 3.81), PointM(0.19, 3.81)),
+                    islands = listOf(listOf(PointM(2.0, 2.0), PointM(3.0, 2.0), PointM(2.0, 3.0))),
+                ),
+            )
+        val painted = (decoded.results[1] as CommandResult.Done).drawing
+        assertThat(painted?.polygons?.single()?.fill).isEqualTo(FillKind.FLOOR)
+        assertThat(painted?.texts)
+            .containsExactly(
+                DrawnText(room, TextKind.ROOM_NAME, RoomKind.STUDY.code.toLong(), PointM(3.0, 2.15), PointM(1.0, 0.0), fit = 4.5),
+            )
+        assertThat(decoded.changes).containsExactly(ElementChange(room, Room(level, PointMm(1_000.mm, 2_000.mm), RoomKind.STUDY)))
+        assertThat(decoded.issues).containsExactly(Issue(IssueKind.ROOM_SHARES_SPACE, room, level, PointMm(1_000.mm, 2_000.mm)))
     }
 
     // A response like the engine's: one created wall, one failure, the wall's value and a deletion.
