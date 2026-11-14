@@ -4,7 +4,7 @@ Turns one level into a display list: what to draw and where, in plan metres. A p
 
 ```mermaid
 flowchart LR
-  W["walls · openings<br/>walls of the level below"] --> J["geom::join_walls<br/>geom::opening_outline"]
+  W["walls · their layers · openings<br/>walls of the level below"] --> J["geom::join_walls · geom::clip<br/>geom::opening_outline"]
   J --> D["drafting::draft"]
   T["text size on the plan<br/>line height · digit width"] --> D
   D --> L["Drawing<br/>polygons · lines · arcs · texts"]
@@ -22,6 +22,7 @@ flowchart LR
 |---|---|
 | Walls of the level below | An outline each, with no element: they cannot be picked from above |
 | Wall | Its joined outline, filled as masonry or as a wall with no material yet |
+| Wall of several layers | Each layer's part of the outline with a fill for what it does: structure, facing, insulation, none for a gap; then the outline with no fill, the polygon a painter marks when the wall is selected ([ADR 0014](../../docs/adr/0014-wall-types-are-job-elements-made-of-layers.md)) |
 | Opening | The gap through its wall and two jambs |
 | Window | The gap, its two faces and the glazing line down the middle of the wall |
 | Door | The gap, the leaf standing open at right angles on the wall's left face, hinged at the near end, and its swing |

@@ -46,6 +46,39 @@ table Wall {
   // Whether the length was typed or measured. A wall read from a sketch is not, until it gets a
   // length (docs/adr/0012).
   exact:bool = true;
+  // What kind of wall this is (docs/adr/0014); absent for a wall with no type. A wall with a
+  // type has thickness 0 and no unit: its type decides them.
+  type:Uuid;
+  // The type's layers start from the wall's right face, looking from start to end, or from its
+  // left one when this is set.
+  mirrored:bool;
+}
+
+// What a wall is for. Exterior and bearing walls carry load; partitions do not.
+enum WallRole:ubyte { Exterior = 0, Bearing = 1, Partition = 2 }
+
+// A kind of wall the job builds with (docs/adr/0014); its layers are WallLayer elements.
+table WallType {
+  role:WallRole = Exterior;
+}
+
+enum LayerFunction:ubyte {
+  Structure = 0,   // the masonry that carries the wall
+  Insulation = 1,  // bought by area
+  Facing = 2,      // masonry laid in front of the wall
+  Gap = 3,         // air
+}
+
+// One layer of a wall type. Layers run from the wall's outer face in, in the order of their
+// positions. Only structure and facing are laid from a unit; all 0 until chosen.
+table WallLayer {
+  type:Uuid;
+  position:long;
+  function:LayerFunction = Structure;
+  thickness:long;
+  unit_length:long;
+  unit_width:long;
+  unit_height:long;
 }
 
 table Opening {
@@ -92,6 +125,16 @@ table SetWallHeight { wall:Uuid; height:long; }
 table SetWallLocationLine { wall:Uuid; location_line:LocationLine = Center; }
 table RemoveWall { wall:Uuid; }
 table SetWallUnit { wall:Uuid; length:long; width:long; height:long; }
+
+// A new wall type with its layers from the outer face in; the layers' type and position are
+// not read. The result's `created` is the type.
+table AddWallType { role:WallRole = Exterior; layers:[WallLayer]; }
+table SetWallTypeRole { type:Uuid; role:WallRole = Exterior; }
+// A layer's thickness and unit; all 0 clears the unit. Every wall of its type changes with it.
+table SetWallLayer { layer:Uuid; thickness:long; unit_length:long; unit_width:long; unit_height:long; }
+// Makes the wall one of the type's kind and drops its own thickness and unit.
+table SetWallType { wall:Uuid; type:Uuid; }
+table SetWallMirrored { wall:Uuid; mirrored:bool; }
 
 table AddOpening { opening:Opening; }
 table MoveOpening { opening:Uuid; offset:long; }
@@ -251,6 +294,11 @@ union Command {
   SetWallLength,
   AddSketch,
   Draw,
+  AddWallType,
+  SetWallTypeRole,
+  SetWallLayer,
+  SetWallType,
+  SetWallMirrored,
 }
 
 table CommandEntry {
@@ -289,6 +337,7 @@ enum ErrorCode:ubyte {
   DoesNotFit = 22,
   ConditionOutOfRange = 23,
   BreaksJoin = 24,
+  TypeDecides = 25,  // a thickness or unit given to a wall whose type decides them
 }
 
 // The aimed point lined up with a wall end: a line from that end to the point.
@@ -316,8 +365,10 @@ struct PointM {
 enum Fill:ubyte {
   None = 0,
   Wall = 1,      // masonry
-  Unchosen = 2,  // a wall with no material yet
+  Unchosen = 2,  // masonry with no material yet
   Gap = 3,       // what an opening leaves of its wall
+  Facing = 4,    // masonry laid in front of the wall
+  Insulation = 5,
 }
 
 enum Stroke:ubyte {
@@ -326,6 +377,7 @@ enum Stroke:ubyte {
   Below = 2,  // a wall of the level below
   Frame = 3,  // a window's faces and glazing
   Leaf = 4,   // a door's leaf and swing
+  Layer = 5,  // where two layers of a wall meet
 }
 
 enum TextKind:ubyte {
@@ -385,7 +437,7 @@ table CommandResult {
   drawing:Drawing;  // the answer to a Draw
 }
 
-union Element { Level, Wall, Opening, Conditions }
+union Element { Level, Wall, Opening, Conditions, WallType, WallLayer }
 
 // What produced an operation-log group (engine/core/op.h).
 enum CommandKind:ubyte {
@@ -413,6 +465,11 @@ enum CommandKind:ubyte {
   SetCondition = 21,
   SetLevelFooting = 22,
   SetWallExact = 23,
+  AddWallType = 24,
+  SetWallTypeRole = 25,
+  SetWallLayer = 26,
+  SetWallType = 27,
+  SetWallMirrored = 28,
 }
 
 enum LevelField:ubyte {
@@ -433,7 +490,11 @@ enum WallField:ubyte {
   UnitWidth = 6,
   UnitHeight = 7,
   Exact = 8,
+  Type = 9,
+  Mirrored = 10,
 }
+enum WallTypeField:ubyte { Role = 0 }
+enum WallLayerField:ubyte { Thickness = 0, UnitLength = 1, UnitWidth = 2, UnitHeight = 3 }
 enum OpeningField:ubyte { Offset = 0, Width = 1, Height = 2, Sill = 3, Kind = 4 }
 
 // Property-level changes (engine/core/op.h). Create and delete carry the whole element.
@@ -441,8 +502,8 @@ table CreateOp { id:Uuid; element:Element; }
 table DeleteOp { id:Uuid; element:Element; }
 // JunctionMeshes uses 0 and 1; the other fields millimetres.
 table SetLevelFieldOp { id:Uuid; field:LevelField; before:long; after:long; }
-// Start and End use the points; LocationLine its code, Exact 0 and 1 and the other fields
-// millimetres in before and after.
+// Start and End use the points and Type the ids, absent for no type; LocationLine its code,
+// Exact and Mirrored 0 and 1 and the other fields millimetres in before and after.
 table SetWallFieldOp {
   id:Uuid;
   field:WallField;
@@ -450,11 +511,18 @@ table SetWallFieldOp {
   after:long;
   before_point:PointMm;
   after_point:PointMm;
+  before_id:Uuid;
+  after_id:Uuid;
 }
 // Kind uses its code; the other fields millimetres.
 table SetOpeningFieldOp { id:Uuid; field:OpeningField; before:long; after:long; }
 
 table SetConditionsFieldOp { id:Uuid; field:ConditionsField; before:long; after:long; }
+
+// Role uses its code.
+table SetWallTypeFieldOp { id:Uuid; field:WallTypeField; before:long; after:long; }
+// Millimetres.
+table SetWallLayerFieldOp { id:Uuid; field:WallLayerField; before:long; after:long; }
 
 union Op {
   CreateOp,
@@ -463,6 +531,8 @@ union Op {
   SetWallFieldOp,
   SetOpeningFieldOp,
   SetConditionsFieldOp,
+  SetWallTypeFieldOp,
+  SetWallLayerFieldOp,
 }
 
 table OpEntry {

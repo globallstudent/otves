@@ -21,7 +21,10 @@ return {
 
 		local volume, sides, bars_kg, stirrups_kg = 0, 0, 0, 0
 		for _, wall in input.walls do
-			local bearing = wall.thickness * 1000 >= norms.practice.walls.load_bearing_min_thickness - ROUNDING
+			-- A wall's type says whether it bears load; a wall with no type is judged by its thickness.
+			local bearing = if wall.bearing ~= nil
+				then wall.bearing
+				else wall.thickness * 1000 >= norms.practice.walls.load_bearing_min_thickness - ROUNDING
 			if bearing and wall.footing_width > 0 and wall.footing_depth > 0 then
 				local width, depth = wall.footing_width * 1000, wall.footing_depth * 1000 -- mm
 				local cover = detail.cover_without_blinding

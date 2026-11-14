@@ -5,11 +5,13 @@
 
 #include <gtest/gtest.h>
 
+#include <otves/core/build.h>
 #include <otves/core/opening.h>
 #include <otves/core/point.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 #include <otves/drafting/plan.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/vec2.h>
@@ -65,6 +67,72 @@ TEST(Draft, AWallIsItsOutlineFilledByWhetherItHasAMaterial) {
   walls[0].wall.unit_width = 0_mm;
   walls[0].wall.unit_height = 0_mm;
   EXPECT_EQ(draft_walls(walls).polygons[0].fill, Fill::kUnchosen);
+}
+
+// Facing brick, insulation and block from the outer face in: 410 mm.
+std::vector<BuiltLayer> outside_layers() {
+  const auto laid = [](LayerFunction function, Mm thickness, Mm length, Mm width, Mm height) {
+    return BuiltLayer{.function = function,
+                      .thickness = thickness,
+                      .unit_length = length,
+                      .unit_width = width,
+                      .unit_height = height};
+  };
+  return {laid(LayerFunction::kFacing, 120_mm, 250_mm, 120_mm, 65_mm),
+          laid(LayerFunction::kInsulation, 100_mm, 0_mm, 0_mm, 0_mm),
+          laid(LayerFunction::kStructure, 190_mm, 390_mm, 190_mm, 188_mm)};
+}
+
+TEST(Draft, AWallOfSeveralLayersIsItsLayersUnderItsOutline) {
+  std::vector walls{wall(1, at(0, 0), at(6000, 0))};
+  walls[0].wall.thickness = 410_mm;
+  const std::vector<WallBuild> builds{{.wall = id(1), .layers = outside_layers()}};
+
+  const Drawing drawing =
+      draft({.walls = walls, .openings = {}, .below = {}, .builds = builds}, kText);
+
+  ASSERT_EQ(drawing.polygons.size(), 4U);
+  EXPECT_EQ(drawing.polygons[0].fill, Fill::kFacing);
+  EXPECT_EQ(drawing.polygons[1].fill, Fill::kInsulation);
+  EXPECT_EQ(drawing.polygons[2].fill, Fill::kWall);
+  // Every layer is the wall's, edged as a layer.
+  EXPECT_EQ(std::ranges::count(drawing.polygons, id(1), &Polygon::element), 4);
+  EXPECT_EQ(std::ranges::count(drawing.polygons, Stroke::kLayer, &Polygon::stroke), 3);
+  // The facing is the wall's right 120 mm.
+  expect_near(drawing.polygons[0].points[0], {.x = 0.0, .y = -0.205});
+  expect_near(drawing.polygons[0].points[2], {.x = 6.0, .y = -0.085});
+  // The edge of the whole wall, with nothing in it, over the layers.
+  EXPECT_EQ(drawing.polygons[3].fill, Fill::kNone);
+  EXPECT_EQ(drawing.polygons[3].stroke, Stroke::kWallEdge);
+  EXPECT_EQ(drawing.polygons[3].points.size(), 4U);
+  // The length stands clear of the wall's 410 mm.
+  expect_near(drawing.texts[0].at, {.x = 3.0, .y = 0.205 + 0.075 + 0.15});
+}
+
+TEST(Draft, AWallOfOneLayerIsFilledByWhatThatLayerIs) {
+  std::vector walls{wall(1, at(0, 0), at(6000, 0)), wall(2, at(0, 3000), at(6000, 3000)),
+                    wall(3, at(0, 6000), at(6000, 6000))};
+  const std::vector<BuiltLayer> block{outside_layers()[2]};
+  std::vector<BuiltLayer> unchosen = block;
+  unchosen[0].unit_length = 0_mm;
+  unchosen[0].unit_width = 0_mm;
+  unchosen[0].unit_height = 0_mm;
+  // The first wall is of a type whose layer has a unit, though the wall itself has none.
+  walls[0].wall.unit_length = 0_mm;
+  walls[0].wall.unit_width = 0_mm;
+  walls[0].wall.unit_height = 0_mm;
+  const std::vector<WallBuild> builds{{.wall = id(1), .layers = block},
+                                      {.wall = id(2), .layers = unchosen},
+                                      {.wall = id(3), .layers = {}}};
+
+  const Drawing drawing =
+      draft({.walls = walls, .openings = {}, .below = {}, .builds = builds}, kText);
+
+  ASSERT_EQ(drawing.polygons.size(), 3U);
+  EXPECT_EQ(drawing.polygons[0].fill, Fill::kWall);
+  EXPECT_EQ(drawing.polygons[0].stroke, Stroke::kWallEdge);
+  EXPECT_EQ(drawing.polygons[1].fill, Fill::kUnchosen);
+  EXPECT_EQ(drawing.polygons[2].fill, Fill::kUnchosen);
 }
 
 TEST(Draft, ALengthIsWrittenByTheLeftFaceAtTheMiddle) {

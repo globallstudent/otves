@@ -23,6 +23,7 @@ target_link_libraries(otves_schema INTERFACE flatbuffers::flatbuffers)
 add_dependencies(otves_schema otves_schema_code)
 
 add_library(otves_bridge
+  src/built.cpp
   src/convert.cpp
   src/derived.cpp
   src/oplog.cpp

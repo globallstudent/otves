@@ -40,9 +40,9 @@ RuleSet content() {
                           load("norms/mortar.luau"), load("norms/practice.luau"),
                           load("norms/rebar.luau"),  load("norms/reinforcement.luau"),
                           load("norms/seismic.luau")};
-  const std::vector rules{load("rules/footing.luau"), load("rules/masonry.luau"),
-                          load("rules/lintels.luau"), load("rules/ring_beam.luau"),
-                          load("rules/junction_meshes.luau")};
+  const std::vector rules{load("rules/footing.luau"),   load("rules/insulation.luau"),
+                          load("rules/masonry.luau"),   load("rules/lintels.luau"),
+                          load("rules/ring_beam.luau"), load("rules/junction_meshes.luau")};
   auto set = RuleSet::compile({.norms = norms, .rules = rules});
   EXPECT_TRUE(set.has_value()) << set.error().message;
   return *std::move(set);
@@ -160,6 +160,24 @@ TEST(Content, OnlyWhatWasChosenIsCounted) {
 
   ASSERT_TRUE(all.has_value()) << all.error().message;
   EXPECT_TRUE(all->empty());
+}
+
+TEST(Content, InsulationIsBoughtByAreaAtEachThickness) {
+  const RuleSet rules = content();
+  Room r = room(rules);
+  r.measurement.insulation = {{.thickness = 100_mm, .area = 58.24},
+                              {.thickness = 150_mm, .area = 11.2},
+                              {.thickness = 50_mm, .area = 0.0}};
+
+  const auto all = rules.run(r.measurement, r.masonry, {});
+
+  ASSERT_TRUE(all.has_value()) << all.error().message;
+  const auto lines = lines_of(*all, "insulation");
+  // Net of openings, with no allowance; a thickness that covers nothing is not listed.
+  ASSERT_EQ(lines.size(), 2U);
+  EXPECT_EQ(lines[0].unit, Unit::kSquareMetre);
+  EXPECT_DOUBLE_EQ(amount(lines, "insulation.100"), 58.24);
+  EXPECT_DOUBLE_EQ(amount(lines, "insulation.150"), 11.2);
 }
 
 TEST(Content, EachUnitSizeGetsItsOwnLine) {

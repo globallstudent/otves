@@ -25,14 +25,19 @@ std::expected<void, Error> validate(const Wall& wall) {
   if (wall.start == wall.end) {
     return make_error(ErrorCode::kZeroLength, "wall start and end coincide");
   }
-  if (wall.thickness <= Mm{0}) {
+  const bool none =
+      wall.unit_length == Mm{0} && wall.unit_width == Mm{0} && wall.unit_height == Mm{0};
+  if (!wall.type.is_nil()) {
+    if (wall.thickness != Mm{0} || !none) {
+      return make_error(ErrorCode::kTypeDecides,
+                        "a wall with a type has no thickness or unit of its own");
+    }
+  } else if (wall.thickness <= Mm{0}) {
     return make_error(ErrorCode::kThicknessNotPositive, "wall thickness must be positive");
   }
   if (wall.height <= Mm{0}) {
     return make_error(ErrorCode::kHeightNotPositive, "wall height must be positive");
   }
-  const bool none =
-      wall.unit_length == Mm{0} && wall.unit_width == Mm{0} && wall.unit_height == Mm{0};
   const bool whole =
       wall.unit_length > Mm{0} && wall.unit_width > Mm{0} && wall.unit_height > Mm{0};
   if (!none && !whole) {
@@ -62,6 +67,10 @@ WallValue get_field(const Wall& wall, WallField field) {
       return wall.unit_height;
     case WallField::kExact:
       return wall.exact;
+    case WallField::kType:
+      return wall.type;
+    case WallField::kMirrored:
+      return wall.mirrored;
   }
   OTVES_ASSERT(false);
   return wall.start;
@@ -95,6 +104,12 @@ void set_field(Wall& wall, WallField field, const WallValue& value) {
       return;
     case WallField::kExact:
       assign(wall.exact, value);
+      return;
+    case WallField::kType:
+      assign(wall.type, value);
+      return;
+    case WallField::kMirrored:
+      assign(wall.mirrored, value);
       return;
   }
   OTVES_ASSERT(false);

@@ -23,6 +23,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 #include <otves/geom/editing.h>
 
 #include "engine_generated.h"
@@ -74,7 +75,9 @@ std::expected<Wall, Error> to_wall_like(const schema::Wall* wall) {
               .unit_length = Mm{wall->unit_length()},
               .unit_width = Mm{wall->unit_width()},
               .unit_height = Mm{wall->unit_height()},
-              .exact = wall->exact()};
+              .exact = wall->exact(),
+              .type = to_id(wall->type()),
+              .mirrored = wall->mirrored()};
 }
 
 std::expected<Wall, Error> to_wall(const schema::Wall* wall) {
@@ -86,6 +89,34 @@ std::expected<Wall, Error> to_wall(const schema::Wall* wall) {
     built.end = to_point(*wall->end());
     return built;
   });
+}
+
+std::expected<WallType, Error> to_wall_type(const schema::WallType* type) {
+  if (type == nullptr) {
+    return corrupt("wall type is missing");
+  }
+  const std::optional<WallRole> role = from_schema(type->role());
+  if (!role) {
+    return corrupt("unknown wall role");
+  }
+  return WallType{.role = *role};
+}
+
+std::expected<WallLayer, Error> to_wall_layer(const schema::WallLayer* layer) {
+  if (layer == nullptr) {
+    return corrupt("wall layer is missing");
+  }
+  const std::optional<LayerFunction> function = from_schema(layer->function());
+  if (!function) {
+    return corrupt("unknown layer function");
+  }
+  return WallLayer{.type = to_id(layer->type()),
+                   .position = layer->position(),
+                   .function = *function,
+                   .thickness = Mm{layer->thickness()},
+                   .unit_length = Mm{layer->unit_length()},
+                   .unit_width = Mm{layer->unit_width()},
+                   .unit_height = Mm{layer->unit_height()}};
 }
 
 std::expected<Opening, Error> to_opening(const schema::Opening* opening) {
@@ -193,6 +224,58 @@ std::expected<Command, Error> decode_wall(const schema::CommandEntry& entry) {
   }
 }
 
+std::expected<Command, Error> decode_add_wall_type(const schema::AddWallType* add) {
+  const std::optional<WallRole> role = from_schema(add->role());
+  if (!role) {
+    return corrupt("unknown wall role");
+  }
+  AddWallType command{.role = *role, .layers = {}};
+  if (add->layers() != nullptr) {
+    command.layers.reserve(add->layers()->size());
+    for (const schema::WallLayer* layer : *add->layers()) {
+      auto decoded = to_wall_layer(layer);
+      if (!decoded) {
+        return std::unexpected{std::move(decoded).error()};
+      }
+      command.layers.push_back(*decoded);
+    }
+  }
+  return command;
+}
+
+std::expected<Command, Error> decode_wall_type(const schema::CommandEntry& entry) {
+  switch (entry.command_type()) {
+    case schema::Command::AddWallType:
+      return decode_add_wall_type(entry.command_as_AddWallType());
+    case schema::Command::SetWallTypeRole: {
+      const auto* set = entry.command_as_SetWallTypeRole();
+      const std::optional<WallRole> role = from_schema(set->role());
+      if (!role) {
+        return corrupt("unknown wall role");
+      }
+      return SetWallTypeRole{.type = to_id(set->type()), .role = *role};
+    }
+    case schema::Command::SetWallLayer: {
+      const auto* set = entry.command_as_SetWallLayer();
+      return SetWallLayer{.layer = to_id(set->layer()),
+                          .thickness = Mm{set->thickness()},
+                          .unit_length = Mm{set->unit_length()},
+                          .unit_width = Mm{set->unit_width()},
+                          .unit_height = Mm{set->unit_height()}};
+    }
+    case schema::Command::SetWallType: {
+      const auto* set = entry.command_as_SetWallType();
+      return SetWallType{.wall = to_id(set->wall()), .type = to_id(set->type())};
+    }
+    case schema::Command::SetWallMirrored: {
+      const auto* set = entry.command_as_SetWallMirrored();
+      return SetWallMirrored{.wall = to_id(set->wall()), .mirrored = set->mirrored()};
+    }
+    default:
+      return corrupt("not a wall type command");
+  }
+}
+
 std::expected<Command, Error> decode_opening(const schema::CommandEntry& entry) {
   switch (entry.command_type()) {
     case schema::Command::AddOpening:
@@ -260,6 +343,58 @@ std::optional<OpeningKind> from_schema(schema::OpeningKind kind) {
       return OpeningKind::kDoor;
     case schema::OpeningKind::Empty:
       return OpeningKind::kEmpty;
+  }
+  return std::nullopt;
+}
+
+schema::WallRole to_schema(WallRole role) {
+  switch (role) {
+    case WallRole::kExterior:
+      return schema::WallRole::Exterior;
+    case WallRole::kBearing:
+      return schema::WallRole::Bearing;
+    case WallRole::kPartition:
+      return schema::WallRole::Partition;
+  }
+  return schema::WallRole::Exterior;
+}
+
+std::optional<WallRole> from_schema(schema::WallRole role) {
+  switch (role) {
+    case schema::WallRole::Exterior:
+      return WallRole::kExterior;
+    case schema::WallRole::Bearing:
+      return WallRole::kBearing;
+    case schema::WallRole::Partition:
+      return WallRole::kPartition;
+  }
+  return std::nullopt;
+}
+
+schema::LayerFunction to_schema(LayerFunction function) {
+  switch (function) {
+    case LayerFunction::kStructure:
+      return schema::LayerFunction::Structure;
+    case LayerFunction::kInsulation:
+      return schema::LayerFunction::Insulation;
+    case LayerFunction::kFacing:
+      return schema::LayerFunction::Facing;
+    case LayerFunction::kGap:
+      return schema::LayerFunction::Gap;
+  }
+  return schema::LayerFunction::Structure;
+}
+
+std::optional<LayerFunction> from_schema(schema::LayerFunction function) {
+  switch (function) {
+    case schema::LayerFunction::Structure:
+      return LayerFunction::kStructure;
+    case schema::LayerFunction::Insulation:
+      return LayerFunction::kInsulation;
+    case schema::LayerFunction::Facing:
+      return LayerFunction::kFacing;
+    case schema::LayerFunction::Gap:
+      return LayerFunction::kGap;
   }
   return std::nullopt;
 }
@@ -340,6 +475,8 @@ schema::ErrorCode to_schema(ErrorCode code) {
       return schema::ErrorCode::ConditionOutOfRange;
     case ErrorCode::kBreaksJoin:
       return schema::ErrorCode::BreaksJoin;
+    case ErrorCode::kTypeDecides:
+      return schema::ErrorCode::TypeDecides;
   }
   return schema::ErrorCode::Internal;
 }
@@ -366,6 +503,12 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
     case schema::Command::RemoveWall:
     case schema::Command::SetWallUnit:
       return decode_wall(entry);
+    case schema::Command::AddWallType:
+    case schema::Command::SetWallTypeRole:
+    case schema::Command::SetWallLayer:
+    case schema::Command::SetWallType:
+    case schema::Command::SetWallMirrored:
+      return decode_wall_type(entry);
     case schema::Command::AddOpening:
     case schema::Command::MoveOpening:
     case schema::Command::ResizeOpening:
@@ -516,12 +659,29 @@ EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Wall& wall)
   const schema::Uuid level = to_schema(wall.level);
   const schema::PointMm start = to_schema(wall.start);
   const schema::PointMm end = to_schema(wall.end);
+  const schema::Uuid type = to_schema(wall.type);
   return {.type = schema::Element::Wall,
           .value = schema::CreateWall(builder, &level, &start, &end, wall.thickness.value(),
                                       wall.height.value(), to_schema(wall.location_line),
                                       wall.unit_length.value(), wall.unit_width.value(),
-                                      wall.unit_height.value(), wall.exact)
+                                      wall.unit_height.value(), wall.exact,
+                                      wall.type.is_nil() ? nullptr : &type, wall.mirrored)
                        .Union()};
+}
+
+EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const WallType& type) {
+  return {.type = schema::Element::WallType,
+          .value = schema::CreateWallType(builder, to_schema(type.role)).Union()};
+}
+
+EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const WallLayer& layer) {
+  const schema::Uuid type = to_schema(layer.type);
+  return {
+      .type = schema::Element::WallLayer,
+      .value = schema::CreateWallLayer(builder, &type, layer.position, to_schema(layer.function),
+                                       layer.thickness.value(), layer.unit_length.value(),
+                                       layer.unit_width.value(), layer.unit_height.value())
+                   .Union()};
 }
 
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Opening& opening) {
@@ -586,6 +746,10 @@ std::expected<Element, Error> decode(schema::Element type, const void* value) {
       return to_opening(static_cast<const schema::Opening*>(value));
     case schema::Element::Conditions:
       return to_conditions(static_cast<const schema::Conditions*>(value));
+    case schema::Element::WallType:
+      return to_wall_type(static_cast<const schema::WallType*>(value));
+    case schema::Element::WallLayer:
+      return to_wall_layer(static_cast<const schema::WallLayer*>(value));
     case schema::Element::NONE:
       break;
   }
@@ -613,6 +777,8 @@ std::expected<Snapshot, Error> decode(const schema::OpenModel* open) {
             [&](const Wall& wall) { snapshot.walls.emplace_back(id, wall); },
             [&](const Opening& opening) { snapshot.openings.emplace_back(id, opening); },
             [&](const Conditions& conditions) { snapshot.conditions.emplace_back(id, conditions); },
+            [&](const WallType& type) { snapshot.wall_types.emplace_back(id, type); },
+            [&](const WallLayer& layer) { snapshot.wall_layers.emplace_back(id, layer); },
         },
         *element);
   }
@@ -631,6 +797,10 @@ flatbuffers::Offset<schema::ElementChange> encode_change(flatbuffers::FlatBuffer
     value = encode(builder, *opening);
   } else if (const auto* conditions = model.find<Conditions>(id)) {
     value = encode(builder, *conditions);
+  } else if (const auto* type = model.find<WallType>(id)) {
+    value = encode(builder, *type);
+  } else if (const auto* layer = model.find<WallLayer>(id)) {
+    value = encode(builder, *layer);
   }
   return schema::CreateElementChange(builder, &key, value.type, value.value);
 }

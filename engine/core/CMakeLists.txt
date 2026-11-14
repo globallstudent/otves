@@ -1,5 +1,6 @@
 add_library(otves_core
   src/assert.cpp
+  src/build.cpp
   src/command.cpp
   src/conditions.cpp
   src/document.cpp
@@ -8,7 +9,8 @@ add_library(otves_core
   src/op.cpp
   src/opening.cpp
   src/uuid.cpp
-  src/wall.cpp)
+  src/wall.cpp
+  src/wall_type.cpp)
 add_library(otves::core ALIAS otves_core)
 
 target_include_directories(otves_core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
@@ -28,6 +30,7 @@ if(OTVES_BUILD_TESTS)
     tests/opening_test.cpp
     tests/slot_map_test.cpp
     tests/units_test.cpp
-    tests/uuid_test.cpp)
+    tests/uuid_test.cpp
+    tests/wall_type_test.cpp)
   target_link_libraries(otves_core_tests PRIVATE otves::core)
 endif()

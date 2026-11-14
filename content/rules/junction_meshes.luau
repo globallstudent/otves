@@ -25,7 +25,10 @@ return {
 		local min_thickness = norms.practice.walls.load_bearing_min_thickness
 		local load_bearing: { [string]: boolean } = {}
 		for _, wall in input.walls do
-			load_bearing[wall.id] = wall.thickness * 1000 >= min_thickness - ROUNDING
+			-- A wall's type says whether it bears load; a wall with no type is judged by its thickness.
+			load_bearing[wall.id] = if wall.bearing ~= nil
+				then wall.bearing
+				else wall.thickness * 1000 >= min_thickness - ROUNDING
 		end
 
 		local meshes = 0

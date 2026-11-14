@@ -31,11 +31,13 @@ namespace otves::takeoff {
 namespace {
 
 constexpr std::size_t kMaxItemLength = 64;
-constexpr int kWallFields = 10;
+constexpr int kWallFields = 11;
 constexpr int kMasonryWallFields = 3;
 constexpr int kUnitMasonryFields = 5;
 constexpr int kLintelFields = 5;
 constexpr int kJunctionFields = 3;
+constexpr int kInsulationFields = 2;
+constexpr int kInputFields = 5;
 
 struct UnitName {
   std::string_view name;
@@ -112,16 +114,18 @@ void close_element(lua_State* state, std::size_t index) {
 }
 
 // input = { walls = { { id, thickness, footprint_area, length, face_area, volume, openings_area,
-//                       ring_beam, footing_width, footing_depth } },
+//                       ring_beam, footing_width, footing_depth, bearing } },
 //           lintels = { { opening, wall, length, height, thickness } },
 //           junctions = { { walls = { id }, height, meshes } },
 //           masonry = { units, mortar, walls = { { id, units, mortar } },
-//                       by_unit = { { length, width, height, units, mortar } } } },
-// in metres, except unit sizes, which are whole millimetres.
+//                       by_unit = { { length, width, height, units, mortar } } },
+//           insulation = { { thickness, area } } },
+// in metres, except unit sizes and insulation thicknesses, which are whole millimetres. A wall
+// of several masonry layers has an entry in masonry.walls for each.
 void push_input(lua_State* state, const Measurement& measurement, const Masonry& masonry) {
   const std::span<const WallQuantities> walls = measurement.walls;
   const std::span<const Lintel> lintels = measurement.lintels;
-  lua_createtable(state, 0, 4);
+  lua_createtable(state, 0, kInputFields);
 
   lua_createtable(state, static_cast<int>(walls.size()), 0);
   for (std::size_t i = 0; i < walls.size(); ++i) {
@@ -137,6 +141,11 @@ void push_input(lua_State* state, const Measurement& measurement, const Masonry&
     set_field(state, "ring_beam", wall.ring_beam);
     set_field(state, "footing_width", wall.footing_width);
     set_field(state, "footing_depth", wall.footing_depth);
+    // Absent for a wall with no type: the rule judges it by its thickness.
+    if (wall.bearing) {
+      lua_pushboolean(state, *wall.bearing ? 1 : 0);
+      lua_rawsetfield(state, -2, "bearing");
+    }
     close_element(state, i);
   }
   close_table(state, "walls");
@@ -198,6 +207,16 @@ void push_input(lua_State* state, const Measurement& measurement, const Masonry&
   }
   close_table(state, "by_unit");
   close_table(state, "masonry");
+
+  const std::span<const Insulation> insulation = measurement.insulation;
+  lua_createtable(state, static_cast<int>(insulation.size()), 0);
+  for (std::size_t i = 0; i < insulation.size(); ++i) {
+    lua_createtable(state, 0, kInsulationFields);
+    set_field(state, "thickness", static_cast<double>(insulation[i].thickness.value()));
+    set_field(state, "area", insulation[i].area);
+    close_element(state, i);
+  }
+  close_table(state, "insulation");
 
   lua_setreadonly(state, -1, 1);
 }

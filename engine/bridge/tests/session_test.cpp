@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -89,6 +91,70 @@ class Request {
   Request& draw(ElementId level) {
     const schema::Uuid on = key(level);
     return add(Command::Draw, schema::CreateDraw(builder_, &on, 300, 150).Union());
+  }
+
+  // The outside wall of the reference plans: 120 of facing brick, 100 of insulation and 190 of
+  // block from the outer face in, or as many millimetres of insulation as asked.
+  Request& add_wall_type(schema::WallRole role = schema::WallRole::Exterior,
+                         std::int64_t insulation = 100) {
+    const std::vector layers{
+        schema::CreateWallLayer(builder_, nullptr, 0, schema::LayerFunction::Facing, 120, 250, 120,
+                                65),
+        schema::CreateWallLayer(builder_, nullptr, 0, schema::LayerFunction::Insulation,
+                                insulation),
+        schema::CreateWallLayer(builder_, nullptr, 0, schema::LayerFunction::Structure, 190, 390,
+                                190, 188)};
+    return add(Command::AddWallType,
+               schema::CreateAddWallType(builder_, role, builder_.CreateVector(layers)).Union());
+  }
+
+  // A wall of a type: it carries no thickness of its own.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a level, then a type, as everywhere
+  Request& add_typed_wall(ElementId level, ElementId type, schema::PointMm start,
+                          schema::PointMm end, std::int64_t thickness = 0) {
+    const schema::Uuid on = key(level);
+    const schema::Uuid of = key(type);
+    const auto wall = schema::CreateWall(builder_, &on, &start, &end, thickness, 2800,
+                                         schema::LocationLine::Center, 0, 0, 0, true, &of);
+    return add(Command::AddWall, schema::CreateAddWall(builder_, wall).Union());
+  }
+
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): the wall, then what it becomes
+  Request& set_wall_type(ElementId wall, ElementId type) {
+    const schema::Uuid id = key(wall);
+    const schema::Uuid of = key(type);
+    return add(Command::SetWallType, schema::CreateSetWallType(builder_, &id, &of).Union());
+  }
+
+  Request& set_mirrored(ElementId wall, bool mirrored) {
+    const schema::Uuid id = key(wall);
+    return add(Command::SetWallMirrored,
+               schema::CreateSetWallMirrored(builder_, &id, mirrored).Union());
+  }
+
+  // A layer of insulation that thick.
+  Request& set_layer(ElementId layer, std::int64_t thickness) {
+    const schema::Uuid id = key(layer);
+    return add(Command::SetWallLayer, schema::CreateSetWallLayer(builder_, &id, thickness).Union());
+  }
+
+  Request& set_role(ElementId type, schema::WallRole role) {
+    const schema::Uuid id = key(type);
+    return add(Command::SetWallTypeRole,
+               schema::CreateSetWallTypeRole(builder_, &id, role).Union());
+  }
+
+  // A stroke read as walls of a type.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a level, then a type, as everywhere
+  Request& add_typed_sketch(ElementId level, ElementId type,
+                            const std::vector<schema::PointMm>& points) {
+    const schema::Uuid on = key(level);
+    const schema::Uuid of = key(type);
+    const auto wall = schema::CreateWall(builder_, &on, nullptr, nullptr, 0, 2800,
+                                         schema::LocationLine::Center, 0, 0, 0, true, &of);
+    const auto path = builder_.CreateVectorOfStructs(points);
+    return add(Command::AddSketch,
+               schema::CreateAddSketch(builder_, wall, path, 300, 100, true).Union());
   }
 
   // A wall up from the origin, meeting add_wall's at a corner.
@@ -987,7 +1053,7 @@ std::vector<std::uint8_t> load_all_content() {
   }
   Request::Files rules;
   for (const std::string_view name :
-       {"footing", "junction_meshes", "lintels", "masonry", "ring_beam"}) {
+       {"footing", "insulation", "junction_meshes", "lintels", "masonry", "ring_beam"}) {
     rules.push_back(content_file("rules", name));
   }
   return Request{}.load_content(norms, rules).bytes();
@@ -1224,6 +1290,228 @@ TEST(Session, IssuesNameTheOpeningsAndJoinsToFix) {
   EXPECT_EQ(overlap->element(), nullptr);
   ASSERT_NE(overlap->at(), nullptr);
   EXPECT_EQ(overlap->at()->x(), 0);
+}
+
+// The fills of a drawing's polygons, in order.
+std::vector<schema::Fill> fills(const schema::Drawing& drawing) {
+  std::vector<schema::Fill> all;
+  for (const schema::DrawnPolygon* polygon : *drawing.polygons()) {
+    all.push_back(polygon->fill());
+  }
+  return all;
+}
+
+// From where to where a polygon reaches along one axis, to the nearest tenth of a millimetre.
+using Range = std::pair<double, double>;
+
+Range across(const schema::DrawnPolygon& polygon, double (schema::PointM::*axis)() const) {
+  const auto rounded = [](double metres) { return std::round(metres * 1e4) / 1e4; };
+  Range reach{1e9, -1e9};
+  for (const schema::PointM* point : *polygon.points()) {
+    reach.first = std::min(reach.first, rounded((point->*axis)()));
+    reach.second = std::max(reach.second, rounded((point->*axis)()));
+  }
+  return reach;
+}
+
+// The ids of the wall layers a response reports, in the order of their positions.
+std::vector<ElementId> layers_in(const schema::Response& response) {
+  std::vector<std::pair<std::int64_t, ElementId>> found;
+  for (const schema::ElementChange* change : *response.changes()) {
+    if (const schema::WallLayer* layer = change->element_as_WallLayer()) {
+      found.emplace_back(layer->position(), to_id(change->id()));
+    }
+  }
+  std::ranges::sort(found);
+  std::vector<ElementId> ids;
+  ids.reserve(found.size());
+  for (const auto& [position, id] : found) {
+    ids.push_back(id);
+  }
+  return ids;
+}
+
+// Whether the response reports an issue of this kind.
+bool reports(const schema::Response& response, schema::IssueKind kind) {
+  return std::ranges::any_of(*response.issues(),
+                             [kind](const schema::Issue* issue) { return issue->kind() == kind; });
+}
+
+// How many of the walls a response reports are mirrored.
+std::ptrdiff_t mirrored_walls(const schema::Response& response) {
+  return std::ranges::count_if(*response.changes(), [](const schema::ElementChange* change) {
+    const schema::Wall* wall = change->element_as_Wall();
+    return wall != nullptr && wall->mirrored();
+  });
+}
+
+TEST(Session, AWallOfATypeIsDrawnAndCountedLayerByLayer) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+  const ElementId level = add_level(session);
+
+  const auto& typed = respond(session, Request{}.add_wall_type().bytes());
+  const ElementId type = to_id(typed.results()->Get(0)->created());
+  // The type and its three layers, in one step.
+  ASSERT_EQ(typed.changes()->size(), 4U);
+  ASSERT_EQ(typed.log()->size(), 1U);
+  EXPECT_EQ(typed.log()->Get(0)->kind(), schema::CommandKind::AddWallType);
+  ASSERT_EQ(layers_in(typed).size(), 3U);
+
+  const auto& built = respond(
+      session, Request{}.add_typed_wall(level, type, {0, 0}, {6000, 0}).draw(level).bytes());
+
+  ASSERT_EQ(built.results()->Get(0)->error(), schema::ErrorCode::None);
+  const schema::Wall* wall = built.changes()->Get(0)->element_as_Wall();
+  ASSERT_NE(wall, nullptr);
+  EXPECT_EQ(to_id(wall->type()), type);
+  EXPECT_EQ(wall->thickness(), 0);
+  // 410 mm between its faces.
+  ASSERT_EQ(built.outlines()->size(), 1U);
+  EXPECT_DOUBLE_EQ(built.outlines()->Get(0)->points()->Get(0)->y(), -0.205);
+  const schema::Drawing* drawing = built.results()->Get(1)->drawing();
+  ASSERT_NE(drawing, nullptr);
+  EXPECT_EQ(fills(*drawing), (std::vector{schema::Fill::Facing, schema::Fill::Insulation,
+                                          schema::Fill::Wall, schema::Fill::None}));
+  EXPECT_EQ(drawing->polygons()->Get(0)->stroke(), schema::Stroke::Layer);
+  EXPECT_EQ(drawing->polygons()->Get(3)->stroke(), schema::Stroke::WallEdge);
+  // 6 m × 2,8 m of each layer: bricks, blocks and insulation, each on its own line.
+  EXPECT_NEAR(amount(built, "insulation.100"), 16.8, 1e-9);
+  EXPECT_GT(amount(built, "masonry_unit.250x120x65"), 800.0);
+  EXPECT_GT(amount(built, "masonry_unit.390x190x188"), 200.0);
+  // Every masonry layer has its unit, so nothing asks for a material.
+  EXPECT_FALSE(reports(built, schema::IssueKind::MaterialNotChosen));
+}
+
+TEST(Session, ALayerEditedOnceChangesEveryWallOfItsType) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+  const ElementId level = add_level(session);
+  const auto& typed = respond(session, Request{}.add_wall_type().bytes());
+  const ElementId type = to_id(typed.results()->Get(0)->created());
+  const ElementId insulation = layers_in(typed)[1];
+  respond(session, Request{}
+                       .add_typed_wall(level, type, {0, 0}, {6000, 0})
+                       .add_typed_wall(level, type, {0, 5000}, {4000, 5000})
+                       .bytes());
+
+  const auto& thicker = respond(session, Request{}.set_layer(insulation, 150).bytes());
+
+  ASSERT_EQ(thicker.results()->Get(0)->error(), schema::ErrorCode::None);
+  // Only the layer changed; both walls are 460 mm now.
+  ASSERT_EQ(thicker.changes()->size(), 1U);
+  EXPECT_EQ(thicker.changes()->Get(0)->element_as_WallLayer()->thickness(), 150);
+  ASSERT_EQ(thicker.outlines()->size(), 2U);
+  EXPECT_DOUBLE_EQ(thicker.outlines()->Get(0)->points()->Get(0)->y(), -0.23);
+  EXPECT_NEAR(amount(thicker, "insulation.150"), (6.0 + 4.0) * 2.8, 1e-9);
+  EXPECT_EQ(thicker.log()->Get(0)->kind(), schema::CommandKind::SetWallLayer);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_NEAR(amount(undone, "insulation.100"), (6.0 + 4.0) * 2.8, 1e-9);
+}
+
+TEST(Session, AWallTakesATypeAndTheTypeDecidesFromThenOn) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const ElementId wall = add_wall(session, level);
+  const auto& typed = respond(session, Request{}.add_wall_type().bytes());
+  const ElementId type = to_id(typed.results()->Get(0)->created());
+
+  const auto& taken = respond(session, Request{}.set_wall_type(wall, type).bytes());
+
+  ASSERT_EQ(taken.results()->Get(0)->error(), schema::ErrorCode::None);
+  const schema::Wall* now = taken.changes()->Get(0)->element_as_Wall();
+  EXPECT_EQ(to_id(now->type()), type);
+  EXPECT_EQ(now->thickness(), 0);
+  ASSERT_EQ(taken.log()->size(), 1U);
+  EXPECT_EQ(taken.log()->Get(0)->kind(), schema::CommandKind::SetWallType);
+
+  const auto& refused =
+      respond(session, Request{}
+                           .set_unit(wall)
+                           .add_typed_wall(level, type, {0, 0}, {0, 4000}, 380)
+                           .add_typed_wall(level, ElementId{Uuid{7, 7}}, {0, 0}, {0, 4000})
+                           .set_wall_type(wall, ElementId{Uuid{7, 7}})
+                           .empty(Command::AddWallType)
+                           .bytes());
+  ASSERT_EQ(refused.results()->size(), 5U);
+  EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::TypeDecides);
+  EXPECT_EQ(refused.results()->Get(1)->error(), schema::ErrorCode::TypeDecides);
+  EXPECT_EQ(refused.results()->Get(2)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(refused.results()->Get(3)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(refused.results()->Get(4)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(refused.changes()->size(), 0U);
+
+  // Turned round, the facing lies on the wall's left face.
+  const auto& turned = respond(session, Request{}.set_mirrored(wall, true).draw(level).bytes());
+  EXPECT_TRUE(turned.changes()->Get(0)->element_as_Wall()->mirrored());
+  const schema::Drawing* drawing = turned.results()->Get(1)->drawing();
+  ASSERT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Facing);
+  EXPECT_EQ(across(*drawing->polygons()->Get(0), &schema::PointM::y), (Range{0.085, 0.205}));
+
+  const auto& back = respond(session, Request{}.undo().undo().bytes());
+  const schema::Wall* plain = back.changes()->Get(0)->element_as_Wall();
+  EXPECT_EQ(plain->type(), nullptr);
+  EXPECT_EQ(plain->thickness(), 380);
+}
+
+TEST(Session, ATypeSaysWhetherItsWallsBearLoad) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+  const ElementId level = add_level(session);
+  const auto& typed =
+      respond(session, Request{}.add_wall_type(schema::WallRole::Partition).bytes());
+  const ElementId type = to_id(typed.results()->Get(0)->created());
+
+  // 410 mm thick, but a partition: the norm asks for no ring beam on it.
+  const auto& built =
+      respond(session, Request{}.add_typed_wall(level, type, {0, 0}, {6000, 0}).bytes());
+  EXPECT_FALSE(reports(built, schema::IssueKind::RingBeamMissing));
+
+  const auto& bearing =
+      respond(session, Request{}.set_role(type, schema::WallRole::Bearing).bytes());
+  ASSERT_EQ(bearing.issues()->size(), 1U);
+  EXPECT_EQ(bearing.issues()->Get(0)->kind(), schema::IssueKind::RingBeamMissing);
+}
+
+TEST(Session, ALoopSketchedClockwiseStartsItsLayersFromTheLeftFace) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const auto& typed = respond(session, Request{}.add_wall_type().bytes());
+  const ElementId type = to_id(typed.results()->Get(0)->created());
+
+  // Up the left side first: the room's outside is on the left of every wall.
+  const auto& drawn = respond(
+      session,
+      Request{}
+          .add_typed_sketch(level, type, {{0, 0}, {0, 4000}, {6000, 4000}, {6000, 0}, {0, 0}})
+          .draw(level)
+          .bytes());
+
+  ASSERT_EQ(drawn.results()->Get(0)->error(), schema::ErrorCode::None);
+  ASSERT_EQ(drawn.changes()->size(), 4U);
+  EXPECT_EQ(mirrored_walls(drawn), 4);
+  const schema::Wall* first = drawn.changes()->Get(0)->element_as_Wall();
+  ASSERT_NE(first, nullptr);
+  EXPECT_EQ(to_id(first->type()), type);
+  EXPECT_FALSE(first->exact());
+  // The first wall runs up the left side; its facing is its outermost 120 mm.
+  const schema::Drawing* drawing = drawn.results()->Get(1)->drawing();
+  ASSERT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Facing);
+  EXPECT_EQ(across(*drawing->polygons()->Get(0), &schema::PointM::x), (Range{-0.205, -0.085}));
+
+  // The other way round nothing is mirrored.
+  respond(session, Request{}.undo().bytes());
+  const auto& again = respond(
+      session,
+      Request{}
+          .add_typed_sketch(level, type, {{0, 0}, {6000, 0}, {6000, 4000}, {0, 4000}, {0, 0}})
+          .bytes());
+  ASSERT_EQ(again.changes()->size(), 4U);
+  EXPECT_EQ(mirrored_walls(again), 0);
 }
 
 }  // namespace

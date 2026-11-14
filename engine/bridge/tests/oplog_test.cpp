@@ -17,6 +17,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 
 #include "engine_generated.h"
 
@@ -61,6 +62,15 @@ Document edited_document() {
       SetWallHeight{.wall = wall, .height = 2700_mm},
       SetWallLocationLine{.wall = wall, .location_line = LocationLine::kRightFace},
       SetWallExact{.wall = wall, .exact = false},
+      AddWallType{
+          .role = WallRole::kExterior,
+          .layers = {{.type = {},
+                      .function = LayerFunction::kFacing,
+                      .thickness = 120_mm,
+                      .unit_length = 250_mm,
+                      .unit_width = 120_mm,
+                      .unit_height = 65_mm},
+                     {.type = {}, .function = LayerFunction::kInsulation, .thickness = 100_mm}}},
       MoveOpening{.opening = window, .offset = 1000_mm},
       ResizeOpening{.opening = window, .width = 900_mm, .height = 2100_mm},
       SetOpeningSill{.opening = window, .sill = 0_mm},
@@ -68,6 +78,34 @@ Document edited_document() {
       RemoveWall{.wall = wall},
   };
   for (const Command& edit : edits) {
+    EXPECT_TRUE(document.execute(edit));
+  }
+  // The type just made and its insulation: every field of both, and a wall that takes the type.
+  ElementId type;
+  document.model().for_each<WallType>([&type](ElementId id, const WallType&) { type = id; });
+  ElementId insulation;
+  document.model().for_each<WallLayer>([&insulation](ElementId id, const WallLayer& layer) {
+    if (layer.function == LayerFunction::kInsulation) {
+      insulation = id;
+    }
+  });
+  const ElementId typed =
+      created(document.execute(AddWall{.wall = {.level = level,
+                                                .start = {.x = 0_mm, .y = 0_mm},
+                                                .end = {.x = 0_mm, .y = 4000_mm},
+                                                .thickness = 380_mm,
+                                                .height = 2800_mm}}));
+  const std::vector<Command> typing{
+      SetWallTypeRole{.type = type, .role = WallRole::kBearing},
+      SetWallLayer{.layer = insulation,
+                   .thickness = 150_mm,
+                   .unit_length = 0_mm,
+                   .unit_width = 0_mm,
+                   .unit_height = 0_mm},
+      SetWallType{.wall = typed, .type = type},
+      SetWallMirrored{.wall = typed, .mirrored = true},
+  };
+  for (const Command& edit : typing) {
     EXPECT_TRUE(document.execute(edit));
   }
   EXPECT_TRUE(document.undo());
@@ -87,7 +125,7 @@ void expect_round_trip(const OpGroup& group) {
 
 TEST(OpLog, EveryGroupComesBackFromItsBuffer) {
   const Document document = edited_document();
-  ASSERT_EQ(document.log().size(), 17U);
+  ASSERT_EQ(document.log().size(), 23U);
 
   for (const OpGroup& group : document.log()) {
     expect_round_trip(group);

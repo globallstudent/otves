@@ -3,6 +3,7 @@
 #include <compare>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -57,6 +58,9 @@ struct WallQuantities {
   // the caller, as ring_beam (docs/adr/0010).
   double footing_width = 0.0;
   double footing_depth = 0.0;
+  // Whether the wall bears load, when its type says so (docs/adr/0014); absent for a wall with
+  // no type, which the rules judge by its thickness. Set by the caller, as ring_beam.
+  std::optional<bool> bearing{};  // NOLINT(readability-redundant-member-init)
 };
 
 // A place where walls meet, with the height they share there.
@@ -89,11 +93,22 @@ struct OpeningIssue {
   constexpr auto operator<=>(const OpeningIssue&) const = default;
 };
 
+// Insulation of one thickness in the walls: the face it covers, net of openings and lintels.
+struct Insulation {
+  Mm thickness;
+  double area = 0.0;  // m²
+
+  constexpr auto operator<=>(const Insulation&) const = default;
+};
+
 struct Measurement {
   std::vector<WallQuantities> walls;          // one per footprint in the joins, sorted by id
   std::vector<Lintel> lintels;                // one per opening inside a wall, sorted by opening
   std::vector<JunctionQuantities> junctions;  // in the order of the joins' junctions
   std::vector<OpeningIssue> issues;           // sorted, no duplicates
+  // What the walls' insulation layers cover, one per thickness, sorted. Measuring leaves it
+  // empty; the caller sets it from measure_layers (docs/adr/0014).
+  std::vector<Insulation> insulation{};  // NOLINT(readability-redundant-member-init)
 };
 
 // Walls are measured as drawn: where join_walls reported an overlap, the shared part counts in

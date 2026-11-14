@@ -7,9 +7,11 @@
 #include <expected>
 #include <iterator>
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
+#include <otves/core/build.h>
 #include <otves/core/command.h>
 #include <otves/core/error.h>
 #include <otves/core/level.h>
@@ -19,13 +21,16 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 #include <otves/drafting/plan.h>
 #include <otves/geom/editing.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/sketch.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
+#include <otves/takeoff/layers.h>
 
+#include "built.h"
 #include "convert.h"
 
 namespace otves::bridge {
@@ -48,13 +53,7 @@ Mm axis_length(const Wall& wall) {
 }
 
 std::vector<geom::WallInput> walls_on(const Model& model, ElementId level) {
-  std::vector<geom::WallInput> walls;
-  model.for_each<Wall>([&walls, level](ElementId id, const Wall& wall) {
-    if (wall.level == level) {
-      walls.push_back({.id = id, .wall = wall});
-    }
-  });
-  return walls;
+  return inputs(built_walls(model, level));
 }
 
 // The level under `level`: the one before it by elevation. Levels at one elevation keep the order
@@ -71,16 +70,25 @@ std::optional<ElementId> level_below(const Model& model, ElementId level) {
   return std::prev(found)->second;
 }
 
-// The openings in the walls of `level`, each with its wall.
-std::vector<geom::PlacedOpening> openings_on(const Model& model, ElementId level) {
+// The openings in `walls`, each with its wall as geometry reads it. Precondition: `walls` is
+// sorted by id.
+std::vector<geom::PlacedOpening> openings_in(const Model& model,
+                                             std::span<const geom::WallInput> walls) {
   std::vector<geom::PlacedOpening> openings;
   model.for_each<Opening>([&](ElementId id, const Opening& opening) {
-    const Wall* wall = model.find<Wall>(opening.wall);
-    if (wall != nullptr && wall->level == level) {
-      openings.push_back({.id = id, .wall = *wall, .opening = opening});
+    const auto wall = std::ranges::lower_bound(walls, opening.wall, {}, &geom::WallInput::id);
+    if (wall != walls.end() && wall->id == opening.wall) {
+      openings.push_back({.id = id, .wall = wall->wall, .opening = opening});
     }
   });
   return openings;
+}
+
+// The walls of `level` sorted by id, to look openings up in.
+std::vector<geom::WallInput> sorted_walls_on(const Model& model, ElementId level) {
+  std::vector<geom::WallInput> walls = walls_on(model, level);
+  std::ranges::sort(walls, {}, &geom::WallInput::id);
+  return walls;
 }
 
 // The wall ends of the level under `level`, so walls stand on walls.
@@ -145,10 +153,18 @@ Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke) {
   if (model.find<Level>(level) == nullptr) {
     return make_error(ErrorCode::kNotFound, "level not found");
   }
+  if (!stroke.wall.type.is_nil() && model.find<WallType>(stroke.wall.type) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "wall type not found");
+  }
   const geom::Sketch drawn{
       .points = stroke.points, .reach = stroke.reach, .grid = stroke.grid, .square = stroke.square};
-  return geom::straighten(walls_on(model, level), ends_below(model, level), drawn, stroke.wall)
-      .transform([&stroke](const std::vector<geom::Leg>& legs) {
+  // The legs are read as walls as thick as the wall to build.
+  const Wall like = geometric(stroke.wall, build_of(model, stroke.wall));
+  return geom::straighten(walls_on(model, level), ends_below(model, level), drawn, like)
+      .and_then([&stroke](const std::vector<geom::Leg>& legs) -> Result<std::vector<Command>> {
+        // The layers of a type start from a wall's right face: the outside of a loop drawn
+        // counter-clockwise. A loop drawn the other way has its outside on the left.
+        const bool mirrored = geom::runs_clockwise(legs);
         std::vector<Command> commands;
         commands.reserve(legs.size());
         for (const geom::Leg& leg : legs) {
@@ -156,6 +172,12 @@ Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke) {
           wall.start = leg.start;
           wall.end = leg.end;
           wall.exact = false;
+          wall.mirrored = mirrored;
+          // The legs were checked as plain walls; the wall to build may still be one that
+          // cannot be, such as a typed wall with a thickness of its own.
+          if (auto valid = validate(wall); !valid) {
+            return std::unexpected{std::move(valid).error()};
+          }
           commands.emplace_back(AddWall{.wall = wall});
         }
         return commands;
@@ -166,21 +188,29 @@ Result<drafting::Drawing> draw(const Model& model, const View& view) {
   if (model.find<Level>(view.level) == nullptr) {
     return make_error(ErrorCode::kNotFound, "level not found");
   }
-  const std::vector<geom::WallInput> walls = walls_on(model, view.level);
-  const std::vector<geom::PlacedOpening> openings = openings_on(model, view.level);
+  const std::vector<takeoff::BuiltWall> built = built_walls(model, view.level);
+  std::vector<geom::WallInput> walls = inputs(built);
+  std::ranges::sort(walls, {}, &geom::WallInput::id);
+  const std::vector<geom::PlacedOpening> openings = openings_in(model, walls);
+  std::vector<drafting::WallBuild> builds;
+  builds.reserve(built.size());
+  for (const takeoff::BuiltWall& wall : built) {
+    builds.push_back({.wall = wall.id, .layers = wall.layers});
+  }
   std::vector<geom::WallInput> below;
   if (const std::optional<ElementId> under = level_below(model, view.level)) {
     below = walls_on(model, *under);
   }
-  return drafting::draft({.walls = walls, .openings = openings, .below = below}, view.text);
+  return drafting::draft({.walls = walls, .openings = openings, .below = below, .builds = builds},
+                         view.text);
 }
 
 Result<std::optional<ElementId>> pick(const Model& model, const Tap& tap) {
   if (model.find<Level>(tap.level) == nullptr) {
     return make_error(ErrorCode::kNotFound, "level not found");
   }
-  const std::vector<geom::WallInput> walls = walls_on(model, tap.level);
-  const std::vector<geom::PlacedOpening> openings = openings_on(model, tap.level);
+  const std::vector<geom::WallInput> walls = sorted_walls_on(model, tap.level);
+  const std::vector<geom::PlacedOpening> openings = openings_in(model, walls);
   const geom::Vec2 at = geom::to_vec2(tap.at);
   const double reach = to_metres(std::max(tap.reach, Mm{0}));
   // Under the finger first, so a wall beside an opening stays easy to pick.

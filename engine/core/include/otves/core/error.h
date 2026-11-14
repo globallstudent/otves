@@ -35,6 +35,7 @@ enum class ErrorCode : std::uint8_t {
                          // more
   kBreaksJoin,           // a wall joined to a resized one would vanish, turn back on itself or
                          // come off the wall it stands against
+  kTypeDecides,          // a thickness or unit given to a wall whose type decides them
 };
 
 struct Error {

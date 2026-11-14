@@ -1,16 +1,20 @@
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <otves/core/build.h>
 #include <otves/core/opening.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 #include <otves/drafting/plan.h>
 #include <otves/geom/faces.h>
+#include <otves/geom/layers.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/polygon.h>
 #include <otves/geom/vec2.h>
@@ -101,6 +105,50 @@ void draw_openings(std::span<const geom::PlacedOpening> openings, Drawing& drawi
   }
 }
 
+Fill fill_of(const BuiltLayer& layer) {
+  switch (layer.function) {
+    case LayerFunction::kStructure:
+      return layer.has_unit() ? Fill::kWall : Fill::kUnchosen;
+    case LayerFunction::kFacing:
+      return layer.has_unit() ? Fill::kFacing : Fill::kUnchosen;
+    case LayerFunction::kInsulation:
+      return Fill::kInsulation;
+    case LayerFunction::kGap:
+      break;
+  }
+  return Fill::kNone;
+}
+
+// What a wall of at most one layer is filled as.
+Fill fill_of(std::span<const BuiltLayer> layers) {
+  return layers.empty() ? Fill::kUnchosen : fill_of(layers.front());
+}
+
+// A wall of several layers: each layer's strip of the joined outline, then the outline itself
+// over them, so the wall's edge is drawn once and whole.
+void draw_layers(const Wall& wall, const geom::WallFootprint& footprint,
+                 std::span<const BuiltLayer> layers, Drawing& drawing) {
+  std::vector<Mm> thicknesses;
+  thicknesses.reserve(layers.size());
+  for (const BuiltLayer& layer : layers) {
+    thicknesses.push_back(layer.thickness);
+  }
+  const std::vector<geom::Strip> strips = geom::layer_strips(wall, thicknesses);
+  for (std::size_t index = 0; index < layers.size(); ++index) {
+    std::vector<geom::Vec2> strip = geom::clip(wall, footprint.outline, strips[index]);
+    if (!strip.empty()) {
+      drawing.polygons.push_back({.element = footprint.id,
+                                  .fill = fill_of(layers[index]),
+                                  .stroke = Stroke::kLayer,
+                                  .points = std::move(strip)});
+    }
+  }
+  drawing.polygons.push_back({.element = footprint.id,
+                              .fill = Fill::kNone,
+                              .stroke = Stroke::kWallEdge,
+                              .points = footprint.outline});
+}
+
 // How wide a wall's length is written.
 double label_width(Mm length, bool exact, TextSize text) {
   const auto digits = static_cast<int>(std::to_string(length.value()).size());
@@ -167,11 +215,20 @@ Drawing draft(const Plan& plan, TextSize text) {
   const geom::WallJoins joins = geom::join_walls(walls);
   for (const geom::WallFootprint& footprint : joins.footprints) {
     const Wall* wall = find(walls, footprint.id);
-    const bool chosen = wall != nullptr && wall->has_unit();
-    drawing.polygons.push_back({.element = footprint.id,
-                                .fill = chosen ? Fill::kWall : Fill::kUnchosen,
-                                .stroke = Stroke::kWallEdge,
-                                .points = footprint.outline});
+    if (wall == nullptr) {
+      continue;
+    }
+    const auto build = std::ranges::find(plan.builds, footprint.id, &WallBuild::wall);
+    if (build == plan.builds.end() || build->layers.size() < 2) {
+      const bool chosen =
+          build == plan.builds.end() ? wall->has_unit() : fill_of(build->layers) != Fill::kUnchosen;
+      drawing.polygons.push_back({.element = footprint.id,
+                                  .fill = chosen ? Fill::kWall : Fill::kUnchosen,
+                                  .stroke = Stroke::kWallEdge,
+                                  .points = footprint.outline});
+      continue;
+    }
+    draw_layers(*wall, footprint, build->layers, drawing);
   }
   draw_openings(plan.openings, drawing);
   write_lengths(walls, joins.footprints,

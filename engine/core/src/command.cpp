@@ -31,6 +31,11 @@ CommandKind kind_of(const Command& command) {
           [](const SetCondition&) { return CommandKind::kSetCondition; },
           [](const SetLevelFooting&) { return CommandKind::kSetLevelFooting; },
           [](const SetWallExact&) { return CommandKind::kSetWallExact; },
+          [](const AddWallType&) { return CommandKind::kAddWallType; },
+          [](const SetWallTypeRole&) { return CommandKind::kSetWallTypeRole; },
+          [](const SetWallLayer&) { return CommandKind::kSetWallLayer; },
+          [](const SetWallType&) { return CommandKind::kSetWallType; },
+          [](const SetWallMirrored&) { return CommandKind::kSetWallMirrored; },
       },
       command);
 }

@@ -17,6 +17,9 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | `aim(walls, measured)` | Where a wall of a typed length ends, turning left, straight or right from the wall before it |
 | `resize_wall(walls, wall, length, fixed)` | Every wall end that moves when a wall gets a length, so what is joined stays joined |
 | `straighten(walls, below, sketch, like)` | The walls a stroke drawn with a finger means: corners found, legs laid on the axes, a loop closed, joined to the plan as `aim` joins a wall |
+| `runs_clockwise(legs)` | Whether a sketch's legs enclose their area clockwise, so its outside is on the left of each leg |
+| `layer_strips(wall, thicknesses)` | The strip of each layer across a wall, in metres left of its location line, from the outer face in |
+| `clip(wall, outline, strip)` | The part of a wall's joined outline that lies in one strip |
 
 ## Joins
 
@@ -66,6 +69,17 @@ flowchart LR
 | Ending near a wall end | A wall to that end; the corner before it moves so the wall stays on its axis |
 | A tap, or a stroke within reach of its first point | Refused with `kZeroLength` |
 
+## Layers
+
+A layer is a strip of its wall's joined outline ([ADR 0014](../../docs/adr/0014-wall-types-are-job-elements-made-of-layers.md)). Walls are joined as solid walls of the layers' total thickness; each layer is then cut out between two lines along the wall.
+
+| Case | Result |
+|---|---|
+| Layers 120, 100 and 190 mm on a wall drawn on its axis | Strips from −205 to −85, −85 to 15 and 15 to 205 mm, counted from the right face |
+| The same wall mirrored | The same strips from the left face |
+| A mitred corner of two walls of one type | Each layer ends on the mitre, so the layers meet |
+| Walls of different types at a corner | Layers end on the mitre and do not wrap round the corner |
+
 ## Invariants
 
 - Outlines are counter-clockwise. Joined outlines share edges and never overlap, so their areas add up to the masonry area.
@@ -74,4 +88,5 @@ flowchart LR
 - Directions are sorted and tested for parallel on integer millimetre steps, so which walls join never depends on floating-point rounding.
 - Coordinates use only correctly rounded operations (`+ − × ÷ √`) with `-ffp-contract=off`, so arm64 and x86-64 give the same bits. A golden test checks this.
 - Input walls pass `validate()` and have unique ids. Input order does not change the result.
+- The strips of a wall's layers tile its thickness, so their clipped outlines add up to the wall's outline.
 - A stroke's points are checked to lie on the plan before any arithmetic, and its reach and grid are held within the plan's size.

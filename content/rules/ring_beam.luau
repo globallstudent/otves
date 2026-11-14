@@ -39,7 +39,10 @@ return {
 
 		local volume, length = 0, 0
 		for _, wall in input.walls do
-			local bearing = wall.thickness * 1000 >= norms.practice.walls.load_bearing_min_thickness - ROUNDING
+			-- A wall's type says whether it bears load; a wall with no type is judged by its thickness.
+			local bearing = if wall.bearing ~= nil
+				then wall.bearing
+				else wall.thickness * 1000 >= norms.practice.walls.load_bearing_min_thickness - ROUNDING
 			if bearing and wall.ring_beam > 0 then
 				if wall.ring_beam * 1000 < seismic.min_height - ROUNDING then
 					error(`a ring beam must be at least {seismic.min_height} mm high`)

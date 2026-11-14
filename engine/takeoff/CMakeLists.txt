@@ -1,6 +1,7 @@
 find_package(unofficial-luau CONFIG REQUIRED)
 
 add_library(otves_takeoff
+  src/layers.cpp
   src/masonry.cpp
   src/rules.cpp
   src/sandbox.cpp
@@ -16,6 +17,7 @@ target_link_libraries(otves_takeoff
 if(OTVES_BUILD_TESTS)
   otves_add_test(otves_takeoff_tests
     tests/content_test.cpp
+    tests/layers_test.cpp
     tests/masonry_test.cpp
     tests/rules_test.cpp
     tests/wall_quantities_test.cpp)

@@ -5,6 +5,7 @@
 #include <initializer_list>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -13,6 +14,7 @@
 #include <vector>
 
 #include <otves/core/assert.h>
+#include <otves/core/build.h>
 #include <otves/core/command.h>
 #include <otves/core/conditions.h>
 #include <otves/core/document.h>
@@ -25,6 +27,7 @@
 #include <otves/core/overloaded.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 
 namespace otves {
 namespace {
@@ -114,6 +117,26 @@ std::expected<Ops, Error> remove_level(const Model& model, ElementId id) {
   });
 }
 
+// A wall type with its layers from the outer face in, at the positions they were given in.
+// `ids` holds the type's id and then one for each layer.
+std::expected<Ops, Error> add_wall_type(const AddWallType& add, std::span<const ElementId> ids) {
+  if (add.layers.empty()) {
+    return make_error(ErrorCode::kThicknessNotPositive, "a wall type needs a layer");
+  }
+  const ElementId type = ids.front();
+  Ops ops{CreateWallType{.id = type, .element = {.role = add.role}}};
+  for (std::size_t position = 0; position < add.layers.size(); ++position) {
+    WallLayer layer = add.layers[position];
+    layer.type = type;
+    layer.position = static_cast<std::int64_t>(position);
+    if (auto valid = validate(layer); !valid) {
+      return std::unexpected(std::move(valid.error()));
+    }
+    ops.emplace_back(CreateWallLayer{.id = ids[position + 1], .element = layer});
+  }
+  return ops;
+}
+
 // A drag sends a command every frame. Within a gesture each field keeps its first `before` and
 // its latest `after`, so the log holds one change per field instead of one per frame.
 template <typename T>
@@ -186,7 +209,8 @@ std::expected<void, Error> insert_saved(Model& model, std::vector<std::pair<Elem
 std::expected<Model, Error> load(const Snapshot& snapshot) {
   std::vector<ElementId> ids;
   ids.reserve(snapshot.levels.size() + snapshot.walls.size() + snapshot.openings.size() +
-              snapshot.conditions.size());
+              snapshot.conditions.size() + snapshot.wall_types.size() +
+              snapshot.wall_layers.size());
   for (const auto& [id, level] : snapshot.levels) {
     ids.push_back(id);
   }
@@ -197,6 +221,12 @@ std::expected<Model, Error> load(const Snapshot& snapshot) {
     ids.push_back(id);
   }
   for (const auto& [id, conditions] : snapshot.conditions) {
+    ids.push_back(id);
+  }
+  for (const auto& [id, type] : snapshot.wall_types) {
+    ids.push_back(id);
+  }
+  for (const auto& [id, layer] : snapshot.wall_layers) {
     ids.push_back(id);
   }
   if (snapshot.conditions.size() > 1) {
@@ -210,9 +240,18 @@ std::expected<Model, Error> load(const Snapshot& snapshot) {
   const auto no_parent = [](const Model&, const Level&) -> std::expected<void, Error> {
     return {};
   };
+  const auto of_type = [](const Model& into, const WallLayer& layer) -> std::expected<void, Error> {
+    if (into.find<WallType>(layer.type) == nullptr) {
+      return make_error(ErrorCode::kCorruptData, "saved layer of a missing wall type");
+    }
+    return {};
+  };
   const auto on_level = [](const Model& into, const Wall& wall) -> std::expected<void, Error> {
     if (into.find<Level>(wall.level) == nullptr) {
       return make_error(ErrorCode::kCorruptData, "saved wall on a missing level");
+    }
+    if (!wall.type.is_nil() && layers_of(into, wall.type).empty()) {
+      return make_error(ErrorCode::kCorruptData, "saved wall of a missing or empty wall type");
     }
     return {};
   };
@@ -222,8 +261,13 @@ std::expected<Model, Error> load(const Snapshot& snapshot) {
     }
     return {};
   };
+  const auto no_owner = [](const Model&, const WallType&) -> std::expected<void, Error> {
+    return {};
+  };
   auto loaded =
       insert_saved(model, snapshot.levels, no_parent)
+          .and_then([&] { return insert_saved(model, snapshot.wall_types, no_owner); })
+          .and_then([&] { return insert_saved(model, snapshot.wall_layers, of_type); })
           .and_then([&] { return insert_saved(model, snapshot.walls, on_level); })
           .and_then([&] { return insert_saved(model, snapshot.openings, in_wall); })
           .and_then([&] {
@@ -244,6 +288,8 @@ void collect_ids(const Model& model, std::vector<ElementId>& ids) {
   model.for_each<Wall>(add);
   model.for_each<Opening>(add);
   model.for_each<Conditions>(add);
+  model.for_each<WallType>(add);
+  model.for_each<WallLayer>(add);
 }
 
 }  // namespace
@@ -389,10 +435,45 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
             if (auto valid = validate(add.wall); !valid) {
               return std::unexpected(std::move(valid.error()));
             }
+            if (!add.wall.type.is_nil()) {
+              if (auto type = find_element<WallType>(model_, add.wall.type); !type) {
+                return std::unexpected(std::move(type.error()));
+              }
+            }
             return find_element<Level>(model_, add.wall.level)
                 .transform([this, &add](const Level*) {
                   return Ops{CreateWall{.id = ElementId{next_uuid()}, .element = add.wall}};
                 });
+          },
+          [this](const AddWallType& add) {
+            std::vector<ElementId> ids(add.layers.size() + 1);
+            std::ranges::generate(ids, [this] { return ElementId{next_uuid()}; });
+            return add_wall_type(add, ids);
+          },
+          [&model](const SetWallTypeRole& set) {
+            return edit<WallType>(model, set.type, {{WallTypeField::kRole, set.role}});
+          },
+          [&model](const SetWallLayer& set) {
+            return edit<WallLayer>(model, set.layer,
+                                   {{WallLayerField::kThickness, set.thickness},
+                                    {WallLayerField::kUnitLength, set.unit_length},
+                                    {WallLayerField::kUnitWidth, set.unit_width},
+                                    {WallLayerField::kUnitHeight, set.unit_height}});
+          },
+          [&model](const SetWallType& set) -> std::expected<Ops, Error> {
+            if (auto type = find_element<WallType>(model, set.type); !type) {
+              return std::unexpected(std::move(type.error()));
+            }
+            // The type decides the thickness and the unit from here on.
+            return edit<Wall>(model, set.wall,
+                              {{WallField::kType, set.type},
+                               {WallField::kThickness, Mm{0}},
+                               {WallField::kUnitLength, Mm{0}},
+                               {WallField::kUnitWidth, Mm{0}},
+                               {WallField::kUnitHeight, Mm{0}}});
+          },
+          [&model](const SetWallMirrored& set) {
+            return edit<Wall>(model, set.wall, {{WallField::kMirrored, set.mirrored}});
           },
           [&model](const MoveWallEnd& move) {
             const WallField field =

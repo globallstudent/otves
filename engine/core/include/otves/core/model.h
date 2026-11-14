@@ -11,6 +11,7 @@
 #include <otves/core/slot_map.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 
 namespace otves {
 
@@ -118,7 +119,7 @@ class Model {
   }
 
   std::tuple<ElementStore<Level>, ElementStore<Wall>, ElementStore<Opening>,
-             ElementStore<Conditions>>
+             ElementStore<Conditions>, ElementStore<WallType>, ElementStore<WallLayer>>
       stores_;
 };
 

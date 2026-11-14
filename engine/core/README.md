@@ -21,6 +21,8 @@ flowchart LR
 | `log()` | Groups to persist; read from the last stored index |
 | `take_dirty()` | Sorted ids of elements to rebuild |
 | `model()` | Read-only view of walls |
+| `build_of(model, wall)` | What a wall is built of: the role of its type and its layers from the outer face in. A wall with no type is one structure layer of its own thickness and unit (ADR 0014) |
+| `geometric(wall, build)` | The wall as geometry reads it: the layers' total thickness, no type |
 
 ## Invariants
 
@@ -29,3 +31,6 @@ flowchart LR
 - In a gesture each field keeps its first `before` and last `after`; a gesture that ends where it began records nothing.
 - Stamps from one document grow strictly, even if the wall clock steps back.
 - Lengths are integer millimetres (`Mm`); plan coordinates run x right, y up from the part's origin.
+- A wall with a type stores thickness 0 and no unit; setting either on it is refused with `kTypeDecides`.
+- A layer names a type that exists, and a wall a type that has layers. A saved job that breaks this does not open.
+- The outer face of a wall is its right face, looking from start to end, and its left when `mirrored` is set.

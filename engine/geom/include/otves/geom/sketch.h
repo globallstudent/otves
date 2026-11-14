@@ -49,4 +49,8 @@ struct Leg {
                                                   std::span<const PointMm> below,
                                                   const Sketch& sketch, const Wall& like);
 
+// Whether the legs close a loop that runs clockwise: its inside then lies to the right of every
+// leg. False for legs that do not close, or that close counter-clockwise.
+[[nodiscard]] bool runs_clockwise(std::span<const Leg> legs);
+
 }  // namespace otves::geom

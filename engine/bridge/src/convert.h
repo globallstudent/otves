@@ -17,6 +17,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 #include <otves/drafting/plan.h>
 #include <otves/geom/editing.h>
 
@@ -34,6 +35,10 @@ namespace otves::bridge {
 [[nodiscard]] schema::OpeningKind to_schema(OpeningKind kind);
 [[nodiscard]] schema::LocationLine to_schema(LocationLine line);
 [[nodiscard]] std::optional<OpeningKind> from_schema(schema::OpeningKind kind);
+[[nodiscard]] schema::WallRole to_schema(WallRole role);
+[[nodiscard]] std::optional<WallRole> from_schema(schema::WallRole role);
+[[nodiscard]] schema::LayerFunction to_schema(LayerFunction function);
+[[nodiscard]] std::optional<LayerFunction> from_schema(schema::LayerFunction function);
 [[nodiscard]] std::optional<LocationLine> from_schema(schema::LocationLine line);
 [[nodiscard]] schema::PointMm to_schema(PointMm point);
 [[nodiscard]] PointMm to_point(const schema::PointMm& point);
@@ -124,11 +129,14 @@ struct EncodedElement {
                                     const Opening& opening);
 [[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder,
                                     const Conditions& conditions);
+[[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const WallType& type);
+[[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder,
+                                    const WallLayer& layer);
 
 [[nodiscard]] schema::ConditionsField to_schema(ConditionsField field);
 [[nodiscard]] std::optional<ConditionsField> from_schema(schema::ConditionsField field);
 
-using Element = std::variant<Level, Wall, Opening, Conditions>;
+using Element = std::variant<Level, Wall, Opening, Conditions, WallType, WallLayer>;
 
 // The element in a schema union, or kCorruptData when it is absent or holds an unknown value.
 [[nodiscard]] std::expected<Element, Error> decode(schema::Element type, const void* value);

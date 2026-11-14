@@ -4,6 +4,7 @@
 #include <span>
 #include <vector>
 
+#include <otves/core/build.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/geom/openings.h>
@@ -16,9 +17,11 @@ namespace otves::drafting {
 
 enum class Fill : std::uint8_t {
   kNone,
-  kWall,      // masonry
-  kUnchosen,  // a wall with no material yet
-  kGap,       // what an opening leaves of its wall
+  kWall,        // masonry that carries the wall
+  kUnchosen,    // masonry with no material yet
+  kGap,         // what an opening leaves of its wall
+  kFacing,      // masonry laid in front of the wall
+  kInsulation,  // a layer of insulation
 };
 
 enum class Stroke : std::uint8_t {
@@ -27,6 +30,7 @@ enum class Stroke : std::uint8_t {
   kBelow,  // a wall of the level below
   kFrame,  // a window's faces and glazing
   kLeaf,   // a door's leaf and swing
+  kLayer,  // where two layers of a wall meet
 };
 
 enum class TextKind : std::uint8_t {
@@ -84,16 +88,27 @@ struct TextSize {
   double digit = 0.0;
 };
 
+// What a wall is built of, from its outer face in (docs/adr/0014).
+struct WallBuild {
+  ElementId wall;
+  std::vector<BuiltLayer> layers;
+};
+
 // One level to draw: its walls, the openings in them, and the walls of the level under it.
+// `builds` says what walls are built of; a wall with none there is one masonry layer, laid from
+// the wall's own unit. The explicit initializer lets a plan be drawn without them.
 struct Plan {
   std::span<const geom::WallInput> walls;
   std::span<const geom::PlacedOpening> openings;
   std::span<const geom::WallInput> below;
+  std::span<const WallBuild> builds{};  // NOLINT(readability-redundant-member-init)
 };
 
 // The level as a drawing.
 //  - The walls of the level below, in outline.
-//  - Each wall's joined outline, filled as masonry or as a wall with no material yet.
+//  - Each wall's joined outline, filled as masonry or as a wall with no material yet. A wall of
+//    several layers is its layers' strips of that outline, each filled as what it is, under the
+//    outline itself: insulation, facing, masonry, and nothing for a gap.
 //  - Each opening's gap through its wall with its jambs; a window's faces and glazing line; a
 //    door's leaf standing open at right angles, hinged at its near end on the wall's left face,
 //    with its swing.

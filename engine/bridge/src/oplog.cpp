@@ -23,6 +23,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 
 #include "convert.h"
 #include "engine_generated.h"
@@ -71,6 +72,16 @@ schema::CommandKind to_code(CommandKind kind) {
       return schema::CommandKind::SetLevelFooting;
     case CommandKind::kSetWallExact:
       return schema::CommandKind::SetWallExact;
+    case CommandKind::kAddWallType:
+      return schema::CommandKind::AddWallType;
+    case CommandKind::kSetWallTypeRole:
+      return schema::CommandKind::SetWallTypeRole;
+    case CommandKind::kSetWallLayer:
+      return schema::CommandKind::SetWallLayer;
+    case CommandKind::kSetWallType:
+      return schema::CommandKind::SetWallType;
+    case CommandKind::kSetWallMirrored:
+      return schema::CommandKind::SetWallMirrored;
     case CommandKind::kAddOpening:
       return schema::CommandKind::AddOpening;
     case CommandKind::kMoveOpening:
@@ -141,6 +152,16 @@ std::optional<CommandKind> from_code(schema::CommandKind kind) {
       return CommandKind::kSetLevelFooting;
     case schema::CommandKind::SetWallExact:
       return CommandKind::kSetWallExact;
+    case schema::CommandKind::AddWallType:
+      return CommandKind::kAddWallType;
+    case schema::CommandKind::SetWallTypeRole:
+      return CommandKind::kSetWallTypeRole;
+    case schema::CommandKind::SetWallLayer:
+      return CommandKind::kSetWallLayer;
+    case schema::CommandKind::SetWallType:
+      return CommandKind::kSetWallType;
+    case schema::CommandKind::SetWallMirrored:
+      return CommandKind::kSetWallMirrored;
   }
   return std::nullopt;
 }
@@ -201,6 +222,10 @@ schema::WallField to_code(WallField field) {
       return schema::WallField::UnitHeight;
     case WallField::kExact:
       return schema::WallField::Exact;
+    case WallField::kType:
+      return schema::WallField::Type;
+    case WallField::kMirrored:
+      return schema::WallField::Mirrored;
   }
   return schema::WallField::Start;
 }
@@ -225,6 +250,38 @@ std::optional<WallField> from_code(schema::WallField field) {
       return WallField::kUnitHeight;
     case schema::WallField::Exact:
       return WallField::kExact;
+    case schema::WallField::Type:
+      return WallField::kType;
+    case schema::WallField::Mirrored:
+      return WallField::kMirrored;
+  }
+  return std::nullopt;
+}
+
+schema::WallLayerField to_code(WallLayerField field) {
+  switch (field) {
+    case WallLayerField::kThickness:
+      return schema::WallLayerField::Thickness;
+    case WallLayerField::kUnitLength:
+      return schema::WallLayerField::UnitLength;
+    case WallLayerField::kUnitWidth:
+      return schema::WallLayerField::UnitWidth;
+    case WallLayerField::kUnitHeight:
+      return schema::WallLayerField::UnitHeight;
+  }
+  return schema::WallLayerField::Thickness;
+}
+
+std::optional<WallLayerField> from_code(schema::WallLayerField field) {
+  switch (field) {
+    case schema::WallLayerField::Thickness:
+      return WallLayerField::kThickness;
+    case schema::WallLayerField::UnitLength:
+      return WallLayerField::kUnitLength;
+    case schema::WallLayerField::UnitWidth:
+      return WallLayerField::kUnitWidth;
+    case schema::WallLayerField::UnitHeight:
+      return WallLayerField::kUnitHeight;
   }
   return std::nullopt;
 }
@@ -286,6 +343,7 @@ std::int64_t number(const WallValue& value) {
           [](Mm length) { return length.value(); },
           [](LocationLine line) { return static_cast<std::int64_t>(to_schema(line)); },
           [](bool on) { return std::int64_t{on ? 1 : 0}; },
+          [](ElementId) { return std::int64_t{0}; },
       },
       value);
 }
@@ -295,6 +353,15 @@ std::optional<schema::PointMm> point(const WallValue& value) {
     return to_schema(*at);
   }
   return std::nullopt;
+}
+
+// The id a wall field holds; absent for another kind of value and for no type.
+std::optional<schema::Uuid> id_of(const WallValue& value) {
+  const auto* id = std::get_if<ElementId>(&value);
+  if (id == nullptr || id->is_nil()) {
+    return std::nullopt;
+  }
+  return to_schema(*id);
 }
 
 std::int64_t number(const OpeningValue& value) {
@@ -338,10 +405,29 @@ flatbuffers::Offset<schema::OpEntry> encode_op(flatbuffers::FlatBufferBuilder& b
             const schema::Uuid key = to_schema(set.id);
             const std::optional<schema::PointMm> before = point(set.before);
             const std::optional<schema::PointMm> after = point(set.after);
+            const std::optional<schema::Uuid> before_id = id_of(set.before);
+            const std::optional<schema::Uuid> after_id = id_of(set.after);
             const auto value = schema::CreateSetWallFieldOp(
                 builder, &key, to_code(set.field), number(set.before), number(set.after),
-                before ? &*before : nullptr, after ? &*after : nullptr);
+                before ? &*before : nullptr, after ? &*after : nullptr,
+                before_id ? &*before_id : nullptr, after_id ? &*after_id : nullptr);
             return schema::CreateOpEntry(builder, schema::Op::SetWallFieldOp, value.Union());
+          },
+          [&builder](const SetWallTypeField& set) {
+            const schema::Uuid key = to_schema(set.id);
+            const auto code = [](const WallTypeValue& role) {
+              return static_cast<std::int64_t>(to_schema(std::get<WallRole>(role)));
+            };
+            const auto value = schema::CreateSetWallTypeFieldOp(
+                builder, &key, schema::WallTypeField::Role, code(set.before), code(set.after));
+            return schema::CreateOpEntry(builder, schema::Op::SetWallTypeFieldOp, value.Union());
+          },
+          [&builder](const SetWallLayerField& set) {
+            const schema::Uuid key = to_schema(set.id);
+            const auto value = schema::CreateSetWallLayerFieldOp(builder, &key, to_code(set.field),
+                                                                 std::get<Mm>(set.before).value(),
+                                                                 std::get<Mm>(set.after).value());
+            return schema::CreateOpEntry(builder, schema::Op::SetWallLayerFieldOp, value.Union());
           },
           [&builder](const SetConditionsField& set) {
             const schema::Uuid key = to_schema(set.id);
@@ -400,7 +486,8 @@ Result<Op> level_op(const schema::SetLevelFieldOp* set) {
                        .after = value(set->after())};
 }
 
-Result<WallValue> wall_value(WallField field, std::int64_t number, const schema::PointMm* at) {
+Result<WallValue> wall_value(WallField field, std::int64_t number, const schema::PointMm* at,
+                             const schema::Uuid* id) {
   switch (field) {
     case WallField::kStart:
     case WallField::kEnd:
@@ -423,7 +510,10 @@ Result<WallValue> wall_value(WallField field, std::int64_t number, const schema:
       return *line;
     }
     case WallField::kExact:
+    case WallField::kMirrored:
       return number != 0;
+    case WallField::kType:
+      return to_id(id);
   }
   return corrupt("unknown wall field");
 }
@@ -436,12 +526,43 @@ Result<Op> wall_op(const schema::SetWallFieldOp* set) {
   if (!field) {
     return corrupt("unknown wall field");
   }
-  auto before = wall_value(*field, set->before(), set->before_point());
-  auto after = wall_value(*field, set->after(), set->after_point());
+  auto before = wall_value(*field, set->before(), set->before_point(), set->before_id());
+  auto after = wall_value(*field, set->after(), set->after_point(), set->after_id());
   if (!before || !after) {
     return std::unexpected{!before ? std::move(before).error() : std::move(after).error()};
   }
   return SetWallField{.id = to_id(set->id()), .field = *field, .before = *before, .after = *after};
+}
+
+Result<Op> wall_type_op(const schema::SetWallTypeFieldOp* set) {
+  if (set == nullptr) {
+    return corrupt("op is missing");
+  }
+  const auto role = [](std::int64_t number) -> std::optional<WallRole> {
+    const auto code = code_of<schema::WallRole>(number);
+    return code ? from_schema(*code) : std::nullopt;
+  };
+  const std::optional<WallRole> before = role(set->before());
+  const std::optional<WallRole> after = role(set->after());
+  if (set->field() != schema::WallTypeField::Role || !before || !after) {
+    return corrupt("unknown wall type field or role");
+  }
+  return SetWallTypeField{
+      .id = to_id(set->id()), .field = WallTypeField::kRole, .before = *before, .after = *after};
+}
+
+Result<Op> wall_layer_op(const schema::SetWallLayerFieldOp* set) {
+  if (set == nullptr) {
+    return corrupt("op is missing");
+  }
+  const std::optional<WallLayerField> field = from_code(set->field());
+  if (!field) {
+    return corrupt("unknown wall layer field");
+  }
+  return SetWallLayerField{.id = to_id(set->id()),
+                           .field = *field,
+                           .before = Mm{set->before()},
+                           .after = Mm{set->after()}};
 }
 
 Result<OpeningValue> opening_value(OpeningField field, std::int64_t number) {
@@ -499,6 +620,10 @@ Result<Op> decode_op(const schema::OpEntry& entry) {
       return opening_op(entry.op_as_SetOpeningFieldOp());
     case schema::Op::SetConditionsFieldOp:
       return conditions_op(entry.op_as_SetConditionsFieldOp());
+    case schema::Op::SetWallTypeFieldOp:
+      return wall_type_op(entry.op_as_SetWallTypeFieldOp());
+    case schema::Op::SetWallLayerFieldOp:
+      return wall_layer_op(entry.op_as_SetWallLayerFieldOp());
     case schema::Op::NONE:
       break;
   }

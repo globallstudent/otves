@@ -325,6 +325,18 @@ class Laid {
 
 }  // namespace
 
+bool runs_clockwise(std::span<const Leg> legs) {
+  if (legs.size() < 3 || legs.back().end != legs.front().start) {
+    return false;
+  }
+  // Twice the signed area of the loop through the legs' starts, in whole millimetres.
+  std::int64_t twice = 0;
+  for (const Leg& leg : legs) {
+    twice += (leg.start.x.value() * leg.end.y.value()) - (leg.end.x.value() * leg.start.y.value());
+  }
+  return twice < 0;
+}
+
 Result<std::vector<Leg>> straighten(std::span<const WallInput> walls,
                                     std::span<const PointMm> below, const Sketch& sketch,
                                     const Wall& like) {

@@ -7,11 +7,14 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <flatbuffers/flatbuffers.h>
 
+#include <otves/core/build.h>
 #include <otves/core/conditions.h>
 #include <otves/core/error.h>
 #include <otves/core/level.h>
@@ -20,27 +23,24 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 #include <otves/drafting/plan.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
+#include <otves/takeoff/layers.h>
 #include <otves/takeoff/masonry.h>
 #include <otves/takeoff/rules.h>
 #include <otves/takeoff/wall_quantities.h>
 
+#include "built.h"
 #include "convert.h"
 #include "engine_generated.h"
 
 namespace otves::bridge {
 namespace {
 
-std::vector<geom::WallInput> walls_of(const Model& model) {
-  std::vector<geom::WallInput> walls;
-  walls.reserve(model.count<Wall>());
-  model.for_each<Wall>(
-      [&walls](ElementId id, const Wall& wall) { walls.push_back({.id = id, .wall = wall}); });
-  return walls;
-}
+std::vector<geom::WallInput> walls_of(const Model& model) { return inputs(built_walls(model)); }
 
 std::vector<takeoff::OpeningInput> openings_of(const Model& model) {
   std::vector<takeoff::OpeningInput> openings;
@@ -103,6 +103,10 @@ schema::Fill fill_code(drafting::Fill fill) {
       return schema::Fill::Unchosen;
     case drafting::Fill::kGap:
       return schema::Fill::Gap;
+    case drafting::Fill::kFacing:
+      return schema::Fill::Facing;
+    case drafting::Fill::kInsulation:
+      return schema::Fill::Insulation;
   }
   return schema::Fill::None;
 }
@@ -119,6 +123,8 @@ schema::Stroke stroke_code(drafting::Stroke stroke) {
       return schema::Stroke::Frame;
     case drafting::Stroke::kLeaf:
       return schema::Stroke::Leaf;
+    case drafting::Stroke::kLayer:
+      return schema::Stroke::Layer;
   }
   return schema::Stroke::None;
 }
@@ -130,40 +136,45 @@ TakeoffOffsets failure(flatbuffers::FlatBufferBuilder& builder, const Error& err
 }
 
 // Carries what the builder chose into the measurement (docs/adr/0008): each wall's ring beam and
-// each junction's meshes from their level. Returns the unit of each measured wall, absent where
-// none was chosen; such a wall is reported in `issues`.
-std::vector<std::optional<takeoff::MasonryUnit>> choices(const Model& model,
-                                                         takeoff::Measurement& measurement,
-                                                         flatbuffers::FlatBufferBuilder& builder,
-                                                         IssueOffsets& issues) {
+// footing and each junction's meshes from their level, and whether the wall bears load from its
+// type (docs/adr/0014).
+void choices(const Model& model, takeoff::Measurement& measurement) {
   const auto level_of = [&model](ElementId wall_id) -> const Level* {
     const Wall* wall = model.find<Wall>(wall_id);
     return wall != nullptr ? model.find<Level>(wall->level) : nullptr;
   };
-  std::vector<std::optional<takeoff::MasonryUnit>> units;
-  units.reserve(measurement.walls.size());
   for (takeoff::WallQuantities& measured : measurement.walls) {
     const Wall* wall = model.find<Wall>(measured.id);
     const Level* level = level_of(measured.id);
     measured.ring_beam = level != nullptr ? to_metres(level->ring_beam) : 0.0;
     measured.footing_width = level != nullptr ? to_metres(level->footing_width) : 0.0;
     measured.footing_depth = level != nullptr ? to_metres(level->footing_depth) : 0.0;
-    if (wall != nullptr && wall->has_unit()) {
-      units.emplace_back(takeoff::MasonryUnit{
-          .length = wall->unit_length, .width = wall->unit_width, .height = wall->unit_height});
-      continue;
+    const WallType* type = wall != nullptr ? model.find<WallType>(wall->type) : nullptr;
+    if (type != nullptr) {
+      measured.bearing = type->role != WallRole::kPartition;
     }
-    units.emplace_back(std::nullopt);
-    const schema::Uuid element = to_schema(measured.id);
-    const schema::Uuid on = to_schema(wall != nullptr ? wall->level : ElementId{});
-    issues.push_back(
-        schema::CreateIssue(builder, schema::IssueKind::MaterialNotChosen, &element, &on));
   }
   for (takeoff::JunctionQuantities& junction : measurement.junctions) {
     const Level* level = junction.walls.empty() ? nullptr : level_of(junction.walls.front());
     junction.meshes = level != nullptr && level->junction_meshes;
   }
-  return units;
+}
+
+// Reports the walls with a masonry layer that has no unit yet: such a layer is not in the
+// take-off.
+void report_unchosen(std::span<const takeoff::BuiltWall> walls,
+                     flatbuffers::FlatBufferBuilder& builder, IssueOffsets& issues) {
+  for (const takeoff::BuiltWall& built : walls) {
+    const bool unchosen = std::ranges::any_of(built.layers, [](const BuiltLayer& layer) {
+      return layer.is_masonry() && !layer.has_unit();
+    });
+    if (unchosen) {
+      const schema::Uuid element = to_schema(built.id);
+      const schema::Uuid on = to_schema(built.wall.level);
+      issues.push_back(
+          schema::CreateIssue(builder, schema::IssueKind::MaterialNotChosen, &element, &on));
+    }
+  }
 }
 
 // The job's conditions, or all unset when it has none.
@@ -205,9 +216,15 @@ void advise(const Model& model, const takeoff::Measurement& measurement,
   if (!advice.required) {
     return;
   }
-  const auto bearing = [&model, &advice](ElementId id) -> const Wall* {
-    const Wall* wall = model.find<Wall>(id);
-    return wall != nullptr && wall->thickness >= advice.load_bearing ? wall : nullptr;
+  // A wall's type says whether it bears load; a wall with no type is judged by its thickness.
+  const auto bearing = [&](ElementId id) -> const Wall* {
+    const auto measured =
+        std::ranges::lower_bound(measurement.walls, id, {}, &takeoff::WallQuantities::id);
+    if (measured == measurement.walls.end() || measured->id != id) {
+      return nullptr;
+    }
+    const bool bears = measured->bearing.value_or(measured->thickness >= advice.load_bearing);
+    return bears ? model.find<Wall>(id) : nullptr;
   };
   std::set<ElementId> no_beam;
   std::set<ElementId> no_meshes;
@@ -262,6 +279,9 @@ OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Mo
       }
       const schema::Uuid wall = to_schema(footprint.id);
       const Wall* drawn = model.find<Wall>(footprint.id);
+      if (drawn == nullptr) {
+        continue;
+      }
       const Mm length =
           round_to_mm(geom::length(geom::to_vec2(drawn->end) - geom::to_vec2(drawn->start)));
       outlines.push_back(schema::CreateWallOutline(
@@ -274,13 +294,16 @@ OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Mo
 OpeningOutlinesOffset encode_openings(flatbuffers::FlatBufferBuilder& builder, const Model& model) {
   std::vector<takeoff::OpeningInput> openings = openings_of(model);
   std::ranges::sort(openings, {}, &takeoff::OpeningInput::id);
+  std::vector<geom::WallInput> walls = walls_of(model);
+  std::ranges::sort(walls, {}, &geom::WallInput::id);
   std::vector<flatbuffers::Offset<schema::OpeningOutline>> outlines;
   outlines.reserve(openings.size());
   for (const takeoff::OpeningInput& input : openings) {
-    const Wall* wall = model.find<Wall>(input.opening.wall);
-    if (wall == nullptr) {
+    const auto host = std::ranges::lower_bound(walls, input.opening.wall, {}, &geom::WallInput::id);
+    if (host == walls.end() || host->id != input.opening.wall) {
       continue;
     }
+    const Wall* wall = &host->wall;
     std::vector<schema::PointM> points;
     for (const geom::Vec2 point : geom::opening_outline(*wall, input.opening)) {
       points.emplace_back(point.x, point.y);
@@ -359,12 +382,16 @@ TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Mod
   if (!joints) {
     return failure(builder, joints.error());
   }
-  auto measurement = takeoff::measure_levels(walls_of(model), openings_of(model), *lintels);
+  const std::vector<takeoff::BuiltWall> built = built_walls(model);
+  auto measurement = takeoff::measure_levels(inputs(built), openings_of(model), *lintels);
   if (!measurement) {
     return failure(builder, measurement.error());
   }
-  const std::vector<std::optional<takeoff::MasonryUnit>> units =
-      choices(model, *measurement, builder, issues);
+  choices(model, *measurement);
+  report_unchosen(built, builder, issues);
+  // Every masonry layer is counted as a wall of its own; insulation goes to its own rule.
+  takeoff::Layers layers = takeoff::measure_layers(built, *measurement);
+  measurement->insulation = std::move(layers.insulation);
   const Conditions conditions = conditions_of(model);
   // Advice is extra: content without these norms still gives a take-off.
   const std::optional<std::int64_t> intensity = conditions.seismic_intensity == Conditions::kUnset
@@ -380,7 +407,7 @@ TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Mod
     const schema::Uuid level = to_schema(wall != nullptr ? wall->level : ElementId{});
     issues.push_back(schema::CreateIssue(builder, issue_code(issue.kind), &element, &level));
   }
-  const auto masonry = takeoff::count_masonry(measurement->walls, units, *joints);
+  const auto masonry = takeoff::count_masonry(layers.masonry, layers.units, *joints);
   if (!masonry) {
     return failure(builder, masonry.error());
   }

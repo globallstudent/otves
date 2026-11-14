@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "source": "Wall make-ups from the units in masonry_units.json, layers from the outer face in. The outside walls follow the reference АР set: 120 mm of facing brick, 100 mm of insulation, masonry",
+  "types": [
+    {
+      "id": "exterior.brick120_wool100_block190",
+      "role": "exterior",
+      "layers": [
+        { "function": "facing", "thickness": 120, "unit": "brick.1nf" },
+        { "function": "insulation", "thickness": 100 },
+        { "function": "structure", "thickness": 190, "unit": "block.390x190x188" }
+      ]
+    },
+    {
+      "id": "exterior.brick120_wool100_brick250",
+      "role": "exterior",
+      "layers": [
+        { "function": "facing", "thickness": 120, "unit": "brick.1nf" },
+        { "function": "insulation", "thickness": 100 },
+        { "function": "structure", "thickness": 250, "unit": "brick.1nf" }
+      ]
+    },
+    {
+      "id": "bearing.brick380",
+      "role": "bearing",
+      "layers": [{ "function": "structure", "thickness": 380, "unit": "brick.1nf" }]
+    },
+    {
+      "id": "bearing.block390",
+      "role": "bearing",
+      "layers": [{ "function": "structure", "thickness": 390, "unit": "block.390x190x188" }]
+    },
+    {
+      "id": "partition.brick120",
+      "role": "partition",
+      "layers": [{ "function": "structure", "thickness": 120, "unit": "brick.1nf" }]
+    },
+    {
+      "id": "partition.block190",
+      "role": "partition",
+      "layers": [{ "function": "structure", "thickness": 190, "unit": "block.390x190x188" }]
+    }
+  ]
+}

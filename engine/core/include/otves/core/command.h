@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <variant>
+#include <vector>
 
 #include <otves/core/conditions.h>
 #include <otves/core/level.h>
@@ -11,6 +12,7 @@
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
+#include <otves/core/wall_type.h>
 
 namespace otves {
 
@@ -93,6 +95,40 @@ struct SetWallExact {
   bool exact = true;
 };
 
+// A new kind of wall with its layers from the outer face in (docs/adr/0014). The layers' type
+// and position are not read: the type is the new one and the positions follow the order given.
+struct AddWallType {
+  WallRole role = WallRole::kExterior;
+  std::vector<WallLayer> layers;
+};
+
+struct SetWallTypeRole {
+  ElementId type;
+  WallRole role = WallRole::kExterior;
+};
+
+// A layer's thickness and, for masonry, its unit as laid; all zero clears the unit. Every wall
+// of the layer's type changes with it.
+struct SetWallLayer {
+  ElementId layer;
+  Mm thickness;
+  Mm unit_length;
+  Mm unit_width;
+  Mm unit_height;
+};
+
+// Makes the wall one of its type's kind. The wall's own thickness and unit are dropped.
+struct SetWallType {
+  ElementId wall;
+  ElementId type;
+};
+
+// Which face of the wall its type's layers start from.
+struct SetWallMirrored {
+  ElementId wall;
+  bool mirrored = false;
+};
+
 // Removes the wall and every opening in it.
 struct RemoveWall {
   ElementId wall;
@@ -135,11 +171,13 @@ struct SetCondition {
   std::int64_t value = Conditions::kUnset;
 };
 
-using Command = std::variant<AddLevel, SetLevelElevation, SetLevelHeight, RemoveLevel, AddWall,
-                             MoveWallEnd, SetWallThickness, SetWallHeight, SetWallLocationLine,
-                             RemoveWall, AddOpening, MoveOpening, ResizeOpening, SetOpeningSill,
-                             SetOpeningKind, RemoveOpening, SetWallUnit, SetLevelRingBeam,
-                             SetLevelJunctionMeshes, SetCondition, SetLevelFooting, SetWallExact>;
+using Command =
+    std::variant<AddLevel, SetLevelElevation, SetLevelHeight, RemoveLevel, AddWall, MoveWallEnd,
+                 SetWallThickness, SetWallHeight, SetWallLocationLine, RemoveWall, AddOpening,
+                 MoveOpening, ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening,
+                 SetWallUnit, SetLevelRingBeam, SetLevelJunctionMeshes, SetCondition,
+                 SetLevelFooting, SetWallExact, AddWallType, SetWallTypeRole, SetWallLayer,
+                 SetWallType, SetWallMirrored>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 

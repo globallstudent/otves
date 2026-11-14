@@ -9,7 +9,9 @@ flowchart LR
   W --> M
   O["openings"] --> M
   K -- "lintel_spec" --> M
-  M -- "WallQuantities, lintels" --> C["count_masonry"]
+  M -- "WallQuantities, lintels" --> Y["measure_layers"]
+  B["layers of each wall<br/>core::build_of"] --> Y
+  Y -- "quantities per masonry layer<br/>insulation by area" --> C["count_masonry"]
   S["MasonrySpec<br/>catalog + norm profile"] --> C
   C -- "units, mortar" --> R["RuleSet::run"]
   K["content/<br/>norms, rules"] --> R
@@ -23,6 +25,7 @@ flowchart LR
 |---|---|
 | `measure_walls(walls, openings, lintels, joins)` | Length, footprint area, face area, volume and openings area of each wall, sorted by id; a lintel over each opening; each junction with the height of its lowest wall; opening issues |
 | `measure_levels(walls, openings, lintels)` | Joins and measures each level apart, so walls on different floors never meet, and merges the results |
+| `measure_layers(walls, measurement)` | The quantities of each masonry layer with its unit, and insulation by face area for each thickness; a wall of one masonry layer keeps the quantities it was measured with ([ADR 0014](../../docs/adr/0014-wall-types-are-job-elements-made-of-layers.md)) |
 | `count_masonry(quantities, spec)` | Units and mortar per wall and in total, plus issues |
 | `validate(spec)` | Checks unit and joint sizes typed by the user or read from content |
 | `RuleSet::compile({.norms, .rules})` | Compiles Luau scripts from `content/`; the caller passes their text |
@@ -41,6 +44,9 @@ flowchart LR
 | lintel length, m | opening width + 2 × bearing, the wall's full thickness, on top of the opening |
 | face area, m² | length × height − union of openings and lintels |
 | volume, m³ | footprint area × height − that union × thickness |
+| layer length, m | area of the layer's strip of the joined footprint / layer thickness |
+| layer face area, m² | layer length × height − what openings and lintels take from the wall's face |
+| insulation, m² | the face area of its layer, summed per thickness |
 | wythes n | (thickness + head joint) / (unit width + head joint) |
 | units | face area × n / ((unit length + head joint) × (unit height + bed joint)) |
 | mortar, m³ | volume − units × unit volume |
@@ -84,6 +90,8 @@ Per m² of face that gives 149.9 units and 0.088 m³ mortar, matching the table 
 
 - Joined outlines tile the plan, so lengths, volumes, units and mortar add up across walls with every corner counted once.
 - Walls with a join overlap are measured as drawn; the overlap counts in both walls.
+- A layer is measured along its own middle line, so an outer layer of a closed loop is longer than an inner one and each corner is still counted once.
+- Openings and lintels cut every layer of their wall, also the insulation.
 - `measure_walls` and `count_masonry` give net quantities. Waste (запас), rounding and cement come from the rules in `content/`.
 - Openings are placed along the wall's location line, from its start and up from its base.
 - Coordinates and quantities use only `+ − × ÷` and `√`, so arm64 and x86-64 give the same bits.

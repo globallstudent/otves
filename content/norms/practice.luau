@@ -26,8 +26,8 @@ return {
 	-- Cement is sold in bags of this many kilograms.
 	cement_bag_kg = 50,
 	walls = {
-		-- Thinner walls are partitions (КМК 3.9.7): no ring beam and no junction meshes, until walls
-		-- carry a load-bearing flag. Millimetres.
+		-- Thinner walls are partitions (КМК 3.9.7): no ring beam and no junction meshes. Only for a
+		-- wall with no type; a wall type says what it is for. Millimetres.
 		load_bearing_min_thickness = 250,
 	},
 	-- A strip footing of a private house: ready-mix B20 (B20–B22.5 is usual), A500С Ø12 along it and
