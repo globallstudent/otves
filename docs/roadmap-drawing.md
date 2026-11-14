@@ -145,7 +145,7 @@ Slice 1 comes first because it is the smallest end-to-end change: it proves the 
 | Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState` | open |
 | `core/designsystem` | Round button, panel, inspector row, number pad, switch row | when a second feature needs them |
 | Tool bar | Five icons, the chosen one filled; names in the tools sheet | done |
-| Tool options | One movable button per screen; its rows come from the tool. It hides for a tool with nothing to choose. Position and options persist per device | done, but the position lasts only while the app lives |
+| Tool options | One movable button per screen; its rows come from the tool. It hides for a tool with nothing to choose. Its place is kept on the phone between runs | done |
 
 No behaviour changes in this slice except the tool bar and the options button.
 

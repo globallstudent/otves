@@ -1,5 +1,6 @@
 package uz.otves.feature.editor
 
+import android.content.Context
 import androidx.compose.animation.core.animateOffsetAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -36,15 +37,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.listSaver
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.core.content.edit
 import uz.otves.core.designsystem.OtvesDimens
 import uz.otves.core.designsystem.OtvesIcons
 import uz.otves.core.designsystem.OtvesTheme
@@ -73,7 +75,26 @@ private data class Rest(
     val up: Float = 0f,
 )
 
-private val RestSaver = listSaver<Rest, Any>(save = { listOf(it.right, it.up) }, restore = { Rest(it[0] as Boolean, it[1] as Float) })
+// Where the builder left the options button, kept on the phone from one run to the next.
+private class RestStore(
+    context: Context,
+) {
+    private val preferences = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    fun read(): Rest = Rest(preferences.getBoolean(RIGHT, true), preferences.getFloat(UP, 0f).coerceIn(0f, 1f))
+
+    fun write(rest: Rest) =
+        preferences.edit {
+            putBoolean(RIGHT, rest.right)
+            putFloat(UP, rest.up)
+        }
+
+    private companion object {
+        const val FILE = "editor"
+        const val RIGHT = "options_right"
+        const val UP = "options_up"
+    }
+}
 
 /** Whether [tool] has settings to offer. */
 internal fun hasOptions(tool: Tool): Boolean = tool != Tool.SELECT
@@ -88,7 +109,10 @@ internal fun ToolOptionsButton(
     actions: EditorActions,
     modifier: Modifier = Modifier,
 ) {
-    var rest by rememberSaveable(stateSaver = RestSaver) { mutableStateOf(Rest()) }
+    // A preview has no files to keep the place in.
+    val context = LocalContext.current.applicationContext
+    val store = if (LocalInspectionMode.current) null else remember(context) { RestStore(context) }
+    var rest by remember { mutableStateOf(store?.read() ?: Rest()) }
     var dragged by remember { mutableStateOf<Offset?>(null) }
     var open by remember { mutableStateOf(false) }
     val colors = OtvesTheme.colors
@@ -127,7 +151,10 @@ internal fun ToolOptionsButton(
                                 dragged = dragged?.let { bounds.within(it + by) }
                             },
                             onDragEnd = {
-                                dragged?.let { rest = bounds.rest(it) }
+                                dragged?.let {
+                                    rest = bounds.rest(it)
+                                    store?.write(rest)
+                                }
                                 dragged = null
                             },
                             onDragCancel = { dragged = null },
