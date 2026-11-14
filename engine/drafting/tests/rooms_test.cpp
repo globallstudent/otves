@@ -144,6 +144,21 @@ TEST(DraftRooms, AnLShapedRoomIsLabelledOnItsFloor) {
   expect_near(areas[0].at, {.x = 3.0, .y = 1.5});
 }
 
+TEST(DraftRooms, ALabelKeepsToTheFloorBesideACornerThatStandsIntoTheRoom) {
+  // A room 6 by 4 m with a closet 2 by 2.2 m between centre lines in its lower left corner.
+  // The centre of area lies over the closet, where the floor is as wide as the room; the
+  // middle of the floor up the plan there lies beside the closet, where it is narrower.
+  std::vector<geom::WallInput> walls = box(6000, 4000);
+  walls.push_back(wall(5, at(2000, 0), at(2000, 2200)));
+  walls.push_back(wall(6, at(2000, 2200), at(0, 2200)));
+  const Drawing drawing = draft_rooms(walls, {});
+  const std::vector<Text> areas = texts(drawing, TextKind::kRoomArea);
+  ASSERT_EQ(areas.size(), 2U);
+  // The larger room first: its area stands in the middle of the floor beside the closet, from
+  // the closet's face at 2.2 m to the wall at 5.8 m, not over the closet's corner.
+  expect_near(areas[0].at, {.x = 4.0, .y = 2.0});
+}
+
 TEST(DraftRooms, ARoomStandingFreeInAnotherIsPaintedOverIt) {
   const std::vector<geom::WallInput> walls{wall(1, at(0, 0), at(10'000, 0)),
                                            wall(2, at(10'000, 0), at(10'000, 8000)),

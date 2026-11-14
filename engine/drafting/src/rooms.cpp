@@ -243,24 +243,30 @@ std::optional<RoomLabel> label_of(const geom::Space& space, TextSize text) {
   if (!tall) {
     return std::nullopt;
   }
-  const geom::Vec2 at{.x = wide->middle(), .y = tall->middle()};
-  // The stretch across the plan may be another one at the height the point moved to.
+  geom::Vec2 at{.x = wide->middle(), .y = tall->middle()};
+  // The stretch across the plan may be another one at the height the point moved to: beside a
+  // corner that stands into the room. The point goes to the middle of that one.
   const Stretch level = pick(stretches(space, Axis::kX, at.y), at.x).value_or(*wide);
-  const bool upright = level.length() < kShortName * text.digit && tall->length() > level.length();
+  Stretch upward = *tall;
+  if (level.from != wide->from || level.to != wide->to) {
+    at.x = level.middle();
+    upward = pick(stretches(space, Axis::kY, at.x), at.y).value_or(*tall);
+  }
+  const bool upright = level.length() < kShortName * text.digit && upward.length() > level.length();
   if (upright) {
     return RoomLabel{.at = at,
                      .along = {.x = 0.0, .y = 1.0},
-                     .fit = tall->length() * kLabelFill,
+                     .fit = upward.length() * kLabelFill,
                      .across = level.length(),
                      .wide = level,
-                     .tall = *tall};
+                     .tall = upward};
   }
   return RoomLabel{.at = at,
                    .along = {.x = 1.0, .y = 0.0},
                    .fit = level.length() * kLabelFill,
-                   .across = tall->length(),
+                   .across = upward.length(),
                    .wide = level,
-                   .tall = *tall};
+                   .tall = upward};
 }
 
 std::vector<ListedRoom> list_rooms(std::span<const RoomSpace> spaces, TextSize text) {

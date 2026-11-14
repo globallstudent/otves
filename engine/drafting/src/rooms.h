@@ -52,7 +52,8 @@ struct RoomLabel {
 };
 
 // The middle of the space's widest stretch: of the one across the plan at the height of its
-// centre, then of the one up the plan through that point. Nothing for a space with no floor.
+// centre, then of the one up the plan through that point; and where the floor across the plan is
+// another stretch at that height, the middle of that one. Nothing for a space with no floor.
 [[nodiscard]] std::optional<RoomLabel> label_of(const geom::Space& space, TextSize text);
 
 // The level's room schedule: every space with a floor, in reading order: from the top of the

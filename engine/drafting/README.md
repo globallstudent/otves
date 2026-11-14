@@ -92,6 +92,7 @@ A mark is taken to be five digits wide.
 |---|---|
 | Across the plan | The middle of the widest stretch of floor at the height of the floor's centre of area |
 | Up the plan | The middle of the stretch of floor through that point |
+| Beside a corner that stands into the room | Where the floor across the plan is another stretch at that height, the middle of that one |
 | Direction | Along x; up the plan in a space narrower than eight digits and taller than it is wide |
 | Lines | The name half a text height to one side of the point, the area half to the other |
 | A space lower than two lines | The area alone; lower than one line, nothing |
