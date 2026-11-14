@@ -215,4 +215,9 @@
     <string name="room_by_size">O‘lcham bo‘yicha xona</string>
     <string name="editor_hint_room">Xona burchagi bo‘ladigan joyga bosing</string>
     <string name="room_refused">Bunday o‘lchamli xona bu yerga sig‘maydi</string>
+    <string name="kind_edit">O‘zgartirish</string>
+    <string name="kind_layers_order">Qatlamlar tashqaridan ichkariga. Shu turdagi barcha devorlar o‘zgaradi</string>
+    <string name="layer_facing">Qoplama</string>
+    <string name="layer_gap_title">Oraliq</string>
+    <string name="layer_thickness_title">Qatlam qalinligi, mm</string>
 </resources>

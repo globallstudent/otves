@@ -141,6 +141,11 @@ fun EditorRoute(
                 onPartitionWall = viewModel::choosePartitionWall,
                 onCancelPartition = viewModel::cancelPartition,
                 onConfirmPartition = viewModel::confirmPartition,
+                onEditKind = viewModel::editKind,
+                onLayerThickness = viewModel::setLayerThickness,
+                onEditLayer = viewModel::editLayer,
+                onCancelLayer = viewModel::cancelLayer,
+                onConfirmLayer = viewModel::confirmLayer,
                 onRoom = viewModel::toggleRoom,
                 onRoomSize = viewModel::chooseRoomSize,
                 onRoomWay = viewModel::turnRoom,
@@ -224,6 +229,11 @@ internal data class EditorActions(
     val onPartitionWall: (Hand) -> Unit = {},
     val onCancelPartition: () -> Unit = {},
     val onConfirmPartition: () -> Unit = {},
+    val onEditKind: (ElementId?) -> Unit = {},
+    val onLayerThickness: (layer: ElementId, thickness: Mm) -> Unit = { _, _ -> },
+    val onEditLayer: (ElementId) -> Unit = {},
+    val onCancelLayer: () -> Unit = {},
+    val onConfirmLayer: () -> Unit = {},
     val onRoom: () -> Unit = {},
     val onRoomSize: (Int) -> Unit = {},
     val onRoomWay: (right: Boolean, up: Boolean) -> Unit = { _, _ -> },
@@ -321,14 +331,18 @@ internal fun EditorScreen(
             val priceEntry = state.priceEntry
             val partition = state.partition
             val room = state.room
+            val layerEntry = state.layerEntry
+            val edited = state.kinds.find { it.id == state.kindEdited }
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 when {
                     entry != null -> LengthPad(entry, actions)
                     partition != null -> PartitionPad(partition, actions)
                     room != null -> RoomPad(room, actions)
+                    layerEntry != null -> LayerPad(layerEntry, actions)
                     sizeEntry != null -> SizePad(sizeEntry, actions)
                     priceEntry != null -> PricePad(priceEntry, state, actions)
                     measure != null -> MeasurePad(measure, state, actions)
+                    edited != null -> KindLayersPanel(edited, state, actions)
                     state.kindsOpen -> WallKindsPanel(state, actions)
                     state.roomKindsOpen -> RoomKindsPanel(state, actions)
                     state.materialOpen -> MaterialPanel(state, actions)

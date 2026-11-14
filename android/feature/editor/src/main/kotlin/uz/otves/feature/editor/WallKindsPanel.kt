@@ -66,6 +66,7 @@ internal fun WallKindsPanel(
                     made = layersText(kind.layers.map { (_, layer) -> LayerSpec(layer.function, layer.thickness, layer.unit) }, units),
                     chosen = kind.id == current,
                     onClick = { actions.onKind(kind.id) },
+                    onEdit = { actions.onEditKind(kind.id) },
                 )
             }
             // A wall that has a type keeps one; only the walls drawn next may go without.
@@ -107,6 +108,7 @@ private fun KindRow(
     chosen: Boolean,
     onClick: () -> Unit,
     isNew: Boolean = false,
+    onEdit: (() -> Unit)? = null,
 ) {
     val colors = OtvesTheme.colors
     Row(
@@ -128,6 +130,8 @@ private fun KindRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        // A type of the job can be changed: its layers open.
+        if (onEdit != null) PanelAction(stringResource(R.string.kind_edit), onEdit)
         when {
             isNew -> Icon(OtvesIcons.Plus, contentDescription = null, tint = colors.inkSecondary, modifier = Modifier.size(20.dp))
             chosen -> Box(Modifier.size(10.dp).background(colors.ink, CircleShape))

@@ -380,6 +380,15 @@ class EditorViewModelTest {
                         results += CommandResult.Done(type)
                     }
 
+                    command is EngineCommand.SetWallLayer -> {
+                        val before = elements.getValue(command.layer)
+                        edit(command.layer) { (it as WallLayer).copy(thickness = command.thickness, unit = command.unit) }
+                        steps.addLast {
+                            elements[command.layer] = before
+                            listOf(ElementChange(command.layer, before))
+                        }
+                    }
+
                     // The type decides the thickness and the unit from here on.
                     command is EngineCommand.SetWallType -> {
                         edit(command.wall) { (it as Wall).copy(type = command.type, thickness = 0.mm, unit = null) }
@@ -955,6 +964,64 @@ class EditorViewModelTest {
                 LayerSpec(LayerFunction.STRUCTURE, 190.mm, block),
             ),
         )
+
+    @Test
+    fun theLayersOfAWallTypeGetOtherThicknesses() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog.copy(wallTypes = listOf(outside)) }, store, prices)
+        viewModel.showKinds(true)
+        viewModel.addKind(outside)
+        val kind =
+            viewModel.uiState.value.kinds
+                .single()
+        val (insulation, _) = kind.layers[1]
+        val (structure, _) = kind.layers[2]
+
+        // The type's layers open over the list of types.
+        viewModel.showKinds(true)
+        viewModel.editKind(kind.id)
+        assertThat(viewModel.uiState.value.kindEdited).isEqualTo(kind.id)
+
+        // Insulation is as thick as the builder types.
+        viewModel.editLayer(insulation)
+        assertThat(viewModel.uiState.value.layerEntry).isEqualTo(LayerEntry(insulation, 100.mm))
+        assertThat(viewModel.uiState.value.typing).isTrue()
+        "50".forEach { viewModel.typeDigit(it.digitToInt()) }
+        viewModel.confirmLayer()
+
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLayer(insulation, 50.mm, null))
+        assertThat(viewModel.uiState.value.layerEntry).isNull()
+        assertThat(
+            viewModel.uiState.value.kinds
+                .single()
+                .thickness,
+        ).isEqualTo(360.mm)
+
+        // A masonry layer keeps its unit when it gets another of that unit's thicknesses.
+        viewModel.setLayerThickness(structure, 390.mm)
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLayer(structure, 390.mm, block))
+        assertThat(
+            viewModel.uiState.value.kinds
+                .single()
+                .thickness,
+        ).isEqualTo(560.mm)
+
+        // The thickness it has already is not sent again.
+        val sent = engine.sent.size
+        viewModel.setLayerThickness(structure, 390.mm)
+        assertThat(engine.sent).hasSize(sent)
+
+        // Undo takes the type's last change back; the layers stay open.
+        viewModel.undo()
+        assertThat(
+            viewModel.uiState.value.kinds
+                .single()
+                .thickness,
+        ).isEqualTo(360.mm)
+        assertThat(viewModel.uiState.value.kindEdited).isEqualTo(kind.id)
+        viewModel.editKind(null)
+        assertThat(viewModel.uiState.value.kindEdited).isNull()
+        assertThat(viewModel.uiState.value.kindsOpen).isTrue()
+    }
 
     @Test
     fun aWallTypeFromTheCatalogIsMadeOnceAndBuildsTheWallsDrawnNext() {

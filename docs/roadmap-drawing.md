@@ -9,7 +9,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Area | Today | What blocks the goal |
 |---|---|---|
 | Drawing | `drafting::draft` places everything on the plan; one `PlanPainter` paints the screen and the PDF (ADR 0013). The plans go out as PDF sheets: a frame, every room's sizes, the room and opening schedules, a legend and a title block | A sheet is fitted to A4, not drawn at a named scale; sizes on paper are ratios of the text height, not the СПДС offsets |
-| Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line | A type starts from a catalog template; its layers cannot be edited yet |
+| Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line. A type's layers take other thicknesses, and every wall of the type follows | A layer keeps the material its catalog template gave it; a layer cannot be added or taken out |
 | Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015). A sheet lists them with their areas | A label may still lie under a door's swing in a room too small to move it |
 | Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value; a partition goes across a room at a typed distance from one of its walls; a room is built from its clear size at a touched corner (ADR 0016) | A room built against an outer corner is not flush with it; a room cannot be turned off the plan's axes |
 | Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred; a sheet lists the marks with their sizes and counts (ADR 0017) | Sill and height are not typed in the app; no two-leaf doors |
@@ -128,7 +128,7 @@ flowchart LR
 | 0 | Groundwork | — | Split the editor files, `JobSession`, shared components, icon-only tool bar, tool options button | — | G31 bar, G43–G46 | in part |
 | 1 | Pencil | `geom/sketch`, `AddSketch`, `Wall.exact` | Pencil tool, refine lengths | v5 | G39–G42 | built |
 | 2 | Display list | `engine/drafting`, `Draw` | `PlanPainter`; delete placement code | — | — | built |
-| 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; layers of a type are not edited yet |
+| 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; a layer's thickness is edited, its material and the number of layers are not |
 | 4 | Rooms | `geom/spaces`, `Room`, floors and room texts in `drafting` | Room labels, room panel | v7 | G31, G34 | built; a room's sizes come with slice 5 |
 | 5 | Dimensions | Sizes in `drafting`, `SetDimension`, `translate_wall`, `set_distance`, `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | built |
 | 6 | Openings | hinge, swing, marks, `CenterOpening`, the selected opening's chain | Door panel | v8 | G37 | built |

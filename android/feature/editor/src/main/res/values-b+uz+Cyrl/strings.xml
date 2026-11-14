@@ -215,4 +215,9 @@
     <string name="room_by_size">Ўлчам бўйича хона</string>
     <string name="editor_hint_room">Хона бурчаги бўладиган жойга босинг</string>
     <string name="room_refused">Бундай ўлчамли хона бу ерга сиғмайди</string>
+    <string name="kind_edit">Ўзгартириш</string>
+    <string name="kind_layers_order">Қатламлар ташқаридан ичкарига. Шу турдаги барча деворлар ўзгаради</string>
+    <string name="layer_facing">Қоплама</string>
+    <string name="layer_gap_title">Оралиқ</string>
+    <string name="layer_thickness_title">Қатлам қалинлиги, мм</string>
 </resources>

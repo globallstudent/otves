@@ -122,6 +122,21 @@ private fun handName(hand: Hand): String =
         },
     )
 
+// How thick a layer of a wall type is, typed for insulation and for a gap.
+@Composable
+internal fun LayerPad(
+    entry: LayerEntry,
+    actions: EditorActions,
+) {
+    Panel {
+        PanelHeader(stringResource(R.string.layer_thickness_title)) {
+            PanelAction(stringResource(R.string.length_cancel), actions.onCancelLayer)
+        }
+        TypedLength(entry.digits, standing = entry.was) {}
+        NumberKeys(actions, stringResource(R.string.inspector_done), actions.onConfirmLayer, enabled = entry.digits.isNotEmpty())
+    }
+}
+
 // A room by its clear size: its width across the plan and its depth up it, typed one after the
 // other, and which way it lies from the corner the builder touched.
 @Composable

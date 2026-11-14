@@ -224,6 +224,13 @@ internal data class PartitionEntry(
     val refused: Boolean = false,
 )
 
+/** The thickness of a wall type's layer being typed, in millimetres; it [was] this thick. */
+internal data class LayerEntry(
+    val layer: ElementId,
+    val was: Mm,
+    val digits: String = "",
+)
+
 /**
  * A room to build from its clear size (docs/adr/0016): the sizes being typed in millimetres,
  * across the plan and then up it, which of them the keys go to, and which way the room lies
@@ -299,6 +306,9 @@ internal data class EditorUiState(
     val kind: ElementId? = null,
     /** The wall types are open, for the selected wall or else for new walls. */
     val kindsOpen: Boolean = false,
+    /** The wall type whose layers are open to be changed (docs/adr/0014). */
+    val kindEdited: ElementId? = null,
+    val layerEntry: LayerEntry? = null,
     /** The names a room can have are open, for the selected space. */
     val roomKindsOpen: Boolean = false,
     /** What the job is estimated under; unset values follow the norms. */
@@ -321,7 +331,9 @@ internal data class EditorUiState(
 ) {
     /** A number pad is open: until the number is entered, touches on the plan only move it. */
     val typing: Boolean
-        get() = entry != null || partition != null || room != null || sizeEntry != null || priceEntry != null || measure != null
+        get() =
+            entry != null || partition != null || room != null || layerEntry != null || sizeEntry != null || priceEntry != null ||
+                measure != null
 
     /** How thick the walls drawn next are: as their type, or else as chosen. */
     val drawnThickness: Mm
@@ -442,6 +454,7 @@ internal class EditorViewModel(
                     takeoffOpen = false,
                     materialOpen = false,
                     kindsOpen = false,
+                    kindEdited = null,
                     roomKindsOpen = false,
                     conditionsOpen = false,
                     priceEntry = null,
@@ -717,7 +730,41 @@ internal class EditorViewModel(
     fun showMaterials(open: Boolean) = state.update { it.copy(materialOpen = open) }
 
     /** Opens the wall types, for the selected wall or else for the walls drawn next. */
-    fun showKinds(open: Boolean) = state.update { it.copy(kindsOpen = open, materialOpen = false) }
+    fun showKinds(open: Boolean) = state.update { it.copy(kindsOpen = open, kindEdited = null, materialOpen = false) }
+
+    /** Opens the layers of a wall type to change them; null goes back to the types. */
+    fun editKind(kind: ElementId?) = state.update { it.copy(kindEdited = kind?.takeIf { id -> id in model.wallTypes }) }
+
+    /**
+     * Gives a layer of a wall type another thickness. Every wall of that type changes with it,
+     * and the take-off follows.
+     */
+    fun setLayerThickness(
+        layer: ElementId,
+        thickness: Mm,
+    ) = act {
+        val now = model.wallLayers[layer] ?: return@act
+        if (thickness != now.thickness) execute(listOf(EngineCommand.SetWallLayer(layer, thickness, now.unit)))
+    }
+
+    /** Opens the keys for a layer's thickness: insulation and a gap are as thick as the builder says. */
+    fun editLayer(layer: ElementId) {
+        val now = model.wallLayers[layer] ?: return
+        state.update { it.copy(layerEntry = LayerEntry(layer, now.thickness)) }
+    }
+
+    fun cancelLayer() = state.update { it.copy(layerEntry = null) }
+
+    fun confirmLayer() {
+        val entry = state.value.layerEntry ?: return
+        val thickness = entry.digits.toLongOrNull()?.takeIf { it > 0 } ?: return
+        state.update { it.copy(layerEntry = null) }
+        setLayerThickness(entry.layer, Mm(thickness))
+    }
+
+    // Changes the digits of the layer's thickness being typed.
+    private fun layered(change: (String) -> String) =
+        state.update { current -> current.copy(layerEntry = current.layerEntry?.let { it.copy(digits = change(it.digits)) }) }
 
     /**
      * Makes the selected wall one of this type, or else the walls drawn from now on; null draws
@@ -906,6 +953,7 @@ internal class EditorViewModel(
         val typed = { digits: String -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_LENGTH_DIGITS } ?: digits }
         if (state.value.partition != null) return partitioned(typed)
         if (state.value.room != null) return roomed(typed)
+        if (state.value.layerEntry != null) return layered(typed)
         if (state.value.sizeEntry != null) return sized(typed)
         if (state.value.priceEntry != null) {
             return priced { digits -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_PRICE_DIGITS } ?: digits }
@@ -955,6 +1003,7 @@ internal class EditorViewModel(
     fun eraseDigit() {
         if (state.value.partition != null) return partitioned { it.dropLast(1) }
         if (state.value.room != null) return roomed { it.dropLast(1) }
+        if (state.value.layerEntry != null) return layered { it.dropLast(1) }
         if (state.value.sizeEntry != null) return sized { it.dropLast(1) }
         if (state.value.priceEntry != null) return priced { it.dropLast(1) }
         if (state.value.entry == null) return measured { it.copy(digits = it.digits.dropLast(1)) }
@@ -1309,6 +1358,7 @@ internal class EditorViewModel(
                 kinds = kinds(),
                 // Undo may take a type away; walls are then drawn with no type again.
                 kind = current.kind?.takeIf { it in model.wallTypes },
+                kindEdited = current.kindEdited?.takeIf { it in model.wallTypes },
             )
         }
         show(show?.takeIf { it in model.levels } ?: state.value.level?.takeIf { it in model.levels }, drawn)

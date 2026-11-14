@@ -234,4 +234,10 @@
     <string name="room_way_left_up" translatable="false">↖</string>
     <string name="room_way_left_down" translatable="false">↙</string>
     <string name="room_way_right_down" translatable="false">↘</string>
+    <string name="kind_edit">Изменить</string>
+    <string name="kind_layers_order">Слои снаружи внутрь. Изменятся все стены этого типа</string>
+    <string name="layer_facing">Облицовка</string>
+    <string name="layer_gap_title">Зазор</string>
+    <string name="layer_thickness_title">Толщина слоя, мм</string>
+    <string name="layer_of" translatable="false">%1$s, %2$s</string>
 </resources>
