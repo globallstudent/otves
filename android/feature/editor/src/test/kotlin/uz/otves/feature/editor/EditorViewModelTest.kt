@@ -42,6 +42,7 @@ import uz.otves.engine.EngineResponse
 import uz.otves.engine.FillKind
 import uz.otves.engine.Footing
 import uz.otves.engine.Guide
+import uz.otves.engine.Hand
 import uz.otves.engine.Hinge
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
@@ -207,6 +208,22 @@ class EditorViewModelTest {
 
                     command is EngineCommand.AddWall -> {
                         create(command.wall)
+                    }
+
+                    // The wall runs across the test room, 2 m up it.
+                    command is EngineCommand.AddWallAcross -> {
+                        create(
+                            Wall(
+                                command.level,
+                                PointMm(6_000.mm, 2_000.mm),
+                                PointMm(0.mm, 2_000.mm),
+                                command.thickness,
+                                command.height,
+                                LocationLine.RIGHT_FACE,
+                                unit = command.unit,
+                                type = command.type,
+                            ),
+                        )
                     }
 
                     command is EngineCommand.AddSketch -> {
@@ -1090,6 +1107,48 @@ class EditorViewModelTest {
         viewModel.nameRoom(RoomKind.STUDY)
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetRoomKind(checkNotNull(named.space.room), RoomKind.STUDY))
         assertThat((viewModel.uiState.value.selected as Selected.SpacePart).space.kind).isEqualTo(RoomKind.STUDY)
+    }
+
+    @Test
+    fun aWallGoesAcrossTheSelectedRoomAtATypedDistance() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.selectTool(Tool.SELECT)
+        engine.floor = floor
+        val at = PointMm(3_000.mm, 2_000.mm)
+        viewModel.tap(at, reach)
+
+        viewModel.startPartition()
+        viewModel.choosePartitionWall(Hand.LEFT)
+        "1500".forEach { viewModel.typeDigit(it.digitToInt()) }
+
+        assertThat(viewModel.uiState.value.partition).isEqualTo(PartitionEntry(at, Hand.LEFT, "1500"))
+        assertThat(viewModel.uiState.value.typing).isTrue()
+
+        // A distance the engine refuses stays on the keys, to be corrected there.
+        engine.refuseNext = EngineError.DOES_NOT_FIT
+        viewModel.confirmPartition()
+        assertThat(viewModel.uiState.value.partition).isEqualTo(PartitionEntry(at, Hand.LEFT, "1500", refused = true))
+        assertThat(viewModel.uiState.value.refused).isNull()
+        assertThat(viewModel.uiState.value.outlines).isEmpty()
+
+        viewModel.eraseDigit()
+        viewModel.typeDigit(0)
+        assertThat(
+            viewModel.uiState.value.partition
+                ?.refused,
+        ).isFalse()
+        viewModel.confirmPartition()
+
+        // The wall is like the ones the wall tool draws; the engine says where it runs.
+        val sent = engine.sent.last().single() as EngineCommand.AddWallAcross
+        assertThat(sent.level).isEqualTo(level)
+        assertThat(sent.at).isEqualTo(at)
+        assertThat(sent.from).isEqualTo(Hand.LEFT)
+        assertThat(sent.distance).isEqualTo(1_500.mm)
+        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.thickness)
+        assertThat(viewModel.uiState.value.partition).isNull()
+        assertThat(viewModel.uiState.value.outlines).hasSize(1)
+        assertThat(viewModel.uiState.value.canUndo).isTrue()
     }
 
     @Test

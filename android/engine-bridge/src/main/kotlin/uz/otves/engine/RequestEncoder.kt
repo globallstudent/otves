@@ -13,6 +13,7 @@ import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddRoom as AddRoomTable
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
+import uz.otves.schema.AddWallAcross as AddWallAcrossTable
 import uz.otves.schema.AddWallType as AddWallTypeTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
@@ -24,6 +25,7 @@ import uz.otves.schema.Draw as DrawTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.EndGesture as EndGestureTable
 import uz.otves.schema.FixedEnd as FixedEndCode
+import uz.otves.schema.Hand as HandCode
 import uz.otves.schema.Hinge as HingeCode
 import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.Level as LevelTable
@@ -300,6 +302,23 @@ internal object RequestEncoder {
                 CenterOpeningTable.startCenterOpening(this)
                 CenterOpeningTable.addOpening(this, uuid(command.opening))
                 Command.CenterOpening to CenterOpeningTable.endCenterOpening(this)
+            }
+
+            is EngineCommand.AddWallAcross -> {
+                // The engine sets the wall's points and the line they lie on.
+                WallTable.startWall(this)
+                WallTable.addLevel(this, uuid(command.level))
+                WallTable.addThickness(this, command.thickness.value)
+                WallTable.addHeight(this, command.height.value)
+                unit(command.unit)
+                command.type?.let { WallTable.addType(this, uuid(it)) }
+                val wall = WallTable.endWall(this)
+                AddWallAcrossTable.startAddWallAcross(this)
+                AddWallAcrossTable.addWall(this, wall)
+                AddWallAcrossTable.addAt(this, point(command.at))
+                AddWallAcrossTable.addFrom(this, code(command.from))
+                AddWallAcrossTable.addDistance(this, command.distance.value)
+                Command.AddWallAcross to AddWallAcrossTable.endAddWallAcross(this)
             }
 
             is EngineCommand.RemoveOpening -> {
@@ -628,6 +647,14 @@ internal object RequestEncoder {
             OpeningKind.WINDOW -> OpeningKindCode.Window
             OpeningKind.DOOR -> OpeningKindCode.Door
             OpeningKind.EMPTY -> OpeningKindCode.Empty
+        }
+
+    private fun code(hand: Hand): Int =
+        when (hand) {
+            Hand.TOP -> HandCode.Top
+            Hand.BOTTOM -> HandCode.Bottom
+            Hand.LEFT -> HandCode.Left
+            Hand.RIGHT -> HandCode.Right
         }
 
     private fun code(turn: Turn): Int =

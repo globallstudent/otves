@@ -28,6 +28,7 @@ import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.Footing
+import uz.otves.engine.Hand
 import uz.otves.engine.Hinge
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
@@ -211,6 +212,18 @@ internal data class LengthEntry(
         get() = of > 0
 }
 
+/**
+ * A wall to put across the selected room, being typed (docs/adr/0016): how far it stands from
+ * the wall that bounds the room on the [from] hand of [at], in millimetres. The engine
+ * [refused] the distance typed last; the keys stay open for another.
+ */
+internal data class PartitionEntry(
+    val at: PointMm,
+    val from: Hand = Hand.TOP,
+    val digits: String = "",
+    val refused: Boolean = false,
+)
+
 @Immutable
 internal data class EditorUiState(
     val ready: Boolean = false,
@@ -237,6 +250,7 @@ internal data class EditorUiState(
     /** The wall drawn last, whose length the user may now type. */
     val drawn: ElementId? = null,
     val entry: LengthEntry? = null,
+    val partition: PartitionEntry? = null,
     /** The builder's prices by take-off item, for one unit of each. */
     val prices: Map<String, Money> = emptyMap(),
     val priceEntry: PriceEntry? = null,
@@ -281,7 +295,7 @@ internal data class EditorUiState(
 ) {
     /** A number pad is open: until the number is entered, touches on the plan only move it. */
     val typing: Boolean
-        get() = entry != null || sizeEntry != null || priceEntry != null || measure != null
+        get() = entry != null || partition != null || sizeEntry != null || priceEntry != null || measure != null
 
     /** How thick the walls drawn next are: as their type, or else as chosen. */
     val drawnThickness: Mm
@@ -858,6 +872,7 @@ internal class EditorViewModel(
     /** A key of the number pad: for the length being corrected, else for the measured wall. */
     fun typeDigit(digit: Int) {
         val typed = { digits: String -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_LENGTH_DIGITS } ?: digits }
+        if (state.value.partition != null) return partitioned(typed)
         if (state.value.sizeEntry != null) return sized(typed)
         if (state.value.priceEntry != null) {
             return priced { digits -> (digits + digit).trimStart('0').takeIf { it.length <= MAX_PRICE_DIGITS } ?: digits }
@@ -905,6 +920,7 @@ internal class EditorViewModel(
         }
 
     fun eraseDigit() {
+        if (state.value.partition != null) return partitioned { it.dropLast(1) }
         if (state.value.sizeEntry != null) return sized { it.dropLast(1) }
         if (state.value.priceEntry != null) return priced { it.dropLast(1) }
         if (state.value.entry == null) return measured { it.copy(digits = it.digits.dropLast(1)) }
@@ -912,6 +928,50 @@ internal class EditorViewModel(
     }
 
     fun cancelLength() = state.update { it.copy(entry = null) }
+
+    /** Opens the keys for a wall across the selected room, a typed distance from one of its walls. */
+    fun startPartition() {
+        val room = state.value.selected as? Selected.SpacePart ?: return
+        state.update { it.copy(partition = PartitionEntry(room.at)) }
+    }
+
+    /** Which of the room's walls the distance is measured from. */
+    fun choosePartitionWall(from: Hand) =
+        state.update { current -> current.copy(partition = current.partition?.copy(from = from, refused = false)) }
+
+    fun cancelPartition() = state.update { it.copy(partition = null) }
+
+    // Changes the digits of the partition's distance.
+    private fun partitioned(change: (String) -> String) =
+        state.update { current ->
+            current.copy(partition = current.partition?.let { it.copy(digits = change(it.digits), refused = false) })
+        }
+
+    /**
+     * Builds the wall across the room, like the walls the wall tool draws. The engine says where
+     * it runs; a distance it refuses stays on the keys to be corrected.
+     */
+    fun confirmPartition() =
+        act {
+            val current = state.value
+            val entry = current.partition ?: return@act
+            val level = current.level ?: return@act
+            val distance = entry.digits.toLongOrNull()?.let(::Mm) ?: return@act
+            val across =
+                EngineCommand.AddWallAcross(
+                    level = level,
+                    at = entry.at,
+                    from = entry.from,
+                    distance = distance,
+                    // A wall of a type has no thickness or unit of its own.
+                    thickness = if (current.kind == null) current.thickness else 0.mm,
+                    height = WallHeight,
+                    unit = current.material.takeIf { current.kind == null },
+                    type = current.kind,
+                )
+            val built = execute(listOf(across)) != null
+            state.update { it.copy(partition = if (built) null else entry.copy(refused = true), refused = null) }
+        }
 
     /**
      * Gives the wall the typed length, which makes it exact. The engine says which end stays, a

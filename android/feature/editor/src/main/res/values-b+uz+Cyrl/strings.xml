@@ -204,4 +204,12 @@
     <string name="legend_masonry">Терим</string>
     <string name="legend_facing">Қоплама ғишт</string>
     <string name="legend_insulation">Иссиқлик қатлами</string>
+    <string name="partition_place">Ўлчам бўйича қўйиш</string>
+    <string name="partition_title">Пардевор: девордан, мм</string>
+    <string name="partition_from_top">Юқоридан</string>
+    <string name="partition_from_bottom">Пастдан</string>
+    <string name="partition_from_left">Чапдан</string>
+    <string name="partition_from_right">Ўнгдан</string>
+    <string name="partition_build">Қуриш</string>
+    <string name="partition_refused">Бу масофада пардевор сиғмайди</string>
 </resources>

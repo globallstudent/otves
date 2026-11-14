@@ -161,6 +161,26 @@ public sealed interface EngineCommand {
         public val opening: ElementId,
     ) : EngineCommand
 
+    /**
+     * Builds a wall across the room that holds [at], side by side with the wall that bounds the
+     * room on the [from] hand of that point and [distance] clear of its face (docs/adr/0016). It
+     * runs from the wall it meets on one hand to the one on the other and lies along its nearer
+     * face, so the distance holds whatever it is made of. The wall is of [type], or with none
+     * [thickness] thick and laid from [unit]; it is [height] high and exact. Fails, changing
+     * nothing, with [EngineError.NOT_FOUND] when no room holds the point, or
+     * [EngineError.DOES_NOT_FIT].
+     */
+    public data class AddWallAcross(
+        public val level: ElementId,
+        public val at: PointMm,
+        public val from: Hand,
+        public val distance: Mm,
+        public val thickness: Mm,
+        public val height: Mm,
+        public val unit: UnitSize? = null,
+        public val type: ElementId? = null,
+    ) : EngineCommand
+
     public data class RemoveOpening(
         public val opening: ElementId,
     ) : EngineCommand

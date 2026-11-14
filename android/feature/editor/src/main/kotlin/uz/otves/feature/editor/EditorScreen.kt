@@ -57,6 +57,7 @@ import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.FillKind
+import uz.otves.engine.Hand
 import uz.otves.engine.LocationLine
 import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.OpeningKind
@@ -136,6 +137,10 @@ fun EditorRoute(
                 onRoomKind = viewModel::nameRoom,
                 onSize = viewModel::editSize,
                 onSizeWall = viewModel::chooseSizeWall,
+                onPartition = viewModel::startPartition,
+                onPartitionWall = viewModel::choosePartitionWall,
+                onCancelPartition = viewModel::cancelPartition,
+                onConfirmPartition = viewModel::confirmPartition,
                 onFlipHinge = viewModel::flipHinge,
                 onFlipSwing = viewModel::flipSwing,
                 onCenterOpening = viewModel::centerOpening,
@@ -210,6 +215,10 @@ internal data class EditorActions(
     val onRoomKind: (RoomKind) -> Unit = {},
     val onSize: (DrawnText) -> Unit = {},
     val onSizeWall: (swapped: Boolean) -> Unit = {},
+    val onPartition: () -> Unit = {},
+    val onPartitionWall: (Hand) -> Unit = {},
+    val onCancelPartition: () -> Unit = {},
+    val onConfirmPartition: () -> Unit = {},
     val onFlipHinge: () -> Unit = {},
     val onFlipSwing: () -> Unit = {},
     val onCenterOpening: () -> Unit = {},
@@ -300,9 +309,11 @@ internal fun EditorScreen(
             val measure = state.measure
             val sizeEntry = state.sizeEntry
             val priceEntry = state.priceEntry
+            val partition = state.partition
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 when {
                     entry != null -> LengthPad(entry, actions)
+                    partition != null -> PartitionPad(partition, actions)
                     sizeEntry != null -> SizePad(sizeEntry, actions)
                     priceEntry != null -> PricePad(priceEntry, state, actions)
                     measure != null -> MeasurePad(measure, state, actions)
@@ -315,7 +326,7 @@ internal fun EditorScreen(
                     else -> Tools(state, actions)
                 }
             }
-            val idle = entry == null && sizeEntry == null && priceEntry == null && measure == null
+            val idle = !state.typing
             val bare = selected == null && !listOpen
             if (state.ready && idle && bare && hasOptions(state.tool)) ToolOptionsButton(state, actions)
         }

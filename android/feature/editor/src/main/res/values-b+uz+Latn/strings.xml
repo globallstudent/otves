@@ -204,4 +204,12 @@
     <string name="legend_masonry">Terim</string>
     <string name="legend_facing">Qoplama g‘isht</string>
     <string name="legend_insulation">Issiqlik qatlami</string>
+    <string name="partition_place">O‘lcham bo‘yicha qo‘yish</string>
+    <string name="partition_title">Pardevor: devordan, mm</string>
+    <string name="partition_from_top">Yuqoridan</string>
+    <string name="partition_from_bottom">Pastdan</string>
+    <string name="partition_from_left">Chapdan</string>
+    <string name="partition_from_right">O‘ngdan</string>
+    <string name="partition_build">Qurish</string>
+    <string name="partition_refused">Bu masofada pardevor sig‘maydi</string>
 </resources>

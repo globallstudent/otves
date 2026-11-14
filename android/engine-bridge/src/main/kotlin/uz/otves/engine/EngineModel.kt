@@ -19,6 +19,9 @@ public enum class WallEnd { START, END }
 /** Which way a wall goes from the wall before it in a run. */
 public enum class Turn { LEFT, STRAIGHT, RIGHT }
 
+/** Which way from a point of the plan, looking at it. */
+public enum class Hand { TOP, BOTTOM, LEFT, RIGHT }
+
 /** The aimed point lined up with a wall end: a line from that end to the point. */
 public data class Guide(
     public val from: PointMm,

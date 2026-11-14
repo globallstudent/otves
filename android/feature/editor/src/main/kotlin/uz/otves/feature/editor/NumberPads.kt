@@ -23,6 +23,7 @@ import uz.otves.core.designsystem.SegmentedControl
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.core.model.mm
+import uz.otves.engine.Hand
 import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
 import kotlin.math.abs
@@ -80,6 +81,46 @@ internal fun LengthPad(
         )
     }
 }
+
+// A wall across the selected room: how far it stands from one of the room's walls, and from
+// which. The engine runs it from wall to wall.
+@Composable
+internal fun PartitionPad(
+    entry: PartitionEntry,
+    actions: EditorActions,
+) {
+    Panel {
+        PanelHeader(stringResource(R.string.partition_title)) {
+            PanelAction(stringResource(R.string.length_cancel), actions.onCancelPartition)
+        }
+        TypedLength(entry.digits) {}
+        if (entry.refused) {
+            Text(
+                stringResource(R.string.partition_refused),
+                style = MaterialTheme.typography.bodyMedium,
+                color = OtvesTheme.colors.warning,
+            )
+        }
+        SegmentedControl(
+            options = Hand.entries.map { handName(it) },
+            selected = entry.from.ordinal,
+            onSelect = { actions.onPartitionWall(Hand.entries[it]) },
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+        NumberKeys(actions, stringResource(R.string.partition_build), actions.onConfirmPartition, enabled = entry.digits.isNotEmpty())
+    }
+}
+
+@Composable
+private fun handName(hand: Hand): String =
+    stringResource(
+        when (hand) {
+            Hand.TOP -> R.string.partition_from_top
+            Hand.BOTTOM -> R.string.partition_from_bottom
+            Hand.LEFT -> R.string.partition_from_left
+            Hand.RIGHT -> R.string.partition_from_right
+        },
+    )
 
 // Walls entered one after another from readings: the length, then which way it goes from the wall
 // before. The plan shows the wall before it is built.

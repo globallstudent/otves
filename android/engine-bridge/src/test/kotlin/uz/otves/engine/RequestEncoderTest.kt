@@ -12,12 +12,14 @@ import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddRoom as AddRoomTable
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
+import uz.otves.schema.AddWallAcross as AddWallAcrossTable
 import uz.otves.schema.AddWallType as AddWallTypeTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
 import uz.otves.schema.CenterOpening as CenterOpeningTable
 import uz.otves.schema.Draw as DrawTable
 import uz.otves.schema.FixedEnd as FixedEndCode
+import uz.otves.schema.Hand as HandCode
 import uz.otves.schema.Hinge as HingeCode
 import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.LoadContent as LoadContentTable
@@ -279,6 +281,32 @@ class RequestEncoderTest {
         // No space is in focus unless the app names a point, and the screen's drawing is no sheet.
         assertThat(draw.focus()).isNull()
         assertThat(draw.sheet()).isFalse()
+    }
+
+    @Test
+    fun aWallAcrossARoomCarriesThePointTheHandAndTheDistance() {
+        val type = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000007"))
+        val commands =
+            listOf(
+                EngineCommand.AddWallAcross(level, PointMm(3_000.mm, 2_000.mm), Hand.LEFT, 1_500.mm, 120.mm, 2_800.mm),
+                EngineCommand.AddWallAcross(level, PointMm(3_000.mm, 2_000.mm), Hand.TOP, 900.mm, 0.mm, 2_800.mm, type = type),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(commands))
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.AddWallAcross)
+        val across = request.commands(0).command(AddWallAcrossTable()) as AddWallAcrossTable
+        assertThat(across.at().x()).isEqualTo(3_000L)
+        assertThat(across.at().y()).isEqualTo(2_000L)
+        assertThat(across.from()).isEqualTo(HandCode.Left)
+        assertThat(across.distance()).isEqualTo(1_500L)
+        assertThat(across.wall().thickness()).isEqualTo(120L)
+        assertThat(across.wall().height()).isEqualTo(2_800L)
+        assertThat(Uuid.fromLongs(across.wall().level().high(), across.wall().level().low())).isEqualTo(level.uuid)
+        // The engine places the wall: it carries no points.
+        assertThat(across.wall().start()).isNull()
+        val typed = (request.commands(1).command(AddWallAcrossTable()) as AddWallAcrossTable).wall()
+        assertThat(Uuid.fromLongs(typed.type().high(), typed.type().low())).isEqualTo(type.uuid)
     }
 
     @Test

@@ -168,6 +168,9 @@ private fun SpaceRows(
     InspectorRow(stringResource(R.string.room_perimeter)) {
         Text(metresText(space.perimeter), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(vertical = 12.dp))
     }
+    InspectorRow(stringResource(R.string.role_partition)) {
+        Pill(stringResource(R.string.partition_place), selected = false, onClick = actions.onPartition)
+    }
 }
 
 // A wall is what its type says, or with no type what it is laid from and how thick; then how

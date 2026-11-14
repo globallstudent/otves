@@ -11,7 +11,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Drawing | `drafting::draft` places everything on the plan; one `PlanPainter` paints the screen and the PDF (ADR 0013). The plans go out as PDF sheets: a frame, every room's sizes, the room and opening schedules, a legend and a title block | A sheet is fitted to A4, not drawn at a named scale; sizes on paper are ratios of the text height, not the СПДС offsets |
 | Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line | A type starts from a catalog template; its layers cannot be edited yet |
 | Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015). A sheet lists them with their areas | A label may still lie under a door's swing in a room too small to move it |
-| Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value (ADR 0016) | A wall cannot be placed at a typed distance yet, and there is no room tool |
+| Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value; a partition goes across a room at a typed distance from one of its walls (ADR 0016) | There is no room tool: a room cannot be entered by its clear sizes |
 | Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred; a sheet lists the marks with their sizes and counts (ADR 0017) | Sill and height are not typed in the app; no two-leaf doors |
 | Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
 | Tests | GoogleTest units, Kotlin unit tests, three instrumented suites | No golden jobs, no property tests, no screenshot tests, no benchmark |
@@ -99,7 +99,8 @@ The engine answers a `Draw` query with a `Drawing` for one level.
 - The engine writes the sizes as lines and texts of the drawing: the plan's overall size outside, and for the space in focus its clear sizes and a chain along each side with openings. Offsets are ratios of the text height.
 - A number is a handle: its text says what a typed value changes, and `SetDimension` sends the handle back with the value. An opening's width resizes it, a piece of wall moves the opening it leads to, a clear size moves one of its two walls.
 - `geom::translate_wall` moves a wall across the plan with what is joined to it, as `resize_wall` does along it; `geom::set_distance` finds the move that puts two walls a clear distance apart.
-- Still to come: `geom::across`, a partition from a wall face to the opposite wall at a typed distance, and `geom::room_walls`, the walls of a room entered by clear size, reusing walls already there.
+- `geom::across` puts a partition from a wall to the opposite wall at a typed distance from a third: `AddWallAcross`, started from the room's panel.
+- Still to come: `geom::room_walls`, the walls of a room entered by clear size, reusing walls already there.
 
 ### 0012: the pencil
 
@@ -129,7 +130,7 @@ flowchart LR
 | 2 | Display list | `engine/drafting`, `Draw` | `PlanPainter`; delete placement code | — | — | built |
 | 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; layers of a type are not edited yet |
 | 4 | Rooms | `geom/spaces`, `Room`, floors and room texts in `drafting` | Room labels, room panel | v7 | G31, G34 | built; a room's sizes come with slice 5 |
-| 5 | Dimensions | Sizes in `drafting`, `SetDimension`, `translate_wall`, `set_distance`; `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | sizes and typed sizes built; wall by distance and the room tool open |
+| 5 | Dimensions | Sizes in `drafting`, `SetDimension`, `translate_wall`, `set_distance`, `across`; `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | sizes, typed sizes and the wall by distance built; the room tool open |
 | 6 | Openings | hinge, swing, marks, `CenterOpening`, the selected opening's chain | Door panel | v8 | G37 | built |
 | 7 | Sheets | `Draw.sheet`, room and opening schedules, marks clear of sizes | Frame, tables, legend, title block, PDF of plans | — | G38 | built; one storey to an A4 page, fitted, not at a named scale |
 

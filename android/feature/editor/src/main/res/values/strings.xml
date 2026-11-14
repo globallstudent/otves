@@ -219,4 +219,12 @@
     <string name="legend_masonry">Кладка</string>
     <string name="legend_facing">Облицовочный кирпич</string>
     <string name="legend_insulation">Утеплитель</string>
+    <string name="partition_place">Поставить по размеру</string>
+    <string name="partition_title">Перегородка: от стены, мм</string>
+    <string name="partition_from_top">Сверху</string>
+    <string name="partition_from_bottom">Снизу</string>
+    <string name="partition_from_left">Слева</string>
+    <string name="partition_from_right">Справа</string>
+    <string name="partition_build">Построить</string>
+    <string name="partition_refused">На таком расстоянии перегородка не помещается</string>
 </resources>
