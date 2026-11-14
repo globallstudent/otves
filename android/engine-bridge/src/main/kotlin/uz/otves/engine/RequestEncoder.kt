@@ -17,12 +17,14 @@ import uz.otves.schema.AddWallType as AddWallTypeTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
 import uz.otves.schema.BeginGesture as BeginGestureTable
+import uz.otves.schema.CenterOpening as CenterOpeningTable
 import uz.otves.schema.Conditions as ConditionsTable
 import uz.otves.schema.ConditionsField as ConditionsFieldCode
 import uz.otves.schema.Draw as DrawTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.EndGesture as EndGestureTable
 import uz.otves.schema.FixedEnd as FixedEndCode
+import uz.otves.schema.Hinge as HingeCode
 import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LoadContent as LoadContentTable
@@ -51,8 +53,10 @@ import uz.otves.schema.SetLevelFooting as SetLevelFootingTable
 import uz.otves.schema.SetLevelHeight as SetLevelHeightTable
 import uz.otves.schema.SetLevelJunctionMeshes as SetLevelJunctionMeshesTable
 import uz.otves.schema.SetLevelRingBeam as SetLevelRingBeamTable
+import uz.otves.schema.SetOpeningHinge as SetOpeningHingeTable
 import uz.otves.schema.SetOpeningKind as SetOpeningKindTable
 import uz.otves.schema.SetOpeningSill as SetOpeningSillTable
+import uz.otves.schema.SetOpeningSwing as SetOpeningSwingTable
 import uz.otves.schema.SetRoomKind as SetRoomKindTable
 import uz.otves.schema.SetWallHeight as SetWallHeightTable
 import uz.otves.schema.SetWallLayer as SetWallLayerTable
@@ -63,6 +67,7 @@ import uz.otves.schema.SetWallThickness as SetWallThicknessTable
 import uz.otves.schema.SetWallType as SetWallTypeTable
 import uz.otves.schema.SetWallTypeRole as SetWallTypeRoleTable
 import uz.otves.schema.SetWallUnit as SetWallUnitTable
+import uz.otves.schema.Swing as SwingCode
 import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Turn as TurnCode
 import uz.otves.schema.Undo as UndoTable
@@ -277,6 +282,26 @@ internal object RequestEncoder {
                 Command.SetOpeningKind to SetOpeningKindTable.endSetOpeningKind(this)
             }
 
+            is EngineCommand.SetOpeningHinge -> {
+                SetOpeningHingeTable.startSetOpeningHinge(this)
+                SetOpeningHingeTable.addOpening(this, uuid(command.opening))
+                SetOpeningHingeTable.addHinge(this, code(command.hinge))
+                Command.SetOpeningHinge to SetOpeningHingeTable.endSetOpeningHinge(this)
+            }
+
+            is EngineCommand.SetOpeningSwing -> {
+                SetOpeningSwingTable.startSetOpeningSwing(this)
+                SetOpeningSwingTable.addOpening(this, uuid(command.opening))
+                SetOpeningSwingTable.addSwing(this, code(command.swing))
+                Command.SetOpeningSwing to SetOpeningSwingTable.endSetOpeningSwing(this)
+            }
+
+            is EngineCommand.CenterOpening -> {
+                CenterOpeningTable.startCenterOpening(this)
+                CenterOpeningTable.addOpening(this, uuid(command.opening))
+                Command.CenterOpening to CenterOpeningTable.endCenterOpening(this)
+            }
+
             is EngineCommand.RemoveOpening -> {
                 RemoveOpeningTable.startRemoveOpening(this)
                 RemoveOpeningTable.addOpening(this, uuid(command.opening))
@@ -406,6 +431,7 @@ internal object RequestEncoder {
                 DrawTable.addTextHeight(this, command.textHeight.value)
                 DrawTable.addDigitWidth(this, command.digitWidth.value)
                 command.focus?.let { DrawTable.addFocus(this, point(it)) }
+                command.selected?.let { DrawTable.addSelected(this, uuid(it)) }
                 Command.Draw to DrawTable.endDraw(this)
             }
 
@@ -542,6 +568,8 @@ internal object RequestEncoder {
         OpeningTable.addHeight(this, opening.height.value)
         OpeningTable.addSill(this, opening.sill.value)
         OpeningTable.addKind(this, code(opening.kind))
+        OpeningTable.addHinge(this, code(opening.hinge))
+        OpeningTable.addSwing(this, code(opening.swing))
         return OpeningTable.endOpening(this)
     }
 
@@ -549,12 +577,28 @@ internal object RequestEncoder {
     private fun code(kind: TextKind): Int =
         when (kind) {
             TextKind.LENGTH -> TextKindCode.Length
+
             TextKind.ABOUT_LENGTH -> TextKindCode.AboutLength
+
             TextKind.PIER -> TextKindCode.Pier
+
             TextKind.OPENING_WIDTH -> TextKindCode.OpeningWidth
+
             TextKind.CLEAR -> TextKindCode.Clear
-            TextKind.OVERALL, TextKind.ROOM_NAME, TextKind.ROOM_AREA, TextKind.UNKNOWN -> TextKindCode.Overall
+
+            TextKind.OVERALL,
+            TextKind.ROOM_NAME,
+            TextKind.ROOM_AREA,
+            TextKind.WINDOW_MARK,
+            TextKind.DOOR_MARK,
+            TextKind.EMPTY_MARK,
+            TextKind.UNKNOWN,
+            -> TextKindCode.Overall
         }
+
+    private fun code(hinge: Hinge): Int = if (hinge == Hinge.NEAR) HingeCode.Near else HingeCode.Far
+
+    private fun code(swing: Swing): Int = if (swing == Swing.LEFT) SwingCode.Left else SwingCode.Right
 
     private fun code(role: WallRole): Int =
         when (role) {

@@ -5,6 +5,7 @@ import uz.otves.core.model.Mm
 import uz.otves.engine.Conditions
 import uz.otves.engine.EngineElement
 import uz.otves.engine.Footing
+import uz.otves.engine.Hinge
 import uz.otves.engine.LayerFunction
 import uz.otves.engine.Level
 import uz.otves.engine.LocationLine
@@ -13,6 +14,7 @@ import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointMm
 import uz.otves.engine.Room
+import uz.otves.engine.Swing
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
 import uz.otves.engine.WallLayer
@@ -31,6 +33,10 @@ internal const val RIGHT_FACE = 2
 internal const val WINDOW = 0
 internal const val DOOR = 1
 internal const val EMPTY = 2
+internal const val NEAR = 0
+internal const val FAR = 1
+internal const val LEFT = 0
+internal const val RIGHT = 1
 internal const val EXTERIOR = 0
 internal const val BEARING = 1
 internal const val PARTITION = 2
@@ -121,6 +127,8 @@ internal fun Opening.row(id: ElementId): OpeningRow =
                 OpeningKind.DOOR -> DOOR
                 OpeningKind.EMPTY -> EMPTY
             },
+        hinge = if (hinge == Hinge.NEAR) NEAR else FAR,
+        swing = if (swing == Swing.LEFT) LEFT else RIGHT,
     )
 
 internal fun Conditions.row(id: ElementId): ConditionsRow =
@@ -219,6 +227,18 @@ internal fun OpeningRow.element(): Pair<ElementId, EngineElement> =
                     DOOR -> OpeningKind.DOOR
                     EMPTY -> OpeningKind.EMPTY
                     else -> throw CorruptJobException("opening $id has kind $kind")
+                },
+            hinge =
+                when (hinge) {
+                    NEAR -> Hinge.NEAR
+                    FAR -> Hinge.FAR
+                    else -> throw CorruptJobException("opening $id has hinge $hinge")
+                },
+            swing =
+                when (swing) {
+                    LEFT -> Swing.LEFT
+                    RIGHT -> Swing.RIGHT
+                    else -> throw CorruptJobException("opening $id has swing $swing")
                 },
         )
 

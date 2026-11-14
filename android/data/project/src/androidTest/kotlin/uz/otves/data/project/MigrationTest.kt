@@ -29,7 +29,7 @@ class MigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(7).use { connection ->
+        helper.runMigrationsAndValidate(8).use { connection ->
             // docs/adr/0010: no footing until the builder gives one.
             connection.prepare("SELECT footing_width, footing_depth FROM level").use { level ->
                 assertThat(level.step()).isTrue()

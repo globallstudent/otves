@@ -22,7 +22,7 @@ import androidx.room.Upsert
         WallLayerRow::class,
         RoomRow::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
     // Version 2 adds what the builder chose (docs/adr/0008): new columns, zero in old jobs.
     // Version 3 adds the conditions table (docs/adr/0009), empty in old jobs.
@@ -31,6 +31,8 @@ import androidx.room.Upsert
     // Version 6 adds wall types and their layers (docs/adr/0014): two tables, empty in old jobs,
     // whose walls have no type.
     // Version 7 adds the names of rooms (docs/adr/0015): a table, empty in old jobs.
+    // Version 8 adds how a door hangs (docs/adr/0017): two columns, zero in old jobs, which is
+    // how doors were drawn before.
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -38,6 +40,7 @@ import androidx.room.Upsert
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7),
+        AutoMigration(from = 7, to = 8),
     ],
 )
 internal abstract class ProjectDatabase : RoomDatabase() {

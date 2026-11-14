@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.unit.dp
@@ -101,9 +102,40 @@ internal fun Inspector(
                         Pill(sizeName(size), size == current, { actions.onOpeningSize(size) })
                     }
                 }
+                OpeningRows(selected, state, actions)
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+// How a door hangs, where the opening stands on its side of the room, and the mark it shares
+// with the openings of its kind and size.
+@Composable
+private fun OpeningRows(
+    selected: Selected.OpeningPart,
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    if (selected.opening.kind == OpeningKind.DOOR) {
+        InspectorRow(stringResource(R.string.door_hinge)) {
+            Pill(stringResource(R.string.door_hinge_flip), false, actions.onFlipHinge)
+        }
+        InspectorRow(stringResource(R.string.door_swing)) {
+            Pill(stringResource(R.string.door_swing_flip), false, actions.onFlipSwing)
+        }
+    }
+    InspectorRow(stringResource(R.string.opening_place)) {
+        Pill(stringResource(R.string.opening_center), false, actions.onCenterOpening)
+    }
+    // The engine numbers the marks; the one of this opening came with the drawing.
+    val mark = state.drawing.texts.find { it.isMark && it.element == selected.id } ?: return
+    InspectorRow(stringResource(R.string.opening_mark)) {
+        Text(
+            stringResource(R.string.opening_mark_count, markText(LocalResources.current, mark.kind, mark.value), selected.alike),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(vertical = 12.dp),
+        )
     }
 }
 

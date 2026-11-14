@@ -8,14 +8,17 @@ import uz.otves.schema.Command
 import uz.otves.schema.Element
 import uz.otves.schema.Request
 import kotlin.uuid.Uuid
+import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddRoom as AddRoomTable
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
 import uz.otves.schema.AddWallType as AddWallTypeTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
+import uz.otves.schema.CenterOpening as CenterOpeningTable
 import uz.otves.schema.Draw as DrawTable
 import uz.otves.schema.FixedEnd as FixedEndCode
+import uz.otves.schema.Hinge as HingeCode
 import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
@@ -30,12 +33,15 @@ import uz.otves.schema.RemoveRoom as RemoveRoomTable
 import uz.otves.schema.Room as RoomTable
 import uz.otves.schema.RoomKind as RoomKindCode
 import uz.otves.schema.SetDimension as SetDimensionTable
+import uz.otves.schema.SetOpeningHinge as SetOpeningHingeTable
+import uz.otves.schema.SetOpeningSwing as SetOpeningSwingTable
 import uz.otves.schema.SetRoomKind as SetRoomKindTable
 import uz.otves.schema.SetWallLayer as SetWallLayerTable
 import uz.otves.schema.SetWallLength as SetWallLengthTable
 import uz.otves.schema.SetWallMirrored as SetWallMirroredTable
 import uz.otves.schema.SetWallType as SetWallTypeTable
 import uz.otves.schema.SetWallTypeRole as SetWallTypeRoleTable
+import uz.otves.schema.Swing as SwingCode
 import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Turn as TurnCode
 import uz.otves.schema.WallEnd as WallEndCode
@@ -437,6 +443,34 @@ class RequestEncoderTest {
         val opened = request.commands(4).command(OpenModelTable()) as OpenModelTable
         assertThat(opened.elements(0).elementType()).isEqualTo(Element.Room)
         assertThat((opened.elements(0).element(RoomTable()) as RoomTable).kind()).isEqualTo(RoomKindCode.Kitchen)
+    }
+
+    @Test
+    fun aDoorCarriesHowItHangsAndTheSelectedElementGoesWithADrawing() {
+        val door = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000003"))
+        val commands =
+            listOf(
+                EngineCommand.AddOpening(Opening(wall, 1_000.mm, 900.mm, 2_100.mm, 0.mm, OpeningKind.DOOR, Hinge.FAR, Swing.RIGHT)),
+                EngineCommand.SetOpeningHinge(door, Hinge.FAR),
+                EngineCommand.SetOpeningSwing(door, Swing.RIGHT),
+                EngineCommand.CenterOpening(door),
+                EngineCommand.Draw(level, 400.mm, 210.mm, selected = door),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(commands))
+
+        assertThat(List(request.commandsLength()) { request.commands(it).commandType() })
+            .containsExactly(Command.AddOpening, Command.SetOpeningHinge, Command.SetOpeningSwing, Command.CenterOpening, Command.Draw)
+            .inOrder()
+        val added = (request.commands(0).command(AddOpeningTable()) as AddOpeningTable).opening()
+        assertThat(added.hinge()).isEqualTo(HingeCode.Far)
+        assertThat(added.swing()).isEqualTo(SwingCode.Right)
+        assertThat((request.commands(1).command(SetOpeningHingeTable()) as SetOpeningHingeTable).hinge()).isEqualTo(HingeCode.Far)
+        assertThat((request.commands(2).command(SetOpeningSwingTable()) as SetOpeningSwingTable).swing()).isEqualTo(SwingCode.Right)
+        val centred = request.commands(3).command(CenterOpeningTable()) as CenterOpeningTable
+        assertThat(Uuid.fromLongs(centred.opening().high(), centred.opening().low())).isEqualTo(door.uuid)
+        val draw = request.commands(4).command(DrawTable()) as DrawTable
+        assertThat(Uuid.fromLongs(draw.selected().high(), draw.selected().low())).isEqualTo(door.uuid)
     }
 
     @Test

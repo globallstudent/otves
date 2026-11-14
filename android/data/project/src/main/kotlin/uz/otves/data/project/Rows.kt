@@ -92,6 +92,10 @@ internal data class OpeningRow(
     val height: Long,
     val sill: Long,
     val kind: Int,
+    // How a door hangs (docs/adr/0017): the edge its leaf is on, near (0) or far (1), and the
+    // side of the wall it opens to, left (0) or right (1). Unused by other openings.
+    @ColumnInfo(defaultValue = "0") val hinge: Int,
+    @ColumnInfo(defaultValue = "0") val swing: Int,
 )
 
 /** The job's estimating conditions (docs/adr/0009): one row at most; null is left to the norm. */

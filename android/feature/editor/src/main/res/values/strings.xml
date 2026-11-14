@@ -195,4 +195,15 @@
     <string name="size_wall_left">Левую</string>
     <string name="size_wall_top">Верхнюю</string>
     <string name="size_wall_bottom">Нижнюю</string>
+    <string name="door_hinge">Петли</string>
+    <string name="door_hinge_flip">Перевесить</string>
+    <string name="door_swing">Открывание</string>
+    <string name="door_swing_flip">В другую сторону</string>
+    <string name="opening_place">Положение</string>
+    <string name="opening_center">По центру</string>
+    <string name="opening_mark">Марка</string>
+    <string name="opening_mark_count">%1$s, таких %2$d шт</string>
+    <string name="mark_window" translatable="false">ОК-%1$d</string>
+    <string name="mark_door" translatable="false">ДВ-%1$d</string>
+    <string name="mark_empty" translatable="false">ПР-%1$d</string>
 </resources>

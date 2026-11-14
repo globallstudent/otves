@@ -134,6 +134,13 @@ public enum class TextKind {
     /** An opening's width. */
     OPENING_WIDTH,
 
+    /** A window's mark (docs/adr/0017): the value is its number among the marks of windows. */
+    WINDOW_MARK,
+    DOOR_MARK,
+
+    /** The mark of an opening with nothing in it. */
+    EMPTY_MARK,
+
     /** A text from a newer engine than this app knows; it is not written. */
     UNKNOWN,
 }
@@ -192,9 +199,22 @@ public data class DrawnText(
             element != null &&
                 when (kind) {
                     TextKind.LENGTH, TextKind.ABOUT_LENGTH, TextKind.PIER, TextKind.OPENING_WIDTH -> true
+
                     TextKind.CLEAR -> other != null
-                    TextKind.OVERALL, TextKind.ROOM_NAME, TextKind.ROOM_AREA, TextKind.UNKNOWN -> false
+
+                    TextKind.OVERALL,
+                    TextKind.ROOM_NAME,
+                    TextKind.ROOM_AREA,
+                    TextKind.WINDOW_MARK,
+                    TextKind.DOOR_MARK,
+                    TextKind.EMPTY_MARK,
+                    TextKind.UNKNOWN,
+                    -> false
                 }
+
+    /** Whether the text is an opening's mark. */
+    public val isMark: Boolean
+        get() = kind == TextKind.WINDOW_MARK || kind == TextKind.DOOR_MARK || kind == TextKind.EMPTY_MARK
 }
 
 /**
@@ -438,7 +458,16 @@ public data class Room(
     public val kind: RoomKind = RoomKind.ROOM,
 ) : EngineElement
 
-/** A window, door or empty opening, placed along its wall from the start and up from the base. */
+/** The edge of an opening a door's leaf hangs on (docs/adr/0017): [NEAR] is towards the wall's start. */
+public enum class Hinge { NEAR, FAR }
+
+/** The side of its wall a door's leaf opens to, looking from the wall's start. */
+public enum class Swing { LEFT, RIGHT }
+
+/**
+ * A window, door or empty opening, placed along its wall from the start and up from the base.
+ * [hinge] and [swing] say how a door hangs; other openings keep them unused.
+ */
 public data class Opening(
     public val wall: ElementId,
     public val offset: Mm,
@@ -446,4 +475,6 @@ public data class Opening(
     public val height: Mm,
     public val sill: Mm,
     public val kind: OpeningKind = OpeningKind.WINDOW,
+    public val hinge: Hinge = Hinge.NEAR,
+    public val swing: Swing = Swing.LEFT,
 ) : EngineElement

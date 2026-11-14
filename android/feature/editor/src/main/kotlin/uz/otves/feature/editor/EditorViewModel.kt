@@ -28,6 +28,7 @@ import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.Footing
+import uz.otves.engine.Hinge
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
 import uz.otves.engine.LayerSpec
@@ -42,6 +43,7 @@ import uz.otves.engine.QuantityLine
 import uz.otves.engine.Room
 import uz.otves.engine.RoomKind
 import uz.otves.engine.Space
+import uz.otves.engine.Swing
 import uz.otves.engine.Takeoff
 import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
@@ -81,9 +83,11 @@ internal sealed interface Selected {
         val wall: Wall,
     ) : Selected
 
+    /** An opening, and how many openings of the job are of its kind and size: they share its mark. */
     data class OpeningPart(
         override val id: ElementId,
         val opening: Opening,
+        val alike: Int = 1,
     ) : Selected
 
     /**
@@ -628,9 +632,18 @@ internal class EditorViewModel(
             sizes.map { size -> if (size == null || !drawings.hasNext()) null else drawings.next() }
         }
 
-    // The selected space is drawn with its sizes in place of its name.
-    private fun draw(level: ElementId) =
-        EngineCommand.Draw(level, label.height, label.digit, focus = (state.value.selected as? Selected.SpacePart)?.at)
+    // The selected space is drawn with its sizes in place of its name, and the selected opening
+    // with the chain of the side it is in.
+    private fun draw(level: ElementId): EngineCommand.Draw {
+        val selected = state.value.selected
+        return EngineCommand.Draw(
+            level,
+            label.height,
+            label.digit,
+            focus = (selected as? Selected.SpacePart)?.at,
+            selected = (selected as? Selected.OpeningPart)?.id,
+        )
+    }
 
     // Asks the shown storey's drawing again. The model does not change, so nothing is recorded.
     private suspend fun redraw() {
@@ -980,6 +993,26 @@ internal class EditorViewModel(
         )
     }
 
+    /** Hangs the selected door on its other edge. */
+    fun flipHinge() {
+        val part = state.value.selected as? Selected.OpeningPart ?: return
+        val hinge = if (part.opening.hinge == Hinge.NEAR) Hinge.FAR else Hinge.NEAR
+        send(listOf(EngineCommand.SetOpeningHinge(part.id, hinge)))
+    }
+
+    /** Makes the selected door open to the other side of its wall. */
+    fun flipSwing() {
+        val part = state.value.selected as? Selected.OpeningPart ?: return
+        val swing = if (part.opening.swing == Swing.LEFT) Swing.RIGHT else Swing.LEFT
+        send(listOf(EngineCommand.SetOpeningSwing(part.id, swing)))
+    }
+
+    /** Puts the selected opening in the middle of the side of the room it is in. */
+    fun centerOpening() {
+        val part = state.value.selected as? Selected.OpeningPart ?: return
+        send(listOf(EngineCommand.CenterOpening(part.id)))
+    }
+
     /** Resizes the selected opening about its centre, as one undo step. */
     fun setOpeningSize(size: OpeningSize) {
         val part = state.value.selected as? Selected.OpeningPart ?: return
@@ -1014,13 +1047,14 @@ internal class EditorViewModel(
         }
     }
 
-    // Selects [picked]. The plan is drawn again when the space in focus changes: a selected
-    // space shows its sizes, and one let go its name.
+    // Selects [picked]. The plan is drawn again when what it shows of the selection changes: a
+    // selected space has its sizes and one let go its name; a selected opening has its chain.
     private suspend fun select(picked: Selected?) {
-        val focus = { selected: Selected? -> (selected as? Selected.SpacePart)?.at }
-        val before = focus(state.value.selected)
+        // What the drawing depends on: the point of a space, or an opening.
+        val shown = { selected: Selected? -> (selected as? Selected.SpacePart)?.at to (selected as? Selected.OpeningPart)?.id }
+        val before = shown(state.value.selected)
         state.update { it.copy(selected = picked, refused = null) }
-        if (focus(picked) != before) redraw()
+        if (shown(picked) != before) redraw()
     }
 
     // Asks the engine where a wall would end. The model does not change, so nothing is recorded.
@@ -1144,7 +1178,15 @@ internal class EditorViewModel(
             .map { same -> same.first().copy(amount = same.sumOf { it.amount }) }
 
     private fun selection(id: ElementId): Selected? =
-        model.walls[id]?.let { Selected.WallPart(id, it) } ?: model.openings[id]?.let { Selected.OpeningPart(id, it) }
+        model.walls[id]?.let { Selected.WallPart(id, it) }
+            ?: model.openings[id]?.let { opening ->
+                val alike =
+                    model.openings.values.count {
+                        it.kind == opening.kind && it.width == opening.width &&
+                            it.height == opening.height
+                    }
+                Selected.OpeningPart(id, opening, alike)
+            }
 
     // Shows a storey: [drawn] is its drawing if one came with the response, else the engine is
     // asked for it.

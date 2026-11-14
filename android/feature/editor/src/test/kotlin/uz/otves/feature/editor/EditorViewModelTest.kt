@@ -42,6 +42,7 @@ import uz.otves.engine.EngineResponse
 import uz.otves.engine.FillKind
 import uz.otves.engine.Footing
 import uz.otves.engine.Guide
+import uz.otves.engine.Hinge
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
 import uz.otves.engine.LayerFunction
@@ -62,6 +63,7 @@ import uz.otves.engine.Room
 import uz.otves.engine.RoomKind
 import uz.otves.engine.Space
 import uz.otves.engine.StrokeKind
+import uz.otves.engine.Swing
 import uz.otves.engine.Takeoff
 import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
@@ -250,6 +252,14 @@ class EditorViewModelTest {
 
                     command is EngineCommand.RemoveRoom -> {
                         remove(command.room)
+                    }
+
+                    command is EngineCommand.SetOpeningHinge -> {
+                        edit(command.opening) { (it as Opening).copy(hinge = command.hinge) }
+                    }
+
+                    command is EngineCommand.SetOpeningSwing -> {
+                        edit(command.opening) { (it as Opening).copy(swing = command.swing) }
                     }
 
                     command is EngineCommand.Draw -> {
@@ -1200,6 +1210,48 @@ class EditorViewModelTest {
         "5400".forEach { viewModel.typeDigit(it.digitToInt()) }
         viewModel.confirmLength()
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(wall, 5_400.mm))
+    }
+
+    @Test
+    fun aSelectedDoorIsHungOnItsOtherEdgeOpenedTheOtherWayAndCentred() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.buildWall()
+        viewModel.selectTool(Tool.DOOR)
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+        viewModel.tap(PointMm(5_000.mm, 0.mm), reach)
+        val door =
+            viewModel.uiState.value.drawing.polygons
+                .last { it.fill == FillKind.GAP }
+                .element!!
+        viewModel.selectTool(Tool.SELECT)
+        engine.pickNext = door
+        viewModel.tap(PointMm(5_000.mm, 0.mm), reach)
+
+        // The engine is told which opening is selected: its drawing has the opening's chain.
+        assertThat(engine.drawn.last().selected).isEqualTo(door)
+        val picked = viewModel.uiState.value.selected as Selected.OpeningPart
+        assertThat(picked.opening.hinge).isEqualTo(Hinge.NEAR)
+        assertThat(picked.opening.swing).isEqualTo(Swing.LEFT)
+        // Both doors are of one size: they share a mark.
+        assertThat(picked.alike).isEqualTo(2)
+
+        viewModel.flipHinge()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetOpeningHinge(door, Hinge.FAR))
+        viewModel.flipSwing()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetOpeningSwing(door, Swing.RIGHT))
+        val hung = (viewModel.uiState.value.selected as Selected.OpeningPart).opening
+        assertThat(hung.hinge).isEqualTo(Hinge.FAR)
+        assertThat(hung.swing).isEqualTo(Swing.RIGHT)
+        // Again, and it hangs as it did.
+        viewModel.flipHinge()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetOpeningHinge(door, Hinge.NEAR))
+
+        viewModel.centerOpening()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.CenterOpening(door))
+
+        // Let go, the drawing is asked with nothing selected.
+        viewModel.deselect()
+        assertThat(engine.drawn.last().selected).isNull()
     }
 
     @Test

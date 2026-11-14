@@ -151,6 +151,7 @@ internal fun PlanCanvas(
                 textSize = labelSize,
                 about = about,
                 rooms = RoomLabels(resources),
+                marks = { kind, number -> markText(resources, kind, number) },
             )
         }
     // The touch handler outlives a painter; it asks the one that painted last.

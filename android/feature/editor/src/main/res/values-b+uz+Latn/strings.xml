@@ -183,4 +183,12 @@
     <string name="size_wall_left">Chap</string>
     <string name="size_wall_top">Yuqori</string>
     <string name="size_wall_bottom">Pastki</string>
+    <string name="door_hinge">Oshiq-moshiq</string>
+    <string name="door_hinge_flip">Boshqa tomonga</string>
+    <string name="door_swing">Ochilishi</string>
+    <string name="door_swing_flip">Boshqa tomonga</string>
+    <string name="opening_place">Joylashuvi</string>
+    <string name="opening_center">O‘rtaga</string>
+    <string name="opening_mark">Marka</string>
+    <string name="opening_mark_count">%1$s, shunday %2$d ta</string>
 </resources>

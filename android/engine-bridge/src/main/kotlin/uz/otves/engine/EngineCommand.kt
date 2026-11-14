@@ -141,6 +141,26 @@ public sealed interface EngineCommand {
         public val kind: OpeningKind,
     ) : EngineCommand
 
+    /** Which edge a door's leaf hangs on (docs/adr/0017). */
+    public data class SetOpeningHinge(
+        public val opening: ElementId,
+        public val hinge: Hinge,
+    ) : EngineCommand
+
+    /** Which side of its wall a door's leaf opens to. */
+    public data class SetOpeningSwing(
+        public val opening: ElementId,
+        public val swing: Swing,
+    ) : EngineCommand
+
+    /**
+     * Puts the opening in the middle of the side of the room it is in, or of its wall when no room
+     * is there.
+     */
+    public data class CenterOpening(
+        public val opening: ElementId,
+    ) : EngineCommand
+
     public data class RemoveOpening(
         public val opening: ElementId,
     ) : EngineCommand
@@ -276,6 +296,8 @@ public sealed interface EngineCommand {
         public val digitWidth: Mm,
         /** The space that holds this point is drawn with its sizes in place of its name. */
         public val focus: PointMm? = null,
+        /** The selected element: an opening is drawn with the chain of the side it is in. */
+        public val selected: ElementId? = null,
     ) : EngineCommand
 
     /**

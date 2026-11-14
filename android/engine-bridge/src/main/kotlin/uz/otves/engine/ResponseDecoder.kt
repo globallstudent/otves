@@ -14,6 +14,7 @@ import uz.otves.schema.Drawing as DrawingTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.Fill as FillCode
 import uz.otves.schema.Guide as GuideStruct
+import uz.otves.schema.Hinge as HingeCode
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
 import uz.otves.schema.LayerFunction as LayerFunctionCode
@@ -29,6 +30,7 @@ import uz.otves.schema.PointMm as PointStruct
 import uz.otves.schema.QuantityLine as LineTable
 import uz.otves.schema.Room as RoomTable
 import uz.otves.schema.Stroke as StrokeCode
+import uz.otves.schema.Swing as SwingCode
 import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Unit as UnitCode
 import uz.otves.schema.Uuid as UuidStruct
@@ -271,6 +273,9 @@ internal object ResponseDecoder {
             TextKindCode.Clear -> TextKind.CLEAR
             TextKindCode.Pier -> TextKind.PIER
             TextKindCode.OpeningWidth -> TextKind.OPENING_WIDTH
+            TextKindCode.WindowMark -> TextKind.WINDOW_MARK
+            TextKindCode.DoorMark -> TextKind.DOOR_MARK
+            TextKindCode.EmptyMark -> TextKind.EMPTY_MARK
             else -> TextKind.UNKNOWN
         }
 
@@ -393,6 +398,18 @@ internal object ResponseDecoder {
             height = Mm(opening.height()),
             sill = Mm(opening.sill()),
             kind = openingKind(opening.kind()),
+            hinge =
+                when (opening.hinge()) {
+                    HingeCode.Near -> Hinge.NEAR
+                    HingeCode.Far -> Hinge.FAR
+                    else -> error("The engine sent an unknown hinge ${opening.hinge()}")
+                },
+            swing =
+                when (opening.swing()) {
+                    SwingCode.Left -> Swing.LEFT
+                    SwingCode.Right -> Swing.RIGHT
+                    else -> error("The engine sent an unknown swing ${opening.swing()}")
+                },
         )
 
     private fun locationLine(code: Int): LocationLine =

@@ -5,6 +5,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.mm
+import uz.otves.engine.Hinge
 import uz.otves.engine.LayerFunction
 import uz.otves.engine.Level
 import uz.otves.engine.LocationLine
@@ -13,6 +14,7 @@ import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointMm
 import uz.otves.engine.Room
 import uz.otves.engine.RoomKind
+import uz.otves.engine.Swing
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
 import uz.otves.engine.WallLayer
@@ -20,10 +22,12 @@ import uz.otves.engine.WallRole
 import uz.otves.engine.WallType
 import kotlin.random.Random
 import kotlin.uuid.Uuid
+import uz.otves.schema.Hinge as HingeCode
 import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.RoomKind as RoomKindCode
+import uz.otves.schema.Swing as SwingCode
 import uz.otves.schema.WallRole as WallRoleCode
 
 class RowMappingTest {
@@ -39,6 +43,8 @@ class RowMappingTest {
         assertThat(listOf(WINDOW, DOOR, EMPTY))
             .containsExactly(OpeningKindCode.Window, OpeningKindCode.Door, OpeningKindCode.Empty)
             .inOrder()
+        assertThat(listOf(NEAR, FAR)).containsExactly(HingeCode.Near, HingeCode.Far).inOrder()
+        assertThat(listOf(LEFT, RIGHT)).containsExactly(SwingCode.Left, SwingCode.Right).inOrder()
         assertThat(listOf(EXTERIOR, BEARING, PARTITION))
             .containsExactly(WallRoleCode.Exterior, WallRoleCode.Bearing, WallRoleCode.Partition)
             .inOrder()
@@ -79,7 +85,7 @@ class RowMappingTest {
     fun elementsComeBackFromTheirRows() {
         val storey = Level(elevation = (-450).mm, height = 3000.mm)
         val masonry = Wall(level, PointMm(0.mm, 0.mm), PointMm(6400.mm, (-20).mm), 380.mm, 2800.mm, LocationLine.RIGHT_FACE)
-        val door = Opening(wall, 1200.mm, 900.mm, 2100.mm, 0.mm, OpeningKind.DOOR)
+        val door = Opening(wall, 1200.mm, 900.mm, 2100.mm, 0.mm, OpeningKind.DOOR, Hinge.FAR, Swing.RIGHT)
 
         assertThat(storey.row(level).element()).isEqualTo(level to storey)
         assertThat(masonry.row(wall).element()).isEqualTo(wall to masonry)

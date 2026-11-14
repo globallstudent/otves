@@ -70,6 +70,7 @@ import uz.otves.engine.Turn
 import uz.otves.engine.Wall
 import uz.otves.engine.WallOutline
 import uz.otves.engine.WallTypeTemplate
+import kotlin.math.roundToLong
 import kotlin.uuid.Uuid
 
 /**
@@ -135,6 +136,9 @@ fun EditorRoute(
                 onRoomKind = viewModel::nameRoom,
                 onSize = viewModel::editSize,
                 onSizeWall = viewModel::chooseSizeWall,
+                onFlipHinge = viewModel::flipHinge,
+                onFlipSwing = viewModel::flipSwing,
+                onCenterOpening = viewModel::centerOpening,
                 onLocationLine = viewModel::setLocationLine,
                 onFlipWall = viewModel::flipWall,
                 onMaterials = viewModel::showMaterials,
@@ -203,6 +207,9 @@ internal data class EditorActions(
     val onRoomKind: (RoomKind) -> Unit = {},
     val onSize: (DrawnText) -> Unit = {},
     val onSizeWall: (swapped: Boolean) -> Unit = {},
+    val onFlipHinge: () -> Unit = {},
+    val onFlipSwing: () -> Unit = {},
+    val onCenterOpening: () -> Unit = {},
     val onLocationLine: (LocationLine) -> Unit = {},
     val onFlipWall: () -> Unit = {},
     val onMaterials: (open: Boolean) -> Unit = {},
@@ -261,7 +268,7 @@ internal fun EditorScreen(
                         ?: state.draft
                             ?.takeIf { state.measure != null }
                             ?.let { listOfNotNull(it.start, it.to?.point) }
-                            .orEmpty(),
+                        ?: selectedPoints(state),
                 onTap = actions.onTap,
                 onAim = actions.onAim,
                 onAimCancel = actions.onAimCancel,
@@ -311,6 +318,29 @@ internal fun EditorScreen(
         }
     }
 }
+
+// Where the selected wall or opening lies, so that it stays in view above its panel. An opening
+// is where the drawing has its gap.
+private fun selectedPoints(state: EditorUiState): List<PointMm> =
+    when (val selected = state.selected) {
+        is Selected.WallPart -> {
+            listOf(selected.wall.start, selected.wall.end)
+        }
+
+        is Selected.OpeningPart -> {
+            state.drawing.polygons
+                .firstOrNull { it.element == selected.id && it.fill == FillKind.GAP }
+                ?.points
+                .orEmpty()
+                .map { PointMm(Mm((it.x * MM_PER_METRE).roundToLong()), Mm((it.y * MM_PER_METRE).roundToLong())) }
+        }
+
+        is Selected.SpacePart, null -> {
+            emptyList()
+        }
+    }
+
+private const val MM_PER_METRE = 1000.0
 
 // One line that says what the next touch does, or what is wrong.
 @Composable

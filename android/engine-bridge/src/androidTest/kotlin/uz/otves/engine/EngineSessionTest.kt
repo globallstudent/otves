@@ -178,8 +178,10 @@ class EngineSessionTest {
         // Two jambs and the leaf, which swings a quarter turn.
         assertThat(drawing.lines.map { it.stroke }).containsExactly(StrokeKind.WALL_EDGE, StrokeKind.WALL_EDGE, StrokeKind.LEAF).inOrder()
         assertThat(drawing.arcs.single().centre).isEqualTo(PointM(1.05, 0.19))
-        val length = drawing.texts.single()
-        assertThat(length.kind).isEqualTo(TextKind.LENGTH)
+        val length = drawing.texts.single { it.kind == TextKind.LENGTH }
+        // The door is the first of its kind: ДВ-1.
+        assertThat(drawing.texts.single { it.isMark }.kind).isEqualTo(TextKind.DOOR_MARK)
+        assertThat(drawing.texts.single { it.isMark }.value).isEqualTo(1L)
         assertThat(length.value).isEqualTo(6000L)
         assertThat(length.at.x).isWithin(1e-9).of(3.0)
         assertThat(length.along).isEqualTo(PointM(1.0, 0.0))

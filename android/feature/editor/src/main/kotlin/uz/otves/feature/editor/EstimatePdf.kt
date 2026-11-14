@@ -63,6 +63,8 @@ internal class EstimatePdf(
             textSize = LABEL_SIZE,
             about = resources.getString(R.string.length_about_mark),
             rooms = RoomLabels(resources),
+            marks = { kind, number -> markText(resources, kind, number) },
+            allMarks = true,
         )
 
     // Where a storey's plan lies in its box: as large as the box allows, with room around the

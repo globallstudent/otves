@@ -3,7 +3,9 @@ package uz.otves.feature.editor
 import android.content.res.Resources
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalResources
+import uz.otves.engine.OpeningKind
 import uz.otves.engine.RoomKind
+import uz.otves.engine.TextKind
 import uz.otves.engine.roomKindOf
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -70,6 +72,29 @@ internal class RoomLabels(
         const val CM2_DIGITS = 4
     }
 }
+
+/** An opening's mark as plans write it: the letters of its kind and its number, «ОК-1». */
+internal fun markText(
+    resources: Resources,
+    kind: TextKind,
+    number: Long,
+): String =
+    resources.getString(
+        when (kind) {
+            TextKind.DOOR_MARK -> R.string.mark_door
+            TextKind.EMPTY_MARK -> R.string.mark_empty
+            else -> R.string.mark_window
+        },
+        number,
+    )
+
+/** The kind of mark an opening of [kind] has. */
+internal fun markKind(kind: OpeningKind): TextKind =
+    when (kind) {
+        OpeningKind.WINDOW -> TextKind.WINDOW_MARK
+        OpeningKind.DOOR -> TextKind.DOOR_MARK
+        OpeningKind.EMPTY -> TextKind.EMPTY_MARK
+    }
 
 @Composable
 internal fun roomKindName(kind: RoomKind): String = roomKindName(LocalResources.current, kind)

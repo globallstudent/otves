@@ -38,6 +38,9 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | mortar | раствор | qorishma | Cement-sand mix that fills the joints |
 | opening | проём | teshik | Window, door or empty opening in a wall |
 | hole | отверстие | teshik (plitada) | Opening through a slab or roof, not a wall |
+| hinge | петли | oshiq-moshiq | The edge of a doorway the leaf hangs on: near, towards the wall's start, or far (ADR 0017) |
+| swing | открывание | ochilish tomoni | The side of its wall a door's leaf opens to |
+| mark | марка | marka | The label openings of one kind and size share on the plan and in the schedule: ОК-1, ДВ-1 |
 | lintel | перемычка | peremichka | Beam over an opening (ГОСТ 948) |
 | bearing | опирание | tayanish | Length of a lintel or slab resting on the masonry on each side |
 | ring beam | армопояс | armopoyas, seysmopoyas | Seismic reinforced-concrete belt (КМК 2.01.03-19) |

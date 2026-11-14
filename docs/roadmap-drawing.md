@@ -12,7 +12,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line | A type starts from a catalog template; its layers cannot be edited yet |
 | Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015) | No room schedule; a room's clear sizes cannot be typed yet |
 | Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value (ADR 0016) | A wall cannot be placed at a typed distance yet, and there is no room tool |
-| Openings | Offset, size, sill, kind | No hinge side, swing, marks or schedule |
+| Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred (ADR 0017) | No schedule yet; sill and height are not typed in the app; no two-leaf doors |
 | Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
 | Tests | GoogleTest units, Kotlin unit tests, three instrumented suites | No golden jobs, no property tests, no screenshot tests, no benchmark |
 
@@ -130,7 +130,7 @@ flowchart LR
 | 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; layers of a type are not edited yet |
 | 4 | Rooms | `geom/spaces`, `Room`, floors and room texts in `drafting` | Room labels, room panel | v7 | G31, G34 | built; a room's sizes come with slice 5 |
 | 5 | Dimensions | Sizes in `drafting`, `SetDimension`, `translate_wall`, `set_distance`; `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | sizes and typed sizes built; wall by distance and the room tool open |
-| 6 | Openings | hinge, swing, marks, schedules | Door panel | v8 | G37 | |
+| 6 | Openings | hinge, swing, marks, `CenterOpening`, the selected opening's chain | Door panel | v8 | G37 | built; schedules come with the sheets |
 | 7 | Sheets | sheet purpose in `Draw`, schedules | Frame, tables, legend, PDF | — | G38 | |
 
 Slice 1 comes first because it is the smallest end-to-end change: it proves the recipe below before the larger slices use it. Columns, porch, stairs, tracing over a PDF, roof, facades and 3D follow slice 7.

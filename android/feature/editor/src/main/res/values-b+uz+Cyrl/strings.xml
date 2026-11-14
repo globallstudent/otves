@@ -183,4 +183,12 @@
     <string name="size_wall_left">Чап</string>
     <string name="size_wall_top">Юқори</string>
     <string name="size_wall_bottom">Пастки</string>
+    <string name="door_hinge">Ошиқ-мошиқ</string>
+    <string name="door_hinge_flip">Бошқа томонга</string>
+    <string name="door_swing">Очилиши</string>
+    <string name="door_swing_flip">Бошқа томонга</string>
+    <string name="opening_place">Жойлашуви</string>
+    <string name="opening_center">Ўртага</string>
+    <string name="opening_mark">Марка</string>
+    <string name="opening_mark_count">%1$s, шундай %2$d та</string>
 </resources>
