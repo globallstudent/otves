@@ -2,6 +2,7 @@ package uz.otves.engine
 
 import com.google.flatbuffers.FlatBufferBuilder
 import uz.otves.core.model.ElementId
+import uz.otves.core.model.Mm
 import uz.otves.schema.Command
 import uz.otves.schema.CommandEntry
 import uz.otves.schema.Element
@@ -11,6 +12,7 @@ import uz.otves.schema.AddLevel as AddLevelTable
 import uz.otves.schema.AddOpening as AddOpeningTable
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
+import uz.otves.schema.AddWallType as AddWallTypeTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
 import uz.otves.schema.BeginGesture as BeginGestureTable
@@ -20,6 +22,7 @@ import uz.otves.schema.Draw as DrawTable
 import uz.otves.schema.ElementChange as ChangeTable
 import uz.otves.schema.EndGesture as EndGestureTable
 import uz.otves.schema.FixedEnd as FixedEndCode
+import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
@@ -46,15 +49,22 @@ import uz.otves.schema.SetLevelRingBeam as SetLevelRingBeamTable
 import uz.otves.schema.SetOpeningKind as SetOpeningKindTable
 import uz.otves.schema.SetOpeningSill as SetOpeningSillTable
 import uz.otves.schema.SetWallHeight as SetWallHeightTable
+import uz.otves.schema.SetWallLayer as SetWallLayerTable
 import uz.otves.schema.SetWallLength as SetWallLengthTable
 import uz.otves.schema.SetWallLocationLine as SetWallLocationLineTable
+import uz.otves.schema.SetWallMirrored as SetWallMirroredTable
 import uz.otves.schema.SetWallThickness as SetWallThicknessTable
+import uz.otves.schema.SetWallType as SetWallTypeTable
+import uz.otves.schema.SetWallTypeRole as SetWallTypeRoleTable
 import uz.otves.schema.SetWallUnit as SetWallUnitTable
 import uz.otves.schema.Turn as TurnCode
 import uz.otves.schema.Undo as UndoTable
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
 import uz.otves.schema.WallEnd as WallEndCode
+import uz.otves.schema.WallLayer as WallLayerTable
+import uz.otves.schema.WallRole as WallRoleCode
+import uz.otves.schema.WallType as WallTypeTable
 
 /** Builds schema `Request` buffers (schema/engine.fbs). Every enum maps explicitly. */
 internal object RequestEncoder {
@@ -184,6 +194,43 @@ internal object RequestEncoder {
                 Command.SetWallLocationLine to SetWallLocationLineTable.endSetWallLocationLine(this)
             }
 
+            is EngineCommand.AddWallType -> {
+                val layers = command.layers.map { layer(null, 0, it.function, it.thickness, it.unit) }.toIntArray()
+                val vector = AddWallTypeTable.createLayersVector(this, layers)
+                Command.AddWallType to AddWallTypeTable.createAddWallType(this, code(command.role), vector)
+            }
+
+            is EngineCommand.SetWallTypeRole -> {
+                SetWallTypeRoleTable.startSetWallTypeRole(this)
+                SetWallTypeRoleTable.addType(this, uuid(command.type))
+                SetWallTypeRoleTable.addRole(this, code(command.role))
+                Command.SetWallTypeRole to SetWallTypeRoleTable.endSetWallTypeRole(this)
+            }
+
+            is EngineCommand.SetWallLayer -> {
+                SetWallLayerTable.startSetWallLayer(this)
+                SetWallLayerTable.addLayer(this, uuid(command.layer))
+                SetWallLayerTable.addThickness(this, command.thickness.value)
+                SetWallLayerTable.addUnitLength(this, command.unit?.length?.value ?: 0)
+                SetWallLayerTable.addUnitWidth(this, command.unit?.width?.value ?: 0)
+                SetWallLayerTable.addUnitHeight(this, command.unit?.height?.value ?: 0)
+                Command.SetWallLayer to SetWallLayerTable.endSetWallLayer(this)
+            }
+
+            is EngineCommand.SetWallType -> {
+                SetWallTypeTable.startSetWallType(this)
+                SetWallTypeTable.addWall(this, uuid(command.wall))
+                SetWallTypeTable.addType(this, uuid(command.type))
+                Command.SetWallType to SetWallTypeTable.endSetWallType(this)
+            }
+
+            is EngineCommand.SetWallMirrored -> {
+                SetWallMirroredTable.startSetWallMirrored(this)
+                SetWallMirroredTable.addWall(this, uuid(command.wall))
+                SetWallMirroredTable.addMirrored(this, command.mirrored)
+                Command.SetWallMirrored to SetWallMirroredTable.endSetWallMirrored(this)
+            }
+
             is EngineCommand.RemoveWall -> {
                 RemoveWallTable.startRemoveWall(this)
                 RemoveWallTable.addWall(this, uuid(command.wall))
@@ -311,6 +358,7 @@ internal object RequestEncoder {
                 WallTable.addHeight(this, command.height.value)
                 WallTable.addLocationLine(this, code(command.locationLine))
                 unit(command.unit)
+                command.type?.let { WallTable.addType(this, uuid(it)) }
                 val wall = WallTable.endWall(this)
                 AddSketchTable.startAddSketch(this)
                 AddSketchTable.addWall(this, wall)
@@ -368,7 +416,27 @@ internal object RequestEncoder {
             is Wall -> Element.Wall to wall(element)
             is Opening -> Element.Opening to opening(element)
             is Conditions -> Element.Conditions to conditions(element)
+            is WallType -> Element.WallType to WallTypeTable.createWallType(this, code(element.role))
+            is WallLayer -> Element.WallLayer to layer(element.type, element.position, element.function, element.thickness, element.unit)
         }
+
+    private fun FlatBufferBuilder.layer(
+        type: ElementId?,
+        position: Int,
+        function: LayerFunction,
+        thickness: Mm,
+        unit: UnitSize?,
+    ): Int {
+        WallLayerTable.startWallLayer(this)
+        type?.let { WallLayerTable.addType(this, uuid(it)) }
+        WallLayerTable.addPosition(this, position.toLong())
+        WallLayerTable.addFunction(this, code(function))
+        WallLayerTable.addThickness(this, thickness.value)
+        WallLayerTable.addUnitLength(this, unit?.length?.value ?: 0)
+        WallLayerTable.addUnitWidth(this, unit?.width?.value ?: 0)
+        WallLayerTable.addUnitHeight(this, unit?.height?.value ?: 0)
+        return WallLayerTable.endWallLayer(this)
+    }
 
     private fun FlatBufferBuilder.conditions(conditions: Conditions): Int =
         ConditionsTable.createConditions(
@@ -401,6 +469,8 @@ internal object RequestEncoder {
         WallTable.addLocationLine(this, code(wall.locationLine))
         unit(wall.unit)
         WallTable.addExact(this, wall.exact)
+        wall.type?.let { WallTable.addType(this, uuid(it)) }
+        WallTable.addMirrored(this, wall.mirrored)
         return WallTable.endWall(this)
     }
 
@@ -422,6 +492,21 @@ internal object RequestEncoder {
         OpeningTable.addKind(this, code(opening.kind))
         return OpeningTable.endOpening(this)
     }
+
+    private fun code(role: WallRole): Int =
+        when (role) {
+            WallRole.EXTERIOR -> WallRoleCode.Exterior
+            WallRole.BEARING -> WallRoleCode.Bearing
+            WallRole.PARTITION -> WallRoleCode.Partition
+        }
+
+    private fun code(function: LayerFunction): Int =
+        when (function) {
+            LayerFunction.STRUCTURE -> LayerFunctionCode.Structure
+            LayerFunction.INSULATION -> LayerFunctionCode.Insulation
+            LayerFunction.FACING -> LayerFunctionCode.Facing
+            LayerFunction.GAP -> LayerFunctionCode.Gap
+        }
 
     private fun code(line: LocationLine): Int =
         when (line) {

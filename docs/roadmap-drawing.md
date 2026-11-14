@@ -9,11 +9,11 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Area | Today | What blocks the goal |
 |---|---|---|
 | Drawing | `drafting::draft` places lengths and opening symbols; one `PlanPainter` paints the screen and the PDF (ADR 0013) | Only wall lengths and opening symbols are drawn yet |
-| Wall | One thickness, one masonry unit, a location line the app never shows | No layers, no hatches, no take-off for insulation or facing brick |
+| Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line | A type starts from a catalog template; its layers cannot be edited yet |
 | Rooms | None | No names, areas or room schedule |
 | Dimensions | One length per wall, along its location line | Plans give clear room sizes and chains along walls |
 | Openings | Offset, size, sill, kind | No hinge side, swing, marks or schedule |
-| Editor | `EditorViewModel` about 1 000 lines: it mirrors the model and talks to the engine and the job file. The screen is split into tool bar, panels and number pads | Every feature still lands in the view model |
+| Editor | `EditorViewModel` about 1 200 lines: it mirrors the model and talks to the engine and the job file. The screen is split into tool bar, panels and number pads | Every feature still lands in the view model |
 | Tests | GoogleTest units, Kotlin unit tests, three instrumented suites | No golden jobs, no property tests, no screenshot tests, no benchmark |
 
 ## Target shape
@@ -80,10 +80,10 @@ The engine answers a `Draw` query with a `Drawing` for one level.
 | `Wall` | gains `type` and `mirrored` (layers run the other way) |
 
 - A layer is its own element, so `Create`, `Delete` and `SetField` cover it and the job file gets a flat table.
-- The name on screen is the role and the total thickness: «Наружная 400». No strings enter the op log.
+- The name on screen is the role and the total thickness: «Наружная 410». No strings enter the op log.
 - A layer's outline is the wall's joined footprint clipped to the layer's strip. `join_walls` does not change, and mitres come out per layer.
 - The take-off measures layers the way it measures walls today. Role replaces the thickness test for load-bearing walls.
-- A job without types gets them when it opens: one type per distinct thickness and unit, as one op group. No second code path stays behind. `Wall.thickness` and `Wall.unit_*` are deprecated, not removed.
+- A wall without a type is read as one structure layer of its own thickness and unit. `build_of` is the one path geometry, drawing and take-off read walls through, so an old job opens unchanged. A wall with a type stores no thickness and no unit.
 - `content/catalog/wall_types.json` offers templates; the job stores sizes, as ADR 0008 does for units.
 
 ### 0015: rooms
@@ -125,7 +125,7 @@ flowchart LR
 | 0 | Groundwork | — | Split the editor files, `JobSession`, shared components, icon-only tool bar, tool options button | — | G31 bar, G43–G46 | in part |
 | 1 | Pencil | `geom/sketch`, `AddSketch`, `Wall.exact` | Pencil tool, refine lengths | v5 | G39–G42 | built |
 | 2 | Display list | `engine/drafting`, `Draw` | `PlanPainter`; delete placement code | — | — | built |
-| 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | next |
+| 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; layers of a type are not edited yet |
 | 4 | Rooms | `geom/rooms`, `Room` | Room labels, room panel | v7 | G31, G34 | |
 | 5 | Dimensions | chains, `SetDistance`, `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | |
 | 6 | Openings | hinge, swing, marks, schedules | Door panel | v8 | G37 | |
@@ -137,9 +137,9 @@ Slice 1 comes first because it is the smallest end-to-end change: it proves the 
 
 | Step | Result | Status |
 |---|---|---|
-| `data/project/JobSession` | One place sends commands and records the response, in order. It holds the mirrored model. The view model maps it to `UiState` | with slice 3 |
+| `data/project/JobSession` | One place sends commands and records the response, in order. It holds the mirrored model. The view model maps it to `UiState` | open, before slice 4 |
 | Split `EditorScreen.kt` | Tool bar, tool options, panels and number pads in files of their own, each under about 400 lines | done |
-| Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState` | with slice 3 |
+| Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState` | open, before slice 4 |
 | `core/designsystem` | Round button, panel, inspector row, number pad, switch row | when a second feature needs them |
 | Tool bar | Five icons, the chosen one filled; names in the tools sheet | done |
 | Tool options | One movable button per screen; its rows come from the tool. It hides for a tool with nothing to choose. Position and options persist per device | done, but the position lasts only while the app lives |

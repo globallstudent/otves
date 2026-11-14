@@ -7,11 +7,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import uz.otves.core.designsystem.OtvesIcons
+import uz.otves.core.model.Mm
 import uz.otves.engine.EngineError
 import uz.otves.engine.IssueKind
+import uz.otves.engine.LayerFunction
+import uz.otves.engine.LayerSpec
+import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.Turn
 import uz.otves.engine.Wall
+import uz.otves.engine.WallRole
 
 @Composable
 internal fun issueText(kind: IssueKind): String =
@@ -68,6 +73,45 @@ internal fun toolName(tool: Tool): String =
         Tool.DOOR -> stringResource(R.string.tool_door)
     }
 
+@Composable
+internal fun roleName(role: WallRole): String =
+    stringResource(
+        when (role) {
+            WallRole.EXTERIOR -> R.string.role_exterior
+            WallRole.BEARING -> R.string.role_bearing
+            WallRole.PARTITION -> R.string.role_partition
+        },
+    )
+
+// A wall type has no name of its own: it is called by what it is for and how thick it is,
+// «Наружная 410».
+@Composable
+internal fun wallKindName(
+    role: WallRole,
+    thickness: Mm,
+): String = stringResource(R.string.wall_kind_name, roleName(role), grouped(thickness))
+
+// What a wall is made of from the outer face in, each layer's thickness first:
+// «120 кирпич 1НФ, 100 утеплитель, 190 блок 390 × 190 × 188».
+@Composable
+internal fun layersText(
+    layers: List<LayerSpec>,
+    units: List<MasonryUnitOption>,
+): String {
+    val names =
+        layers.map { layer ->
+            val what =
+                when {
+                    layer.function == LayerFunction.INSULATION -> stringResource(R.string.layer_insulation)
+                    layer.function == LayerFunction.GAP -> stringResource(R.string.layer_gap)
+                    layer.unit != null -> unitTitle(layer.unit!!, units).replaceFirstChar { it.lowercase() }
+                    else -> stringResource(R.string.layer_masonry)
+                }
+            stringResource(R.string.layer_line, grouped(layer.thickness), what)
+        }
+    return names.joinToString(", ")
+}
+
 // Millimetres, as on drawings: «1500 × 1500».
 @Composable
 internal fun sizeName(size: OpeningSize): String = stringResource(R.string.opening_size, size.width.value, size.height.value)
@@ -80,5 +124,6 @@ internal fun refusalText(error: EngineError): String =
         EngineError.NO_WALL -> stringResource(R.string.refused_no_wall)
         EngineError.DOES_NOT_FIT -> stringResource(R.string.refused_does_not_fit)
         EngineError.BREAKS_JOIN -> stringResource(R.string.refused_breaks_join)
+        EngineError.TYPE_DECIDES -> stringResource(R.string.refused_type_decides)
         else -> stringResource(R.string.refused_other)
     }

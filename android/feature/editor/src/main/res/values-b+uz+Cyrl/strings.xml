@@ -127,4 +127,22 @@
     <string name="sketch_too_short">Чизиқ девор учун жуда қисқа</string>
     <string name="sketch_refine">Ўлчамларни аниқлаш · %1$d</string>
     <string name="sketch_wall_of">Девор %1$d / %2$d</string>
+    <string name="wall_kind_title">Девор тури</string>
+    <string name="wall_kind_none">Турсиз</string>
+    <string name="wall_kind_none_made">Битта материал, қалинлиги танланади</string>
+    <string name="wall_kind_catalog">Каталогдан</string>
+    <string name="role_exterior">Ташқи</string>
+    <string name="role_bearing">Юк кўтарувчи</string>
+    <string name="role_partition">Пардевор</string>
+    <string name="layer_insulation">иссиқлик қатлами</string>
+    <string name="layer_gap">оралиқ</string>
+    <string name="layer_masonry">терим</string>
+    <string name="inspector_location">Боғлаш</string>
+    <string name="location_inside">Ички</string>
+    <string name="location_axis">Ўқ</string>
+    <string name="location_outside">Ташқи</string>
+    <string name="inspector_layers">Қатламлар</string>
+    <string name="inspector_flip">Айлантириш</string>
+    <string name="item_insulation">Иссиқлик қатлами %1$s мм</string>
+    <string name="refused_type_decides">Қалинлик ва материални девор тури белгилайди</string>
 </resources>

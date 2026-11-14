@@ -10,10 +10,12 @@ import uz.otves.schema.Request
 import kotlin.uuid.Uuid
 import uz.otves.schema.AddSketch as AddSketchTable
 import uz.otves.schema.AddWall as AddWallTable
+import uz.otves.schema.AddWallType as AddWallTypeTable
 import uz.otves.schema.Aim as AimTable
 import uz.otves.schema.AimMeasured as AimMeasuredTable
 import uz.otves.schema.Draw as DrawTable
 import uz.otves.schema.FixedEnd as FixedEndCode
+import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.LoadContent as LoadContentTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.MoveWallEnd as MoveWallEndTable
@@ -22,9 +24,15 @@ import uz.otves.schema.Opening as OpeningTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
 import uz.otves.schema.Pick as PickTable
 import uz.otves.schema.PlaceOpening as PlaceOpeningTable
+import uz.otves.schema.SetWallLayer as SetWallLayerTable
 import uz.otves.schema.SetWallLength as SetWallLengthTable
+import uz.otves.schema.SetWallMirrored as SetWallMirroredTable
+import uz.otves.schema.SetWallType as SetWallTypeTable
+import uz.otves.schema.SetWallTypeRole as SetWallTypeRoleTable
 import uz.otves.schema.Turn as TurnCode
 import uz.otves.schema.WallEnd as WallEndCode
+import uz.otves.schema.WallLayer as WallLayerTable
+import uz.otves.schema.WallRole as WallRoleCode
 
 class RequestEncoderTest {
     private val level = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000001"))
@@ -254,6 +262,108 @@ class RequestEncoderTest {
         assertThat(Uuid.fromLongs(draw.level().high(), draw.level().low())).isEqualTo(level.uuid)
         assertThat(draw.textHeight()).isEqualTo(400L)
         assertThat(draw.digitWidth()).isEqualTo(210L)
+    }
+
+    @Test
+    fun aWallTypeCarriesItsRoleAndItsLayersFromTheOuterFaceIn() {
+        val brick = UnitSize(250.mm, 120.mm, 65.mm)
+        val add =
+            EngineCommand.AddWallType(
+                role = WallRole.BEARING,
+                layers =
+                    listOf(
+                        LayerSpec(LayerFunction.FACING, 120.mm, brick),
+                        LayerSpec(LayerFunction.INSULATION, 100.mm),
+                        LayerSpec(LayerFunction.STRUCTURE, 250.mm, brick),
+                    ),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(add)))
+
+        assertThat(request.commands(0).commandType()).isEqualTo(Command.AddWallType)
+        val type = request.commands(0).command(AddWallTypeTable()) as AddWallTypeTable
+        assertThat(type.role()).isEqualTo(WallRoleCode.Bearing)
+        assertThat(List(type.layersLength()) { type.layers(it).function() })
+            .containsExactly(LayerFunctionCode.Facing, LayerFunctionCode.Insulation, LayerFunctionCode.Structure)
+            .inOrder()
+        assertThat(List(type.layersLength()) { type.layers(it).thickness() }).containsExactly(120L, 100L, 250L).inOrder()
+        assertThat(type.layers(0).unitHeight()).isEqualTo(65L)
+        assertThat(type.layers(1).unitLength()).isEqualTo(0L)
+    }
+
+    @Test
+    fun aWallNamesItsTypeAndWhichFaceItsLayersStartFrom() {
+        val type = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000007"))
+        val layer = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000008"))
+        val typed = Wall(level, PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm), 0.mm, 2_800.mm, type = type, mirrored = true)
+        val commands =
+            listOf(
+                EngineCommand.AddWall(typed),
+                EngineCommand.SetWallType(wall, type),
+                EngineCommand.SetWallMirrored(wall, mirrored = true),
+                EngineCommand.SetWallLayer(layer, 150.mm, unit = null),
+                EngineCommand.SetWallTypeRole(type, WallRole.PARTITION),
+                EngineCommand.AddSketch(
+                    level,
+                    listOf(PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm)),
+                    300.mm,
+                    100.mm,
+                    true,
+                    0.mm,
+                    2_800.mm,
+                    type = type,
+                ),
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(commands))
+
+        val added = (request.commands(0).command(AddWallTable()) as AddWallTable).wall()
+        assertThat(Uuid.fromLongs(added.type().high(), added.type().low())).isEqualTo(type.uuid)
+        assertThat(added.mirrored()).isTrue()
+        assertThat(added.thickness()).isEqualTo(0L)
+        val set = request.commands(1).command(SetWallTypeTable()) as SetWallTypeTable
+        assertThat(Uuid.fromLongs(set.wall().high(), set.wall().low())).isEqualTo(wall.uuid)
+        assertThat(Uuid.fromLongs(set.type().high(), set.type().low())).isEqualTo(type.uuid)
+        assertThat((request.commands(2).command(SetWallMirroredTable()) as SetWallMirroredTable).mirrored()).isTrue()
+        val thicker = request.commands(3).command(SetWallLayerTable()) as SetWallLayerTable
+        assertThat(Uuid.fromLongs(thicker.layer().high(), thicker.layer().low())).isEqualTo(layer.uuid)
+        assertThat(thicker.thickness()).isEqualTo(150L)
+        assertThat(thicker.unitLength()).isEqualTo(0L)
+        assertThat((request.commands(4).command(SetWallTypeRoleTable()) as SetWallTypeRoleTable).role()).isEqualTo(WallRoleCode.Partition)
+        val sketched = (request.commands(5).command(AddSketchTable()) as AddSketchTable).wall()
+        assertThat(Uuid.fromLongs(sketched.type().high(), sketched.type().low())).isEqualTo(type.uuid)
+        // A wall with no type says so by leaving it out.
+        val plain = RequestEncoder.encode(listOf(EngineCommand.AddWall(typed.copy(type = null, thickness = 380.mm))))
+        assertThat((Request.getRootAsRequest(plain).commands(0).command(AddWallTable()) as AddWallTable).wall().type()).isNull()
+    }
+
+    @Test
+    fun aSavedJobCarriesItsWallTypesAndLayers() {
+        val type = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000007"))
+        val layer = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000008"))
+        val open =
+            EngineCommand.OpenModel(
+                elements =
+                    mapOf(
+                        type to WallType(WallRole.EXTERIOR),
+                        layer to WallLayer(type, position = 2, LayerFunction.STRUCTURE, 190.mm, UnitSize(390.mm, 190.mm, 188.mm)),
+                    ),
+                clock = 1L,
+            )
+
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(open)))
+
+        val opened = request.commands(0).command(OpenModelTable()) as OpenModelTable
+        assertThat(
+            List(opened.elementsLength()) {
+                opened.elements(it).elementType()
+            },
+        ).containsExactly(Element.WallType, Element.WallLayer).inOrder()
+        val saved = opened.elements(1).element(WallLayerTable()) as WallLayerTable
+        assertThat(Uuid.fromLongs(saved.type().high(), saved.type().low())).isEqualTo(type.uuid)
+        assertThat(saved.position()).isEqualTo(2L)
+        assertThat(saved.function()).isEqualTo(LayerFunctionCode.Structure)
+        assertThat(saved.unitWidth()).isEqualTo(190L)
     }
 
     @Test

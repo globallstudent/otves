@@ -71,6 +71,10 @@ public enum class FillKind {
     /** What an opening leaves of its wall. */
     GAP,
 
+    /** Masonry laid in front of the wall. */
+    FACING,
+    INSULATION,
+
     /** A fill from a newer engine than this app knows; it is not painted. */
     UNKNOWN,
 }
@@ -88,6 +92,9 @@ public enum class StrokeKind {
 
     /** A door's leaf and swing. */
     LEAF,
+
+    /** Where two layers of a wall meet. */
+    LAYER,
 
     /** A stroke from a newer engine than this app knows; it is not painted. */
     UNKNOWN,
@@ -280,7 +287,48 @@ public data class Wall(
      * length (docs/adr/0012).
      */
     public val exact: Boolean = true,
+    /**
+     * What kind of wall this is (docs/adr/0014); null for a wall with no type. A wall with a type
+     * has [thickness] zero and no [unit]: its type decides them.
+     */
+    public val type: ElementId? = null,
+    /**
+     * The type's layers start from the wall's right face, looking from start to end, or from its
+     * left one when this is set.
+     */
+    public val mirrored: Boolean = false,
 ) : EngineElement
+
+/** What a wall is for. Exterior and bearing walls carry load; partitions do not. */
+public enum class WallRole { EXTERIOR, BEARING, PARTITION }
+
+/** A kind of wall the job builds with (docs/adr/0014); its layers are [WallLayer] elements. */
+public data class WallType(
+    public val role: WallRole,
+) : EngineElement
+
+/** What a layer of a wall does; only structure and facing are laid from a unit. */
+public enum class LayerFunction { STRUCTURE, INSULATION, FACING, GAP }
+
+/**
+ * One layer of a wall [type]. Layers run from the wall's outer face in, in the order of their
+ * [position]s.
+ */
+public data class WallLayer(
+    public val type: ElementId,
+    public val position: Int,
+    public val function: LayerFunction,
+    public val thickness: Mm,
+    /** What a masonry layer is laid from; null until chosen, and always for insulation and gaps. */
+    public val unit: UnitSize? = null,
+) : EngineElement
+
+/** A layer of a wall type that is about to be made: what it does, how thick it is, its unit. */
+public data class LayerSpec(
+    public val function: LayerFunction,
+    public val thickness: Mm,
+    public val unit: UnitSize? = null,
+)
 
 /** A window, door or empty opening, placed along its wall from the start and up from the base. */
 public data class Opening(

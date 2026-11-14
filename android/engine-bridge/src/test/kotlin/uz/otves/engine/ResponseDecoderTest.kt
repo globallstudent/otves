@@ -24,6 +24,7 @@ import uz.otves.schema.Fill as FillCode
 import uz.otves.schema.Guide as GuideStruct
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
+import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.LogEntry as LogEntryTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
@@ -36,7 +37,10 @@ import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Unit as UnitCode
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
+import uz.otves.schema.WallLayer as WallLayerTable
 import uz.otves.schema.WallOutline as OutlineTable
+import uz.otves.schema.WallRole as WallRoleCode
+import uz.otves.schema.WallType as WallTypeTable
 
 class ResponseDecoderTest {
     private val level = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000001"))
@@ -258,6 +262,60 @@ class ResponseDecoderTest {
                     texts = listOf(DrawnText(wall, TextKind.ABOUT_LENGTH, 6400.mm, PointM(3.2, 0.415), PointM(1.0, 0.0))),
                 ),
             )
+    }
+
+    @Test
+    fun wallTypesLayersAndTypedWallsComeBackTyped() {
+        val type = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000007"))
+        val layer = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000008"))
+        val builder = FlatBufferBuilder(1024)
+        val typeValue = WallTypeTable.createWallType(builder, WallRoleCode.Partition)
+        WallLayerTable.startWallLayer(builder)
+        WallLayerTable.addType(builder, builder.uuid(type))
+        WallLayerTable.addPosition(builder, 1)
+        WallLayerTable.addFunction(builder, LayerFunctionCode.Insulation)
+        WallLayerTable.addThickness(builder, 100)
+        val layerValue = WallLayerTable.endWallLayer(builder)
+        WallTable.startWall(builder)
+        WallTable.addLevel(builder, builder.uuid(level))
+        WallTable.addStart(builder, PointStruct.createPointMm(builder, 0, 0))
+        WallTable.addEnd(builder, PointStruct.createPointMm(builder, 6000, 0))
+        WallTable.addHeight(builder, 2800)
+        WallTable.addType(builder, builder.uuid(type))
+        WallTable.addMirrored(builder, true)
+        val wallValue = WallTable.endWall(builder)
+        val changes =
+            listOf(
+                Triple(type, Element.WallType, typeValue),
+                Triple(layer, Element.WallLayer, layerValue),
+                Triple(wall, Element.Wall, wallValue),
+            ).map { (id, kind, value) ->
+                ChangeTable.startElementChange(builder)
+                ChangeTable.addId(builder, builder.uuid(id))
+                ChangeTable.addElementType(builder, kind)
+                ChangeTable.addElement(builder, value)
+                ChangeTable.endElementChange(builder)
+            }.toIntArray()
+        ResultTable.startCommandResult(builder)
+        ResultTable.addError(builder, ErrorCode.TypeDecides)
+        val refused = ResultTable.endCommandResult(builder)
+        val results = Response.createResultsVector(builder, intArrayOf(refused))
+        val changed = Response.createChangesVector(builder, changes)
+        Response.startResponse(builder)
+        Response.addVersion(builder, 1L)
+        Response.addResults(builder, results)
+        Response.addChanges(builder, changed)
+        builder.finish(Response.endResponse(builder), "OTVS")
+
+        val decoded = ResponseDecoder.decode(builder.dataBuffer())
+
+        assertThat(decoded.changes)
+            .containsExactly(
+                ElementChange(type, WallType(WallRole.PARTITION)),
+                ElementChange(layer, WallLayer(type, position = 1, LayerFunction.INSULATION, 100.mm)),
+                ElementChange(wall, Wall(level, PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), 0.mm, 2800.mm, type = type, mirrored = true)),
+            ).inOrder()
+        assertThat((decoded.results.single() as CommandResult.Failed).error).isEqualTo(EngineError.TYPE_DECIDES)
     }
 
     // A response like the engine's: one created wall, one failure, the wall's value and a deletion.

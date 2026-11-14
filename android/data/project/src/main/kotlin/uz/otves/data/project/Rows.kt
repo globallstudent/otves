@@ -5,8 +5,8 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// Tables of a job file, schema version 5 (docs/adr/0007 to 0010 and 0012). Ids are canonical UUID
-// text, lengths whole millimetres, enums the codes of schema/engine.fbs.
+// Tables of a job file, schema version 6 (docs/adr/0007 to 0010, 0012 and 0014). Ids are canonical
+// UUID text, lengths whole millimetres, enums the codes of schema/engine.fbs.
 
 @Entity(tableName = "job")
 internal data class JobRow(
@@ -45,6 +45,31 @@ internal data class WallRow(
     @ColumnInfo(name = "unit_height", defaultValue = "0") val unitHeight: Long,
     // Whether the length was typed or measured; a sketched wall is not until it gets one.
     @ColumnInfo(defaultValue = "1") val exact: Boolean,
+    // The wall's type; null for a wall with no type. A wall with one has thickness 0 and no unit.
+    @ColumnInfo(name = "type_id") val typeId: String?,
+    // The type's layers start from the wall's left face instead of its right one.
+    @ColumnInfo(defaultValue = "0") val mirrored: Boolean,
+)
+
+/** A kind of wall the job builds with (docs/adr/0014); its layers are in `wall_layer`. */
+@Entity(tableName = "wall_type")
+internal data class WallTypeRow(
+    @PrimaryKey val id: String,
+    val role: Int,
+)
+
+/** One layer of a wall type, from the wall's outer face in by [position]. */
+@Entity(tableName = "wall_layer", indices = [Index("type_id")])
+internal data class WallLayerRow(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "type_id") val typeId: String,
+    val position: Int,
+    val function: Int,
+    val thickness: Long,
+    // The masonry unit as laid; all zero for insulation, gaps and layers with none chosen.
+    @ColumnInfo(name = "unit_length") val unitLength: Long,
+    @ColumnInfo(name = "unit_width") val unitWidth: Long,
+    @ColumnInfo(name = "unit_height") val unitHeight: Long,
 )
 
 @Entity(tableName = "opening", indices = [Index("wall_id")])

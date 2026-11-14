@@ -6,6 +6,7 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.TextPaint
+import androidx.core.graphics.withClip
 import androidx.core.graphics.withRotation
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
@@ -18,6 +19,7 @@ import uz.otves.engine.PointM
 import uz.otves.engine.StrokeKind
 import uz.otves.engine.TextKind
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.roundToLong
 
@@ -29,6 +31,8 @@ internal data class PlanPalette(
     /** What an opening leaves of its wall: the paper under the plan. */
     val gap: Int,
     val edge: Int,
+    /** The lines of a layer of insulation, and the line where two layers meet. */
+    val layer: Int,
     val below: Int,
     val text: Int,
     val selection: Int,
@@ -65,6 +69,8 @@ internal class PlanPainter(
     hairline: Float,
     /** The width of the line round what is selected or to be fixed. */
     bold: Float,
+    /** How far apart the lines of a hatch lie. */
+    private val hatch: Float,
     textSize: Float,
     /** The mark before a length nobody has given: «≈». */
     private val about: String,
@@ -88,6 +94,7 @@ internal class PlanPainter(
         }
     private val path = Path()
     private val oval = RectF()
+    private val box = RectF()
 
     /** The size of the label text on a plan drawn at [scale] pixels a metre, to ask a drawing with. */
     fun labelSize(scale: Float): LabelSize =
@@ -110,7 +117,8 @@ internal class PlanPainter(
     ) {
         val (gaps, bodies) = drawing.polygons.partition { it.fill == FillKind.GAP }
         bodies.forEach { polygon(canvas, it, frame) }
-        bodies.filter { it.element != null && it.element == selected }.forEach { polygon ->
+        // A wall of several layers is marked once, by its outline.
+        bodies.filter { it.element != null && it.element == selected && it.stroke == StrokeKind.WALL_EDGE }.forEach { polygon ->
             trace(polygon.points, frame)
             fill.color = palette.selection and SELECTION_FILL
             canvas.drawPath(path, fill)
@@ -142,13 +150,24 @@ internal class PlanPainter(
         val inside =
             when (polygon.fill) {
                 FillKind.WALL -> palette.wall
-                FillKind.UNCHOSEN -> palette.unchosen
+
+                // Hatched layers are drawn on paper, as a wall with no material is.
+                FillKind.UNCHOSEN, FillKind.FACING, FillKind.INSULATION -> palette.unchosen
+
                 FillKind.GAP -> palette.gap
+
                 FillKind.NONE, FillKind.UNKNOWN -> null
             }
         if (inside != null) {
             fill.color = inside
             canvas.drawPath(path, fill)
+        }
+        // Facing masonry is hatched at 45°, as brickwork is on drawings. Insulation is hatched both
+        // ways in the lighter line, so it reads whichever way its wall runs.
+        when (polygon.fill) {
+            FillKind.FACING -> hatch(canvas, frame, palette.edge, crossed = false)
+            FillKind.INSULATION -> hatch(canvas, frame, palette.layer, crossed = true)
+            else -> Unit
         }
         colour(polygon.stroke)?.let {
             line.color = it
@@ -160,8 +179,44 @@ internal class PlanPainter(
         when (stroke) {
             StrokeKind.WALL_EDGE, StrokeKind.FRAME, StrokeKind.LEAF -> palette.edge
             StrokeKind.BELOW -> palette.below
+            StrokeKind.LAYER -> palette.layer
             StrokeKind.NONE, StrokeKind.UNKNOWN -> null
         }
+
+    // Slanted lines across the traced path, [hatch] apart. They are counted from the plan's origin,
+    // so a hatch stays on its wall when the plan moves, and runs on from one wall into the next.
+    private fun hatch(
+        canvas: Canvas,
+        frame: PlanFrame,
+        colour: Int,
+        crossed: Boolean,
+    ) {
+        path.computeBounds(box, true)
+        line.color = colour
+        val step = hatch * SQRT_2
+        canvas.withClip(path) {
+            // Every point of one line has the same x + y.
+            var sum = first(box.left + box.top, frame.originX + frame.originY, step)
+            while (sum <= box.right + box.bottom) {
+                drawLine(sum - box.bottom, box.bottom, sum - box.top, box.top, line)
+                sum += step
+            }
+            if (!crossed) return@withClip
+            // And every point of one line the other way the same x - y.
+            var difference = first(box.left - box.bottom, frame.originX - frame.originY, step)
+            while (difference <= box.right - box.top) {
+                drawLine(difference + box.top, box.top, difference + box.bottom, box.bottom, line)
+                difference += step
+            }
+        }
+    }
+
+    // The first value at or after [from] that lies a whole number of steps from [origin].
+    private fun first(
+        from: Float,
+        origin: Float,
+        step: Float,
+    ): Float = origin + ceil((from - origin) / step) * step
 
     // The traced path's outline in the bold line.
     private fun outline(
@@ -229,6 +284,7 @@ internal class PlanPainter(
     private companion object {
         const val MM_PER_METRE = 1000.0
         const val FULL_TURN = 360f
+        const val SQRT_2 = 1.4142135f
 
         // Medium, as the theme's label text.
         const val LABEL_WEIGHT = 500

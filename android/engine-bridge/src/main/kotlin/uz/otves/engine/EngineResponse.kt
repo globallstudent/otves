@@ -37,6 +37,9 @@ public enum class EngineError {
     /** A wall joined to a resized one would vanish, turn back on itself or come off the wall it stands against. */
     BREAKS_JOIN,
 
+    /** A thickness or unit given to a wall whose type decides them. */
+    TYPE_DECIDES,
+
     /** A code from a newer engine than this app knows. */
     UNKNOWN,
 }

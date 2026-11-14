@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import uz.otves.core.designsystem.OtvesIcons
 import uz.otves.core.designsystem.OtvesTheme
 import uz.otves.core.designsystem.SegmentedControl
+import uz.otves.engine.LayerSpec
+import uz.otves.engine.LocationLine
 import uz.otves.engine.OpeningKind
 
 // What the select tool picked, with its settings.
@@ -43,25 +45,7 @@ internal fun Inspector(
         }
         when (selected) {
             is Selected.WallPart -> {
-                val unit = selected.wall.unit
-                InspectorRow(stringResource(R.string.inspector_material)) {
-                    Pill(
-                        label = if (unit == null) stringResource(R.string.material_choose) else unitTitle(unit, state.catalog.units),
-                        selected = false,
-                        onClick = { actions.onMaterials(true) },
-                        trailing = OtvesIcons.ChevronDown,
-                    )
-                }
-                state.dimensions.find { it.id == selected.id }?.let { dimension ->
-                    InspectorRow(stringResource(R.string.length_title)) {
-                        Pill(stringResource(R.string.length_value, grouped(dimension.length)), false, { actions.onEditLength(selected.id) })
-                    }
-                }
-                InspectorRow(stringResource(R.string.inspector_thickness)) {
-                    state.thicknessesOf(unit).forEach { thickness ->
-                        Pill(grouped(thickness), thickness == selected.wall.thickness, { actions.onWallThickness(thickness) })
-                    }
-                }
+                WallRows(selected, state, actions)
             }
 
             is Selected.OpeningPart -> {
@@ -88,6 +72,72 @@ internal fun Inspector(
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+// A wall is what its type says, or with no type what it is laid from and how thick; then how
+// long it is and which of its lines its points lie on.
+@Composable
+private fun WallRows(
+    selected: Selected.WallPart,
+    state: EditorUiState,
+    actions: EditorActions,
+) {
+    val wall = selected.wall
+    val kind = state.kinds.find { it.id == wall.type }
+    InspectorRow(stringResource(R.string.wall_kind_title)) {
+        Pill(
+            label = if (kind == null) stringResource(R.string.wall_kind_none) else wallKindName(kind.role, kind.thickness),
+            selected = false,
+            onClick = { actions.onKinds(true) },
+            trailing = OtvesIcons.ChevronDown,
+        )
+    }
+    if (kind != null) {
+        Text(
+            layersText(kind.layers.map { (_, layer) -> LayerSpec(layer.function, layer.thickness, layer.unit) }, state.catalog.units),
+            style = MaterialTheme.typography.bodyMedium,
+            color = OtvesTheme.colors.inkSecondary,
+        )
+    } else {
+        InspectorRow(stringResource(R.string.inspector_material)) {
+            Pill(
+                label = if (wall.unit == null) stringResource(R.string.material_choose) else unitTitle(wall.unit!!, state.catalog.units),
+                selected = false,
+                onClick = { actions.onMaterials(true) },
+                trailing = OtvesIcons.ChevronDown,
+            )
+        }
+    }
+    state.dimensions.find { it.id == selected.id }?.let { dimension ->
+        InspectorRow(stringResource(R.string.length_title)) {
+            Pill(stringResource(R.string.length_value, grouped(dimension.length)), false, { actions.onEditLength(selected.id) })
+        }
+    }
+    if (kind == null) {
+        InspectorRow(stringResource(R.string.inspector_thickness)) {
+            state.thicknessesOf(wall.unit).forEach { thickness ->
+                Pill(grouped(thickness), thickness == wall.thickness, { actions.onWallThickness(thickness) })
+            }
+        }
+    }
+    // The outer face is the wall's right one, looking from its start, or its left one when the
+    // wall is turned round.
+    val outer = if (wall.mirrored) LocationLine.LEFT_FACE else LocationLine.RIGHT_FACE
+    val inner = if (wall.mirrored) LocationLine.RIGHT_FACE else LocationLine.LEFT_FACE
+    InspectorRow(stringResource(R.string.inspector_location)) {
+        Pill(stringResource(R.string.location_inside), wall.locationLine == inner, { actions.onLocationLine(inner) })
+        Pill(
+            stringResource(R.string.location_axis),
+            wall.locationLine == LocationLine.CENTER,
+            { actions.onLocationLine(LocationLine.CENTER) },
+        )
+        Pill(stringResource(R.string.location_outside), wall.locationLine == outer, { actions.onLocationLine(outer) })
+    }
+    if (kind != null && kind.layers.size > 1) {
+        InspectorRow(stringResource(R.string.inspector_layers)) {
+            Pill(stringResource(R.string.inspector_flip), false, actions.onFlipWall)
+        }
     }
 }
 

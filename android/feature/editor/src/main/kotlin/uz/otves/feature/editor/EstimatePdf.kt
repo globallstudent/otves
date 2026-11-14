@@ -48,6 +48,7 @@ internal class EstimatePdf(
                     unchosen = PAPER,
                     gap = PAPER,
                     edge = INK,
+                    layer = SECONDARY,
                     below = Color.TRANSPARENT,
                     text = SECONDARY,
                     selection = Color.TRANSPARENT,
@@ -55,6 +56,7 @@ internal class EstimatePdf(
                 ),
             hairline = HAIRLINE,
             bold = HAIRLINE,
+            hatch = HATCH_GAP,
             textSize = LABEL_SIZE,
             about = resources.getString(R.string.length_about_mark),
         )
@@ -259,6 +261,7 @@ internal class EstimatePdf(
         const val ROW_GAP = 6f
         const val ROW = TEXT_SIZE + 2 * ROW_GAP
         const val HAIRLINE = 0.6f
+        const val HATCH_GAP = 2.5f
         const val LABEL_SIZE = 7f
         const val LABEL_ROOM = 14f
 

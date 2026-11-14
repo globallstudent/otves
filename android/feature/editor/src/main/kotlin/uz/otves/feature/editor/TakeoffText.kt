@@ -31,6 +31,7 @@ internal fun itemName(
     val concrete = Regex("""concrete\.b(\d+)(?:_(\d+))?""").matchEntire(item)
     val rebar = Regex("""rebar\.a(\d+)(c?)\.d(\d+)""").matchEntire(item)
     val lintel = Regex("""lintel\.bar\.l(\d+)""").matchEntire(item)
+    val insulation = Regex("""insulation\.(\d+)""").matchEntire(item)
     return when {
         masonry != null -> {
             val (length, width, height) = masonry.destructured
@@ -73,6 +74,10 @@ internal fun itemName(
 
         lintel != null -> {
             resources.getString(R.string.item_lintel, decimetres(lintel.groupValues[1]))
+        }
+
+        insulation != null -> {
+            resources.getString(R.string.item_insulation, insulation.groupValues[1])
         }
 
         else -> {

@@ -153,7 +153,7 @@ internal fun ToolOptionsButton(
             }
             // A wall drawn without a material is left out of the take-off; the dot says where to choose one.
             val builds = state.tool == Tool.WALL || state.tool == Tool.PENCIL
-            if (builds && state.material == null && !open) {
+            if (builds && state.material == null && state.kind == null && !open) {
                 Box(Modifier.align(Alignment.TopEnd).size(12.dp).background(colors.warning, CircleShape))
             }
             if (open) {
@@ -259,38 +259,57 @@ private fun WallOptions(
     onClose: () -> Unit,
 ) {
     val colors = OtvesTheme.colors
-    val material = state.material
+    val kind = state.kinds.find { it.id == state.kind }
     OptionRow(
-        label = stringResource(R.string.inspector_material),
+        label = stringResource(R.string.wall_kind_title),
         onClick = {
             onClose()
-            actions.onMaterials(true)
+            actions.onKinds(true)
         },
     ) {
         Text(
-            if (material == null) stringResource(R.string.material_choose) else unitTitle(material, state.catalog.units),
+            if (kind == null) stringResource(R.string.wall_kind_none) else wallKindName(kind.role, kind.thickness),
             style = MaterialTheme.typography.titleSmall,
-            color = if (material == null) colors.warning else colors.ink,
             maxLines = 1,
         )
         Icon(OtvesIcons.ChevronRight, contentDescription = null, tint = colors.inkTertiary, modifier = Modifier.size(18.dp))
     }
     HorizontalDivider(color = colors.divider)
-    val thicknesses = state.thicknessesOf(material)
-    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Text(
-            stringResource(R.string.inspector_thickness),
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.inkSecondary,
-        )
-        SegmentedControl(
-            options = thicknesses.map { grouped(it) },
-            selected = thicknesses.indexOf(state.thickness),
-            onSelect = { actions.onThickness(thicknesses[it]) },
-            modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
-        )
+    // A wall with no type is laid from one material at one thickness; a type decides both.
+    if (kind == null) {
+        val material = state.material
+        OptionRow(
+            label = stringResource(R.string.inspector_material),
+            onClick = {
+                onClose()
+                actions.onMaterials(true)
+            },
+        ) {
+            Text(
+                if (material == null) stringResource(R.string.material_choose) else unitTitle(material, state.catalog.units),
+                style = MaterialTheme.typography.titleSmall,
+                color = if (material == null) colors.warning else colors.ink,
+                maxLines = 1,
+            )
+            Icon(OtvesIcons.ChevronRight, contentDescription = null, tint = colors.inkTertiary, modifier = Modifier.size(18.dp))
+        }
+        HorizontalDivider(color = colors.divider)
+        val thicknesses = state.thicknessesOf(material)
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Text(
+                stringResource(R.string.inspector_thickness),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.inkSecondary,
+            )
+            SegmentedControl(
+                options = thicknesses.map { grouped(it) },
+                selected = thicknesses.indexOf(state.thickness),
+                onSelect = { actions.onThickness(thicknesses[it]) },
+                modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
+            )
+        }
+        HorizontalDivider(color = colors.divider)
     }
-    HorizontalDivider(color = colors.divider)
     val ortho = stringResource(R.string.options_ortho)
     Row(
         verticalAlignment = Alignment.CenterVertically,

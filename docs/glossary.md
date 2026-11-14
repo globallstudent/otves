@@ -10,6 +10,12 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | level | этаж | qavat | Storey, including basement (подвал) and foundation; walls stand on one, heights measured from its floor |
 | wall | стена | devor | Masonry or block wall with thickness in bricks; its height is the masonry, below the ring beam |
 | location line | линия привязки | bog‘lash chizig‘i | The wall line whose points are stored: centre, left or right face |
+| wall type | тип стены | devor turi | What a wall is for and the layers it is built of; changed once, it changes every wall of it (ADR 0014) |
+| role | назначение стены | devor vazifasi | Exterior, bearing or partition; exterior and bearing walls carry load |
+| layer | слой | qatlam | One strip across a wall type, counted from the outer face in: structure, insulation, facing or gap |
+| facing | облицовка | qoplama | The outer masonry layer; hatched at 45° on the plan |
+| insulation | утеплитель | issiqlik qatlami | A layer counted by face area for each thickness; cross-hatched on the plan |
+| mirrored wall | развёрнутая стена | aylantirilgan devor | A wall whose outer face is its left, looking from start to end |
 | sketch | набросок | qoralama | A stroke drawn with a finger and read as walls (ADR 0012) |
 | drawing | чертёж | chizma | One level as a display list: polygons, lines, arcs and texts the engine placed and the app paints (ADR 0013) |
 | exact length | точный размер | aniq o‘lcham | A wall length that was typed or measured; a sketched wall's is written with «≈» until then |

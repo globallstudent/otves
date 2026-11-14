@@ -127,4 +127,22 @@
     <string name="sketch_too_short">Chiziq devor uchun juda qisqa</string>
     <string name="sketch_refine">O‘lchamlarni aniqlash · %1$d</string>
     <string name="sketch_wall_of">Devor %1$d / %2$d</string>
+    <string name="wall_kind_title">Devor turi</string>
+    <string name="wall_kind_none">Tursiz</string>
+    <string name="wall_kind_none_made">Bitta material, qalinligi tanlanadi</string>
+    <string name="wall_kind_catalog">Katalogdan</string>
+    <string name="role_exterior">Tashqi</string>
+    <string name="role_bearing">Yuk ko‘taruvchi</string>
+    <string name="role_partition">Pardevor</string>
+    <string name="layer_insulation">issiqlik qatlami</string>
+    <string name="layer_gap">oraliq</string>
+    <string name="layer_masonry">terim</string>
+    <string name="inspector_location">Bog‘lash</string>
+    <string name="location_inside">Ichki</string>
+    <string name="location_axis">O‘q</string>
+    <string name="location_outside">Tashqi</string>
+    <string name="inspector_layers">Qatlamlar</string>
+    <string name="inspector_flip">Aylantirish</string>
+    <string name="item_insulation">Issiqlik qatlami %1$s mm</string>
+    <string name="refused_type_decides">Qalinlik va materialni devor turi belgilaydi</string>
 </resources>

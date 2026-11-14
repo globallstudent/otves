@@ -16,6 +16,7 @@ import uz.otves.schema.Fill as FillCode
 import uz.otves.schema.Guide as GuideStruct
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
+import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.Level as LevelTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.LogEntry as LogEntryTable
@@ -30,7 +31,10 @@ import uz.otves.schema.TextKind as TextKindCode
 import uz.otves.schema.Unit as UnitCode
 import uz.otves.schema.Uuid as UuidStruct
 import uz.otves.schema.Wall as WallTable
+import uz.otves.schema.WallLayer as WallLayerTable
 import uz.otves.schema.WallOutline as OutlineTable
+import uz.otves.schema.WallRole as WallRoleCode
+import uz.otves.schema.WallType as WallTypeTable
 
 /**
  * Reads schema `Response` buffers (schema/engine.fbs). The engine ships with the app, so a value
@@ -207,6 +211,8 @@ internal object ResponseDecoder {
             FillCode.Wall -> FillKind.WALL
             FillCode.Unchosen -> FillKind.UNCHOSEN
             FillCode.Gap -> FillKind.GAP
+            FillCode.Facing -> FillKind.FACING
+            FillCode.Insulation -> FillKind.INSULATION
             else -> FillKind.UNKNOWN
         }
 
@@ -217,6 +223,7 @@ internal object ResponseDecoder {
             StrokeCode.Below -> StrokeKind.BELOW
             StrokeCode.Frame -> StrokeKind.FRAME
             StrokeCode.Leaf -> StrokeKind.LEAF
+            StrokeCode.Layer -> StrokeKind.LAYER
             else -> StrokeKind.UNKNOWN
         }
 
@@ -248,6 +255,8 @@ internal object ResponseDecoder {
                 Element.Wall -> wall(change.element(WallTable()) as WallTable)
                 Element.Opening -> opening(change.element(OpeningTable()) as OpeningTable)
                 Element.Conditions -> conditions(change.element(ConditionsTable()) as ConditionsTable)
+                Element.WallType -> WallType(wallRole((change.element(WallTypeTable()) as WallTypeTable).role()))
+                Element.WallLayer -> wallLayer(change.element(WallLayerTable()) as WallLayerTable)
                 else -> error("The engine sent an unknown element type ${change.elementType()}")
             }
         return ElementChange(id = id, element = element)
@@ -300,7 +309,33 @@ internal object ResponseDecoder {
                     null
                 },
             exact = wall.exact(),
+            type = wall.type()?.let(::id),
+            mirrored = wall.mirrored(),
         )
+
+    private fun wallLayer(layer: WallLayerTable): WallLayer =
+        WallLayer(
+            type = id(checkNotNull(layer.type()) { "A wall layer has no type" }),
+            position = layer.position().toInt(),
+            function =
+                when (layer.function()) {
+                    LayerFunctionCode.Structure -> LayerFunction.STRUCTURE
+                    LayerFunctionCode.Insulation -> LayerFunction.INSULATION
+                    LayerFunctionCode.Facing -> LayerFunction.FACING
+                    LayerFunctionCode.Gap -> LayerFunction.GAP
+                    else -> error("The engine sent an unknown layer function ${layer.function()}")
+                },
+            thickness = Mm(layer.thickness()),
+            unit = if (layer.unitLength() > 0) UnitSize(Mm(layer.unitLength()), Mm(layer.unitWidth()), Mm(layer.unitHeight())) else null,
+        )
+
+    private fun wallRole(code: Int): WallRole =
+        when (code) {
+            WallRoleCode.Exterior -> WallRole.EXTERIOR
+            WallRoleCode.Bearing -> WallRole.BEARING
+            WallRoleCode.Partition -> WallRole.PARTITION
+            else -> error("The engine sent an unknown wall role $code")
+        }
 
     private fun opening(opening: OpeningTable): Opening =
         Opening(
@@ -356,6 +391,7 @@ internal object ResponseDecoder {
             ErrorCode.DoesNotFit -> EngineError.DOES_NOT_FIT
             ErrorCode.ConditionOutOfRange -> EngineError.CONDITION_OUT_OF_RANGE
             ErrorCode.BreaksJoin -> EngineError.BREAKS_JOIN
+            ErrorCode.TypeDecides -> EngineError.TYPE_DECIDES
             else -> EngineError.UNKNOWN
         }
 }

@@ -4,16 +4,23 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.mm
+import uz.otves.engine.LayerFunction
 import uz.otves.engine.Level
 import uz.otves.engine.LocationLine
 import uz.otves.engine.Opening
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointMm
+import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
+import uz.otves.engine.WallLayer
+import uz.otves.engine.WallRole
+import uz.otves.engine.WallType
 import kotlin.random.Random
 import kotlin.uuid.Uuid
+import uz.otves.schema.LayerFunction as LayerFunctionCode
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.OpeningKind as OpeningKindCode
+import uz.otves.schema.WallRole as WallRoleCode
 
 class RowMappingTest {
     private val level = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000001"))
@@ -28,6 +35,28 @@ class RowMappingTest {
         assertThat(listOf(WINDOW, DOOR, EMPTY))
             .containsExactly(OpeningKindCode.Window, OpeningKindCode.Door, OpeningKindCode.Empty)
             .inOrder()
+        assertThat(listOf(EXTERIOR, BEARING, PARTITION))
+            .containsExactly(WallRoleCode.Exterior, WallRoleCode.Bearing, WallRoleCode.Partition)
+            .inOrder()
+        assertThat(listOf(STRUCTURE, INSULATION, FACING, GAP))
+            .containsExactly(LayerFunctionCode.Structure, LayerFunctionCode.Insulation, LayerFunctionCode.Facing, LayerFunctionCode.Gap)
+            .inOrder()
+    }
+
+    @Test
+    fun wallTypesLayersAndTypedWallsComeBackFromTheirRows() {
+        val type = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000007"))
+        val layer = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000008"))
+        val outside = WallType(WallRole.EXTERIOR)
+        val facing = WallLayer(type, position = 0, LayerFunction.FACING, 120.mm, UnitSize(250.mm, 120.mm, 65.mm))
+        val wool = WallLayer(type, position = 1, LayerFunction.INSULATION, 100.mm)
+        val typed = Wall(level, PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), 0.mm, 2800.mm, type = type, mirrored = true)
+
+        assertThat(outside.row(type).element()).isEqualTo(type to outside)
+        assertThat(facing.row(layer).element()).isEqualTo(layer to facing)
+        assertThat(wool.row(layer).element()).isEqualTo(layer to wool)
+        assertThat(typed.row(wall).element()).isEqualTo(wall to typed)
+        assertThat(typed.row(wall).typeId).isEqualTo("019a5f00-0000-7000-8000-000000000007")
     }
 
     @Test

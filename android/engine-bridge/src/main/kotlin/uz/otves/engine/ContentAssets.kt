@@ -19,6 +19,16 @@ public data class MasonryUnitOption(
 
 public enum class MasonryUnitKind { BRICK, STONE, BLOCK }
 
+/**
+ * A wall make-up the catalog offers (content/catalog/wall_types.json): what the wall is for and
+ * its layers from the outer face in. The job keeps the sizes, not the [id].
+ */
+public data class WallTypeTemplate(
+    public val id: String,
+    public val role: WallRole,
+    public val layers: List<LayerSpec>,
+)
+
 /** What the app offers the builder to choose from (content/catalog); sizes come from standards. */
 public data class Catalog(
     public val units: List<MasonryUnitOption> = emptyList(),
@@ -26,6 +36,8 @@ public data class Catalog(
     public val ringBeamHeights: List<Mm> = emptyList(),
     /** The values offered for each estimating condition, with the norm default among them. */
     public val conditions: Map<Condition, ConditionChoices> = emptyMap(),
+    /** Wall make-ups to start a wall type from. */
+    public val wallTypes: List<WallTypeTemplate> = emptyList(),
 )
 
 /** What a condition may be set to; [default] is what the norms use while it is unset. */
@@ -40,16 +52,53 @@ public object ContentAssets {
     private const val UNITS = "catalog/masonry_units.json"
     private const val RING_BEAM = "catalog/ring_beam.json"
     private const val CONDITIONS = "catalog/conditions.json"
+    private const val WALL_TYPES = "catalog/wall_types.json"
 
     public fun load(assets: AssetManager): EngineCommand.LoadContent =
         EngineCommand.LoadContent(norms = read(assets, "norms"), rules = read(assets, "rules"))
 
-    public fun catalog(assets: AssetManager): Catalog =
-        Catalog(
-            units = masonryUnits(text(assets, UNITS)),
+    public fun catalog(assets: AssetManager): Catalog {
+        val units = masonryUnits(text(assets, UNITS))
+        return Catalog(
+            units = units,
             ringBeamHeights = lengths(JSONObject(text(assets, RING_BEAM)).getJSONArray("heights")),
             conditions = conditions(text(assets, CONDITIONS)),
+            wallTypes = wallTypes(text(assets, WALL_TYPES), units),
         )
+    }
+
+    /**
+     * The wall make-ups to offer, in catalog order, with each masonry layer's unit looked up in
+     * [units]. A make-up with an unknown role, function or unit is left out.
+     */
+    internal fun wallTypes(
+        json: String,
+        units: List<MasonryUnitOption>,
+    ): List<WallTypeTemplate> {
+        val types = JSONObject(json).getJSONArray("types")
+        return (0 until types.length()).mapNotNull { index ->
+            val type = types.getJSONObject(index)
+            val role = WallRole.entries.find { it.name.equals(type.getString("role"), ignoreCase = true) }
+            val layers = type.getJSONArray("layers")
+            val specs = (0 until layers.length()).map { layerSpec(layers.getJSONObject(it), units) }
+            if (role == null || specs.isEmpty() ||
+                specs.any { it == null }
+            ) {
+                null
+            } else {
+                WallTypeTemplate(type.getString("id"), role, specs.filterNotNull())
+            }
+        }
+    }
+
+    private fun layerSpec(
+        layer: JSONObject,
+        units: List<MasonryUnitOption>,
+    ): LayerSpec? {
+        val function = LayerFunction.entries.find { it.name.equals(layer.getString("function"), ignoreCase = true) } ?: return null
+        val unit = if (layer.has("unit")) units.find { it.id == layer.getString("unit") }?.size ?: return null else null
+        return LayerSpec(function, Mm(layer.getLong("thickness")), unit)
+    }
 
     internal fun conditions(json: String): Map<Condition, ConditionChoices> {
         val all = JSONObject(json)

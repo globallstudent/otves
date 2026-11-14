@@ -21,6 +21,8 @@ class EngineSessionTest {
 
     private fun EngineResponse.createdId(): ElementId = checkNotNull((results.single() as CommandResult.Done).created)
 
+    private fun EngineResponse.createdIdOf(index: Int): ElementId = checkNotNull((results[index] as CommandResult.Done).created)
+
     @Test
     fun levelWallDragAndUndoTravelThroughTheEngine() {
         val ground = Level(elevation = 0.mm, height = 3000.mm)
@@ -222,6 +224,44 @@ class EngineSessionTest {
         assertThat(lines.map { it.item }).contains("concrete.b15")
         assertThat(lines.map { it.item }).doesNotContain("mesh.junction")
         assertThat(ContentAssets.catalog(assets).units.map { it.size }).contains(brick)
+    }
+
+    @Test
+    fun aWallOfATypeFromTheCatalogIsDrawnAndCountedLayerByLayer() {
+        val assets = InstrumentationRegistry.getInstrumentation().targetContext.assets
+        session.send(listOf(ContentAssets.load(assets)))
+        // The first make-up of the catalog: facing brick, insulation and block.
+        val template = ContentAssets.catalog(assets).wallTypes.first()
+        assertThat(template.role).isEqualTo(WallRole.EXTERIOR)
+        assertThat(
+            template.layers.map {
+                it.function
+            },
+        ).containsExactly(LayerFunction.FACING, LayerFunction.INSULATION, LayerFunction.STRUCTURE).inOrder()
+        assertThat(template.layers.map { it.thickness }).containsExactly(120.mm, 100.mm, 190.mm).inOrder()
+        val level = session.send(listOf(EngineCommand.AddLevel(Level(0.mm, 3000.mm)))).createdId()
+
+        val typed = session.send(listOf(EngineCommand.AddWallType(template.role, template.layers)))
+        val type = typed.createdId()
+        assertThat(typed.changes.first { it.id == type }.element).isEqualTo(WallType(WallRole.EXTERIOR))
+        val layers = typed.changes.mapNotNull { it.element as? WallLayer }.sortedBy { it.position }
+        assertThat(layers.map { it.thickness }).containsExactly(120.mm, 100.mm, 190.mm).inOrder()
+        assertThat(layers.all { it.type == type }).isTrue()
+
+        val wall = Wall(level, PointMm(0.mm, 0.mm), PointMm(6000.mm, 0.mm), thickness = 0.mm, height = 2800.mm, type = type)
+        val built = session.send(listOf(EngineCommand.AddWall(wall), EngineCommand.Draw(level, 300.mm, 150.mm)))
+
+        val drawing = checkNotNull((built.results[1] as CommandResult.Done).drawing)
+        assertThat(
+            drawing.polygons.map { it.fill },
+        ).containsExactly(FillKind.FACING, FillKind.INSULATION, FillKind.WALL, FillKind.NONE).inOrder()
+        assertThat(drawing.polygons.last().stroke).isEqualTo(StrokeKind.WALL_EDGE)
+        val lines = (built.takeoff as Takeoff.Lines).lines
+        assertThat(lines.single { it.item == "insulation.100" }.amount).isWithin(1e-9).of(16.8)
+        assertThat(lines.map { it.item }).containsAtLeast("masonry_unit.250x120x65", "masonry_unit.390x190x188")
+
+        val refused = session.send(listOf(EngineCommand.SetWallThickness(built.createdIdOf(0), 250.mm)))
+        assertThat((refused.results.single() as CommandResult.Failed).error).isEqualTo(EngineError.TYPE_DECIDES)
     }
 
     @Test

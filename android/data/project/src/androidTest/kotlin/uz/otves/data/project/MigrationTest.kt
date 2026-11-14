@@ -29,7 +29,7 @@ class MigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(5).use { connection ->
+        helper.runMigrationsAndValidate(6).use { connection ->
             // docs/adr/0010: no footing until the builder gives one.
             connection.prepare("SELECT footing_width, footing_depth FROM level").use { level ->
                 assertThat(level.step()).isTrue()
@@ -44,6 +44,16 @@ class MigrationTest {
             connection.prepare("SELECT thickness, unit_length, unit_width, unit_height, exact FROM wall").use { wall ->
                 assertThat(wall.step()).isTrue()
                 assertThat((0..4).map(wall::getLong)).containsExactly(380L, 0L, 0L, 0L, 1L).inOrder()
+            }
+            // docs/adr/0014: old walls have no type, and the job has none to offer yet.
+            connection.prepare("SELECT type_id, mirrored FROM wall").use { wall ->
+                assertThat(wall.step()).isTrue()
+                assertThat(wall.isNull(0)).isTrue()
+                assertThat(wall.getLong(1)).isEqualTo(0L)
+            }
+            connection.prepare("SELECT (SELECT COUNT(*) FROM wall_type) + (SELECT COUNT(*) FROM wall_layer)").use { types ->
+                assertThat(types.step()).isTrue()
+                assertThat(types.getLong(0)).isEqualTo(0L)
             }
             connection.prepare("SELECT ring_beam, junction_meshes FROM level").use { level ->
                 assertThat(level.step()).isTrue()

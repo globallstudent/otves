@@ -44,7 +44,10 @@ import uz.otves.engine.Footing
 import uz.otves.engine.Guide
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
+import uz.otves.engine.LayerFunction
+import uz.otves.engine.LayerSpec
 import uz.otves.engine.Level
+import uz.otves.engine.LocationLine
 import uz.otves.engine.LogEntry
 import uz.otves.engine.MasonryUnitKind
 import uz.otves.engine.MasonryUnitOption
@@ -62,7 +65,11 @@ import uz.otves.engine.Turn
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
 import uz.otves.engine.WallEnd
+import uz.otves.engine.WallLayer
 import uz.otves.engine.WallOutline
+import uz.otves.engine.WallRole
+import uz.otves.engine.WallType
+import uz.otves.engine.WallTypeTemplate
 import uz.otves.schema.CommandKind
 import kotlin.math.abs
 import kotlin.math.sign
@@ -283,6 +290,36 @@ class EditorViewModelTest {
 
                     command is EngineCommand.SetWallUnit -> {
                         edit(command.wall) { (it as Wall).copy(unit = command.unit) }
+                    }
+
+                    command is EngineCommand.AddWallType -> {
+                        val type = ElementId(Uuid.fromLongs(++next, 0))
+                        val made =
+                            listOf(type to WallType(command.role)) +
+                                command.layers.mapIndexed { position, layer ->
+                                    ElementId(Uuid.fromLongs(++next, 0)) to
+                                        WallLayer(type, position, layer.function, layer.thickness, layer.unit)
+                                }
+                        elements += made
+                        changes += made.map { (id, element) -> ElementChange(id, element) }
+                        steps.addLast {
+                            made.forEach { elements.remove(it.first) }
+                            made.map { ElementChange(it.first, null) }
+                        }
+                        results += CommandResult.Done(type)
+                    }
+
+                    // The type decides the thickness and the unit from here on.
+                    command is EngineCommand.SetWallType -> {
+                        edit(command.wall) { (it as Wall).copy(type = command.type, thickness = 0.mm, unit = null) }
+                    }
+
+                    command is EngineCommand.SetWallMirrored -> {
+                        edit(command.wall) { (it as Wall).copy(mirrored = command.mirrored) }
+                    }
+
+                    command is EngineCommand.SetWallLocationLine -> {
+                        edit(command.wall) { (it as Wall).copy(locationLine = command.locationLine) }
                     }
 
                     command is EngineCommand.SetLevelRingBeam -> {
@@ -823,6 +860,140 @@ class EditorViewModelTest {
             assertThat(drawings[1]).isNull()
             assertThat(upper).isNotEqualTo(level)
         }
+
+    // The outside wall of the catalog: facing brick, insulation and block, 410 mm.
+    private val outside =
+        WallTypeTemplate(
+            "exterior.brick120_wool100_block190",
+            WallRole.EXTERIOR,
+            listOf(
+                LayerSpec(LayerFunction.FACING, 120.mm, brick),
+                LayerSpec(LayerFunction.INSULATION, 100.mm),
+                LayerSpec(LayerFunction.STRUCTURE, 190.mm, block),
+            ),
+        )
+
+    @Test
+    fun aWallTypeFromTheCatalogIsMadeOnceAndBuildsTheWallsDrawnNext() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog.copy(wallTypes = listOf(outside)) }, store, prices)
+        viewModel.showKinds(true)
+
+        viewModel.addKind(outside)
+
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.AddWallType(WallRole.EXTERIOR, outside.layers))
+        val state = viewModel.uiState.value
+        val kind = state.kinds.single()
+        assertThat(kind.role).isEqualTo(WallRole.EXTERIOR)
+        assertThat(
+            kind.layers.map {
+                it.second.function
+            },
+        ).containsExactly(LayerFunction.FACING, LayerFunction.INSULATION, LayerFunction.STRUCTURE).inOrder()
+        assertThat(kind.thickness).isEqualTo(410.mm)
+        assertThat(state.kind).isEqualTo(kind.id)
+        assertThat(state.drawnThickness).isEqualTo(410.mm)
+        assertThat(state.kindsOpen).isFalse()
+        // The type and its three layers are written to the job.
+        assertThat(store.recorded.last().changes).hasSize(4)
+
+        // A wall of a type has no thickness or unit of its own.
+        viewModel.tap(PointMm(0.mm, 0.mm), reach)
+        viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
+        val built = (engine.sent.last().single() as EngineCommand.AddWall).wall
+        assertThat(built.type).isEqualTo(kind.id)
+        assertThat(built.thickness).isEqualTo(0.mm)
+        assertThat(built.unit).isNull()
+
+        // The same make-up again is the type the job already has.
+        val requests = engine.sent.size
+        viewModel.addKind(outside)
+        assertThat(engine.sent).hasSize(requests)
+        assertThat(viewModel.uiState.value.kinds).hasSize(1)
+    }
+
+    @Test
+    fun aSketchIsBuiltOfTheChosenType() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.addKind(outside)
+        val kind = viewModel.uiState.value.kind
+        viewModel.selectTool(Tool.PENCIL)
+
+        viewModel.sketch(listOf(PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm)), reach)
+
+        val sent = engine.sent.last().single() as EngineCommand.AddSketch
+        assertThat(sent.type).isEqualTo(kind)
+        assertThat(sent.thickness).isEqualTo(0.mm)
+        assertThat(sent.unit).isNull()
+    }
+
+    @Test
+    fun aSelectedWallTakesATypeTurnsRoundAndIsTiedToAFace() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        val wall = viewModel.buildWall()
+        viewModel.selectTool(Tool.SELECT)
+        engine.pickNext = wall
+        viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
+
+        viewModel.showKinds(true)
+        viewModel.addKind(outside)
+
+        val kind =
+            viewModel.uiState.value.kinds
+                .single()
+                .id
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallType(wall, kind))
+        val typed = (viewModel.uiState.value.selected as Selected.WallPart).wall
+        assertThat(typed.type).isEqualTo(kind)
+        assertThat(typed.thickness).isEqualTo(0.mm)
+        // No choice was made for new walls yet, so they are built of this type too.
+        assertThat(viewModel.uiState.value.kind).isEqualTo(kind)
+
+        viewModel.flipWall()
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallMirrored(wall, mirrored = true))
+        assertThat((viewModel.uiState.value.selected as Selected.WallPart).wall.mirrored).isTrue()
+
+        viewModel.setLocationLine(LocationLine.LEFT_FACE)
+        assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLocationLine(wall, LocationLine.LEFT_FACE))
+    }
+
+    @Test
+    fun wallsGoBackToNoTypeWhenAskedAndWhenUndoTakesTheTypeAway() {
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+        viewModel.addKind(outside)
+        val kind = viewModel.uiState.value.kind
+
+        viewModel.chooseKind(null)
+        assertThat(viewModel.uiState.value.kind).isNull()
+        assertThat(viewModel.uiState.value.kinds).hasSize(1)
+        viewModel.chooseKind(kind)
+        assertThat(viewModel.uiState.value.kind).isEqualTo(kind)
+
+        viewModel.undo()
+        assertThat(viewModel.uiState.value.kinds).isEmpty()
+        assertThat(viewModel.uiState.value.kind).isNull()
+    }
+
+    @Test
+    fun aSavedJobGoesOnWithTheTypeOfItsLastWall() {
+        val type = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000020"))
+        val layer = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000021"))
+        val wall = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000022"))
+        val saved =
+            mapOf(
+                level to Level(0.mm, 3_000.mm),
+                type to WallType(WallRole.BEARING),
+                layer to WallLayer(type, 0, LayerFunction.STRUCTURE, 380.mm, brick),
+                wall to Wall(level, PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm), 0.mm, 2_800.mm, type = type),
+            )
+        store = FakeStore(SavedJob(saved, clock = 42L, name = "Дом"))
+
+        val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+
+        val state = viewModel.uiState.value
+        assertThat(state.kinds.single().thickness).isEqualTo(380.mm)
+        assertThat(state.kind).isEqualTo(type)
+        assertThat(state.drawnThickness).isEqualTo(380.mm)
+    }
 
     @Test
     fun aStrokeOfThePencilGoesToTheEngineAsDrawn() {

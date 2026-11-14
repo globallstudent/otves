@@ -137,4 +137,24 @@
     <string name="sketch_refine">Уточнить размеры · %1$d</string>
     <string name="sketch_wall_of">Стена %1$d из %2$d</string>
     <string name="length_about_mark" translatable="false">≈</string>
+    <string name="wall_kind_title">Тип стены</string>
+    <string name="wall_kind_name" translatable="false">%1$s %2$s</string>
+    <string name="wall_kind_none">Без типа</string>
+    <string name="wall_kind_none_made">Один материал, толщина по выбору</string>
+    <string name="wall_kind_catalog">Из каталога</string>
+    <string name="role_exterior">Наружная</string>
+    <string name="role_bearing">Несущая</string>
+    <string name="role_partition">Перегородка</string>
+    <string name="layer_line" translatable="false">%1$s %2$s</string>
+    <string name="layer_insulation">утеплитель</string>
+    <string name="layer_gap">зазор</string>
+    <string name="layer_masonry">кладка</string>
+    <string name="inspector_location">Привязка</string>
+    <string name="location_inside">Внутри</string>
+    <string name="location_axis">Ось</string>
+    <string name="location_outside">Снаружи</string>
+    <string name="inspector_layers">Слои</string>
+    <string name="inspector_flip">Развернуть</string>
+    <string name="item_insulation">Утеплитель %1$s мм</string>
+    <string name="refused_type_decides">Толщину и материал задаёт тип стены</string>
 </resources>

@@ -117,8 +117,9 @@ internal fun PlanCanvas(
                 .toPx()
         }
     val about = stringResource(R.string.length_about_mark)
+    val hatchGap = with(density) { HATCH_GAP.dp.toPx() }
     val painter =
-        remember(colors, wallStroke, selectionStroke, labelSize, about) {
+        remember(colors, wallStroke, selectionStroke, hatchGap, labelSize, about) {
             PlanPainter(
                 palette =
                     PlanPalette(
@@ -126,6 +127,7 @@ internal fun PlanCanvas(
                         unchosen = colors.surface.toArgb(),
                         gap = colors.canvas.toArgb(),
                         edge = colors.ink.toArgb(),
+                        layer = colors.inkTertiary.toArgb(),
                         below = colors.inkTertiary.toArgb(),
                         text = colors.inkSecondary.toArgb(),
                         selection = colors.selection.toArgb(),
@@ -133,6 +135,7 @@ internal fun PlanCanvas(
                     ),
                 hairline = wallStroke,
                 bold = selectionStroke,
+                hatch = hatchGap,
                 textSize = labelSize,
                 about = about,
             )
@@ -390,6 +393,7 @@ private const val TOUCH_REACH = 12f
 private const val SKETCH_REACH = 24f
 private const val STROKE_STEP = 3f
 private const val STROKE_WIDTH = 3f
+private const val HATCH_GAP = 4f
 
 // The labels are asked again when the zoom has changed by about a twentieth.
 private const val ZOOM_STEP = 0.05f

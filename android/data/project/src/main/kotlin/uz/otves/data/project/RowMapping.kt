@@ -5,6 +5,7 @@ import uz.otves.core.model.Mm
 import uz.otves.engine.Conditions
 import uz.otves.engine.EngineElement
 import uz.otves.engine.Footing
+import uz.otves.engine.LayerFunction
 import uz.otves.engine.Level
 import uz.otves.engine.LocationLine
 import uz.otves.engine.LogEntry
@@ -13,6 +14,9 @@ import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointMm
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
+import uz.otves.engine.WallLayer
+import uz.otves.engine.WallRole
+import uz.otves.engine.WallType
 import kotlin.uuid.Uuid
 
 // Engine values to rows and back. Enum codes are those of schema/engine.fbs; RowMappingTest
@@ -24,6 +28,13 @@ internal const val RIGHT_FACE = 2
 internal const val WINDOW = 0
 internal const val DOOR = 1
 internal const val EMPTY = 2
+internal const val EXTERIOR = 0
+internal const val BEARING = 1
+internal const val PARTITION = 2
+internal const val STRUCTURE = 0
+internal const val INSULATION = 1
+internal const val FACING = 2
+internal const val GAP = 3
 
 internal fun ElementId.key(): String = uuid.toString()
 
@@ -60,6 +71,37 @@ internal fun Wall.row(id: ElementId): WallRow =
         unitWidth = unit?.width?.value ?: 0,
         unitHeight = unit?.height?.value ?: 0,
         exact = exact,
+        typeId = type?.key(),
+        mirrored = mirrored,
+    )
+
+internal fun WallType.row(id: ElementId): WallTypeRow =
+    WallTypeRow(
+        id = id.key(),
+        role =
+            when (role) {
+                WallRole.EXTERIOR -> EXTERIOR
+                WallRole.BEARING -> BEARING
+                WallRole.PARTITION -> PARTITION
+            },
+    )
+
+internal fun WallLayer.row(id: ElementId): WallLayerRow =
+    WallLayerRow(
+        id = id.key(),
+        typeId = type.key(),
+        position = position,
+        function =
+            when (function) {
+                LayerFunction.STRUCTURE -> STRUCTURE
+                LayerFunction.INSULATION -> INSULATION
+                LayerFunction.FACING -> FACING
+                LayerFunction.GAP -> GAP
+            },
+        thickness = thickness.value,
+        unitLength = unit?.length?.value ?: 0,
+        unitWidth = unit?.width?.value ?: 0,
+        unitHeight = unit?.height?.value ?: 0,
     )
 
 internal fun Opening.row(id: ElementId): OpeningRow =
@@ -111,6 +153,36 @@ internal fun WallRow.element(): Pair<ElementId, EngineElement> =
                 },
             unit = if (unitLength > 0) UnitSize(Mm(unitLength), Mm(unitWidth), Mm(unitHeight)) else null,
             exact = exact,
+            type = typeId?.let(::elementId),
+            mirrored = mirrored,
+        )
+
+internal fun WallTypeRow.element(): Pair<ElementId, EngineElement> =
+    elementId(id) to
+        WallType(
+            when (role) {
+                EXTERIOR -> WallRole.EXTERIOR
+                BEARING -> WallRole.BEARING
+                PARTITION -> WallRole.PARTITION
+                else -> throw CorruptJobException("wall type $id has role $role")
+            },
+        )
+
+internal fun WallLayerRow.element(): Pair<ElementId, EngineElement> =
+    elementId(id) to
+        WallLayer(
+            type = elementId(typeId),
+            position = position,
+            function =
+                when (function) {
+                    STRUCTURE -> LayerFunction.STRUCTURE
+                    INSULATION -> LayerFunction.INSULATION
+                    FACING -> LayerFunction.FACING
+                    GAP -> LayerFunction.GAP
+                    else -> throw CorruptJobException("wall layer $id has function $function")
+                },
+            thickness = Mm(thickness),
+            unit = if (unitLength > 0) UnitSize(Mm(unitLength), Mm(unitWidth), Mm(unitHeight)) else null,
         )
 
 internal fun OpeningRow.element(): Pair<ElementId, EngineElement> =

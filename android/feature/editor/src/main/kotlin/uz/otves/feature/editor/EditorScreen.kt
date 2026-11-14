@@ -57,6 +57,7 @@ import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
 import uz.otves.engine.FillKind
+import uz.otves.engine.LocationLine
 import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.OpeningKind
 import uz.otves.engine.PointM
@@ -67,6 +68,7 @@ import uz.otves.engine.TextKind
 import uz.otves.engine.Turn
 import uz.otves.engine.Wall
 import uz.otves.engine.WallOutline
+import uz.otves.engine.WallTypeTemplate
 import kotlin.uuid.Uuid
 
 /**
@@ -125,6 +127,11 @@ fun EditorRoute(
                 onTurn = viewModel::setTurn,
                 onNextMeasured = viewModel::nextMeasured,
                 onCloseMeasured = viewModel::closeMeasured,
+                onKinds = viewModel::showKinds,
+                onKind = viewModel::chooseKind,
+                onAddKind = viewModel::addKind,
+                onLocationLine = viewModel::setLocationLine,
+                onFlipWall = viewModel::flipWall,
                 onMaterials = viewModel::showMaterials,
                 onMaterial = viewModel::chooseMaterial,
                 onOwnSize = viewModel::startSize,
@@ -183,6 +190,12 @@ internal data class EditorActions(
     val onTurn: (Turn) -> Unit = {},
     val onNextMeasured: () -> Unit = {},
     val onCloseMeasured: () -> Unit = {},
+    val onKinds: (open: Boolean) -> Unit = {},
+    /** The wall type for the selected wall or for new walls; null draws walls with no type. */
+    val onKind: (ElementId?) -> Unit = {},
+    val onAddKind: (WallTypeTemplate) -> Unit = {},
+    val onLocationLine: (LocationLine) -> Unit = {},
+    val onFlipWall: () -> Unit = {},
     val onMaterials: (open: Boolean) -> Unit = {},
     val onMaterial: (MasonryUnitOption) -> Unit = {},
     val onOwnSize: () -> Unit = {},
@@ -214,7 +227,7 @@ internal fun EditorScreen(
     val measuring = state.measure != null
     val refining = state.entry?.refining == true
     LaunchedEffect(measuring, refining, state.ready) { if (!measuring && !refining && state.ready) fit++ }
-    val listOpen = state.takeoffOpen || state.materialOpen
+    val listOpen = state.takeoffOpen || state.materialOpen || state.kindsOpen
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
         Box(modifier = Modifier.safeDrawingPadding()) {
             // The wall whose length is typed is marked as a selected one is.
@@ -225,7 +238,7 @@ internal fun EditorScreen(
                 selected = sized?.id ?: state.selected?.id,
                 issues = state.issues,
                 draft = state.draft,
-                draftThickness = state.thickness,
+                draftThickness = state.drawnThickness,
                 drawing = state.tool == Tool.WALL && !state.typing && !listOpen,
                 sketching = state.tool == Tool.PENCIL && !state.typing && !listOpen,
                 fit = fit,
@@ -269,6 +282,7 @@ internal fun EditorScreen(
                     sizeEntry != null -> SizePad(sizeEntry, actions)
                     priceEntry != null -> PricePad(priceEntry, state, actions)
                     measure != null -> MeasurePad(measure, state, actions)
+                    state.kindsOpen -> WallKindsPanel(state, actions)
                     state.materialOpen -> MaterialPanel(state, actions)
                     selected != null -> Inspector(selected, state, actions)
                     state.takeoffOpen && state.conditionsOpen -> ConditionsPanel(state, actions)
@@ -277,7 +291,7 @@ internal fun EditorScreen(
                 }
             }
             val idle = entry == null && sizeEntry == null && priceEntry == null && measure == null
-            val bare = selected == null && !state.materialOpen && !state.takeoffOpen
+            val bare = selected == null && !listOpen
             if (state.ready && idle && bare && hasOptions(state.tool)) ToolOptionsButton(state, actions)
         }
     }

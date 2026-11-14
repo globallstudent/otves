@@ -78,6 +78,39 @@ public sealed interface EngineCommand {
         public val value: Int?,
     ) : EngineCommand
 
+    /**
+     * A new wall type with its [layers] from the outer face in (docs/adr/0014). The result's
+     * `created` is the type.
+     */
+    public data class AddWallType(
+        public val role: WallRole,
+        public val layers: List<LayerSpec>,
+    ) : EngineCommand
+
+    public data class SetWallTypeRole(
+        public val type: ElementId,
+        public val role: WallRole,
+    ) : EngineCommand
+
+    /** A layer's thickness and unit; every wall of its type changes with it. */
+    public data class SetWallLayer(
+        public val layer: ElementId,
+        public val thickness: Mm,
+        public val unit: UnitSize?,
+    ) : EngineCommand
+
+    /** Makes the wall one of the [type]'s kind; its own thickness and unit are dropped. */
+    public data class SetWallType(
+        public val wall: ElementId,
+        public val type: ElementId,
+    ) : EngineCommand
+
+    /** Which face of the wall its type's layers start from. */
+    public data class SetWallMirrored(
+        public val wall: ElementId,
+        public val mirrored: Boolean,
+    ) : EngineCommand
+
     /** Also removes the wall's openings. */
     public data class RemoveWall(
         public val wall: ElementId,
@@ -192,9 +225,10 @@ public sealed interface EngineCommand {
     /**
      * A stroke drawn with a finger on [level], read as walls (docs/adr/0012). [points] is the
      * finger's path in the order drawn; [reach], [grid] and [square] mean what they do for [Aim].
-     * The walls are [thickness] thick and [height] high, laid from [unit], and none is exact until
-     * it gets a length. They are added in one undo step. Fails, changing nothing, with
-     * [EngineError.ZERO_LENGTH] when the stroke gives no wall, or [EngineError.OFF_PLAN].
+     * The walls are of [type], or with none [thickness] thick and laid from [unit]; they are
+     * [height] high, and none is exact until it gets a length. They are added in one undo step.
+     * Fails, changing nothing, with [EngineError.ZERO_LENGTH] when the stroke gives no wall, or
+     * [EngineError.OFF_PLAN].
      */
     public data class AddSketch(
         public val level: ElementId,
@@ -206,6 +240,7 @@ public sealed interface EngineCommand {
         public val height: Mm,
         public val locationLine: LocationLine = LocationLine.CENTER,
         public val unit: UnitSize? = null,
+        public val type: ElementId? = null,
     ) : EngineCommand
 
     /**

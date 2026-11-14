@@ -11,11 +11,16 @@ import uz.otves.core.model.ElementId
 import uz.otves.core.model.mm
 import uz.otves.engine.ElementChange
 import uz.otves.engine.EngineResponse
+import uz.otves.engine.LayerFunction
 import uz.otves.engine.Level
 import uz.otves.engine.LogEntry
 import uz.otves.engine.Opening
 import uz.otves.engine.PointMm
+import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
+import uz.otves.engine.WallLayer
+import uz.otves.engine.WallRole
+import uz.otves.engine.WallType
 import java.io.File
 import kotlin.uuid.Uuid
 
@@ -80,6 +85,35 @@ class JobFilesTest {
                 assertThat(job.load()).isEqualTo(SavedJob(mapOf(level to storey, wall to masonry), clock = 400L, name = "Дом"))
             }
             assertThat(files.list().single().updatedAt).isGreaterThan(created.updatedAt)
+        }
+
+    @Test
+    fun wallTypesAndTheirLayersAreKeptWithTheWallsOfThem() =
+        runTest {
+            val created = files.create("Дом")
+            val type = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000007"))
+            val facing = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000008"))
+            val wool = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000009"))
+            val thicker = WallLayer(type, 1, LayerFunction.INSULATION, 150.mm)
+            val saved =
+                mapOf(
+                    level to Level(0.mm, 3000.mm),
+                    type to WallType(WallRole.EXTERIOR),
+                    facing to WallLayer(type, 0, LayerFunction.FACING, 120.mm, UnitSize(250.mm, 120.mm, 65.mm)),
+                    wool to WallLayer(type, 1, LayerFunction.INSULATION, 100.mm),
+                    wall to Wall(level, PointMm(0.mm, 0.mm), PointMm(6400.mm, 0.mm), 0.mm, 2800.mm, type = type, mirrored = true),
+                )
+
+            files.open(created.id).use { job ->
+                job.record(response(saved.map { (id, element) -> ElementChange(id, element) }, listOf(entry(1, hlc = 100))))
+                // The insulation gets thicker, and undo takes the facing away.
+                job.record(response(listOf(ElementChange(wool, thicker)), listOf(entry(2, hlc = 200))))
+                job.record(response(listOf(ElementChange(facing, null)), listOf(entry(3, hlc = 300))))
+            }
+
+            files.open(created.id).use { job ->
+                assertThat(job.load()).isEqualTo(SavedJob(saved - facing + (wool to thicker), clock = 300L, name = "Дом"))
+            }
         }
 
     @Test

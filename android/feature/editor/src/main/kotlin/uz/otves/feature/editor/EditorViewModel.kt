@@ -30,7 +30,9 @@ import uz.otves.engine.EngineResponse
 import uz.otves.engine.Footing
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
+import uz.otves.engine.LayerSpec
 import uz.otves.engine.Level
+import uz.otves.engine.LocationLine
 import uz.otves.engine.MasonryUnitKind
 import uz.otves.engine.MasonryUnitOption
 import uz.otves.engine.Opening
@@ -41,7 +43,11 @@ import uz.otves.engine.Takeoff
 import uz.otves.engine.Turn
 import uz.otves.engine.UnitSize
 import uz.otves.engine.Wall
+import uz.otves.engine.WallLayer
 import uz.otves.engine.WallOutline
+import uz.otves.engine.WallRole
+import uz.otves.engine.WallType
+import uz.otves.engine.WallTypeTemplate
 import kotlin.math.abs
 
 /** What a touch on the plan does. */
@@ -75,6 +81,24 @@ internal sealed interface Selected {
         override val id: ElementId,
         val opening: Opening,
     ) : Selected
+}
+
+/**
+ * A wall type of the job as the screen shows it (docs/adr/0014): what it is for and its layers
+ * from the outer face in.
+ */
+internal data class WallKind(
+    val id: ElementId,
+    val role: WallRole,
+    val layers: List<Pair<ElementId, WallLayer>>,
+) {
+    /** The wall's thickness: its layers one after another. */
+    val thickness: Mm
+        get() = Mm(layers.sumOf { it.second.thickness.value })
+
+    /** Whether the catalog's [template] describes this very make-up. */
+    fun matches(template: WallTypeTemplate): Boolean =
+        role == template.role && layers.map { LayerSpec(it.second.function, it.second.thickness, it.second.unit) } == template.layers
 }
 
 /** A wall's length, written along it on the plan. */
@@ -205,6 +229,12 @@ internal data class EditorUiState(
     val material: UnitSize? = null,
     /** The material list is open, for the selected wall or else for new walls. */
     val materialOpen: Boolean = false,
+    /** The job's wall types, the oldest first. */
+    val kinds: List<WallKind> = emptyList(),
+    /** What new walls are built as; null for walls with no type, laid from [material]. */
+    val kind: ElementId? = null,
+    /** The wall types are open, for the selected wall or else for new walls. */
+    val kindsOpen: Boolean = false,
     /** What the job is estimated under; unset values follow the norms. */
     val conditions: Conditions = Conditions(),
     /** The conditions are open in place of the take-off. */
@@ -226,6 +256,10 @@ internal data class EditorUiState(
     /** A number pad is open: until the number is entered, touches on the plan only move it. */
     val typing: Boolean
         get() = entry != null || sizeEntry != null || priceEntry != null || measure != null
+
+    /** How thick the walls drawn next are: as their type, or else as chosen. */
+    val drawnThickness: Mm
+        get() = kinds.find { it.id == kind }?.thickness ?: thickness
 
     /** Walls of the shown storey read from a sketch, whose lengths nobody has given yet. */
     val rough: List<ElementId>
@@ -270,6 +304,8 @@ internal class EditorViewModel(
     private val levels = mutableMapOf<ElementId, Level>()
     private val walls = mutableMapOf<ElementId, Wall>()
     private val openings = mutableMapOf<ElementId, Opening>()
+    private val wallTypes = mutableMapOf<ElementId, WallType>()
+    private val wallLayers = mutableMapOf<ElementId, WallLayer>()
     private var conditions: Pair<ElementId, Conditions>? = null
     private var wallOutlines: List<WallOutline> = emptyList()
     private var allIssues: List<Issue> = emptyList()
@@ -332,6 +368,8 @@ internal class EditorViewModel(
                         catalog = catalog,
                         material = like?.unit,
                         thickness = thickness,
+                        // A job built from wall types goes on with the one used last.
+                        kind = walls.values.lastOrNull()?.type,
                     )
                 }
             }
@@ -352,8 +390,10 @@ internal class EditorViewModel(
         val current = state.value
         val onLevel = current.level ?: return
         // A touch beside an open list closes it and does nothing else.
-        if (current.takeoffOpen || current.materialOpen) {
-            state.update { it.copy(takeoffOpen = false, materialOpen = false, conditionsOpen = false, priceEntry = null) }
+        if (current.takeoffOpen || current.materialOpen || current.kindsOpen) {
+            state.update {
+                it.copy(takeoffOpen = false, materialOpen = false, kindsOpen = false, conditionsOpen = false, priceEntry = null)
+            }
             return
         }
         if (current.typing) return
@@ -444,9 +484,11 @@ internal class EditorViewModel(
                 reach = reach,
                 grid = Grid,
                 square = current.ortho,
-                thickness = current.thickness,
+                // A wall of a type has no thickness or unit of its own.
+                thickness = if (current.kind == null) current.thickness else 0.mm,
                 height = WallHeight,
-                unit = current.material,
+                unit = current.material.takeIf { current.kind == null },
+                type = current.kind,
             )
         execute(listOf(stroke))
     }
@@ -521,7 +563,17 @@ internal class EditorViewModel(
         val level = current.level ?: return
         val from = run?.tip() ?: return
         if (to == from) return
-        val wall = Wall(level, from, to, thickness = current.thickness, height = WallHeight, unit = current.material)
+        val wall =
+            Wall(
+                level,
+                from,
+                to,
+                // A wall of a type has no thickness or unit of its own.
+                thickness = if (current.kind == null) current.thickness else 0.mm,
+                height = WallHeight,
+                unit = current.material.takeIf { current.kind == null },
+                type = current.kind,
+            )
         val created = execute(listOf(EngineCommand.AddWall(wall))) ?: return
         run = run?.takeUnless { closes }?.let { it.copy(built = it.built + created) }
         state.update { it.copy(drawn = created).withRun() }
@@ -594,6 +646,60 @@ internal class EditorViewModel(
     ) = send(listOf(EngineCommand.SetCondition(condition, value)))
 
     fun showMaterials(open: Boolean) = state.update { it.copy(materialOpen = open) }
+
+    /** Opens the wall types, for the selected wall or else for the walls drawn next. */
+    fun showKinds(open: Boolean) = state.update { it.copy(kindsOpen = open, materialOpen = false) }
+
+    /**
+     * Makes the selected wall one of this type, or else the walls drawn from now on; null draws
+     * walls with no type again. A choice for one wall is also the choice for new walls only while
+     * the builder has made none for them.
+     */
+    fun chooseKind(kind: ElementId?) =
+        act {
+            state.update { it.copy(kindsOpen = false) }
+            assign(kind)
+        }
+
+    /**
+     * Starts a wall type from the catalog's [template] and chooses it, as [chooseKind] does. A
+     * make-up the job already has is not made twice.
+     */
+    fun addKind(template: WallTypeTemplate) =
+        act {
+            state.update { it.copy(kindsOpen = false) }
+            val known =
+                state.value.kinds
+                    .find { it.matches(template) }
+                    ?.id
+            assign(known ?: execute(listOf(EngineCommand.AddWallType(template.role, template.layers))) ?: return@act)
+        }
+
+    private suspend fun assign(kind: ElementId?) {
+        val wall = state.value.selected as? Selected.WallPart
+        state.update { current ->
+            if (wall == null ||
+                (current.kind == null && current.material == null)
+            ) {
+                current.copy(kind = kind)
+            } else {
+                current
+            }
+        }
+        if (wall != null && kind != null && wall.wall.type != kind) execute(listOf(EngineCommand.SetWallType(wall.id, kind)))
+    }
+
+    /** Which line of the selected wall its points lie on. */
+    fun setLocationLine(line: LocationLine) {
+        val wall = state.value.selected as? Selected.WallPart ?: return
+        send(listOf(EngineCommand.SetWallLocationLine(wall.id, line)))
+    }
+
+    /** Turns the selected wall's layers round: what was its outer face is now its inner one. */
+    fun flipWall() {
+        val wall = state.value.selected as? Selected.WallPart ?: return
+        send(listOf(EngineCommand.SetWallMirrored(wall.id, !wall.wall.mirrored)))
+    }
 
     /**
      * Lays the selected wall, or else the walls drawn from now on, from [option]. A thickness the
@@ -675,6 +781,7 @@ internal class EditorViewModel(
                         drawn = null,
                         selected = null,
                         materialOpen = false,
+                        kindsOpen = false,
                         refused = null,
                     ).withRun()
             }
@@ -792,7 +899,7 @@ internal class EditorViewModel(
 
     fun redo() = send(listOf(EngineCommand.Redo))
 
-    fun deselect() = state.update { it.copy(selected = null, materialOpen = false) }
+    fun deselect() = state.update { it.copy(selected = null, materialOpen = false, kindsOpen = false) }
 
     fun setWallThickness(thickness: Mm) {
         val wall = state.value.selected as? Selected.WallPart ?: return
@@ -933,9 +1040,18 @@ internal class EditorViewModel(
                     conditions = change.id to element
                 }
 
+                is WallType -> {
+                    wallTypes[change.id] = element
+                }
+
+                is WallLayer -> {
+                    wallLayers[change.id] = element
+                }
+
                 null -> {
                     if (conditions?.first == change.id) conditions = null
                     levels.remove(change.id) ?: walls.remove(change.id) ?: openings.remove(change.id)
+                        ?: wallTypes.remove(change.id) ?: wallLayers.remove(change.id)
                 }
             }
         }
@@ -963,10 +1079,25 @@ internal class EditorViewModel(
                 selected = current.selected?.let { selection(it.id) },
                 drawn = current.drawn?.takeIf { it in walls },
                 conditions = conditions?.second ?: Conditions(),
+                kinds = kinds(),
+                // Undo may take a type away; walls are then drawn with no type again.
+                kind = current.kind?.takeIf { it in wallTypes },
             )
         }
         show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels }, drawn)
     }
+
+    // The job's wall types with their layers from the outer face in. Ids grow with time, so the
+    // oldest type comes first.
+    private fun kinds(): List<WallKind> =
+        wallTypes.entries.sortedBy { it.key.uuid.toString() }.map { (id, type) ->
+            val layers =
+                wallLayers.entries
+                    .filter { it.value.type == id }
+                    .sortedWith(compareBy({ it.value.position }, { it.key.uuid.toString() }))
+                    .map { it.key to it.value }
+            WallKind(id, type.role, layers)
+        }
 
     // Two rules may ask for the same material, as the footing and the ring beam do for bars of one
     // diameter; the builder buys it once, so such lines add up where the first one stands.
