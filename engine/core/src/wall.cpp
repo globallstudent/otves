@@ -9,14 +9,6 @@
 #include "field.h"
 
 namespace otves {
-namespace {
-
-constexpr bool on_plan(PointMm point) {
-  const auto within = [](Mm value) { return value >= -kMaxCoordinate && value <= kMaxCoordinate; };
-  return within(point.x) && within(point.y);
-}
-
-}  // namespace
 
 std::expected<void, Error> validate(const Wall& wall) {
   if (!on_plan(wall.start) || !on_plan(wall.end)) {

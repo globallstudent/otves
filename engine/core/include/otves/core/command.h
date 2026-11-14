@@ -9,6 +9,7 @@
 #include <otves/core/op.h>
 #include <otves/core/opening.h>
 #include <otves/core/point.h>
+#include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -50,7 +51,8 @@ struct SetLevelFooting {
   Mm depth;
 };
 
-// Removes the level with every wall on it and every opening in those walls.
+// Removes the level with the names of its rooms, every wall on it and every opening in those
+// walls.
 struct RemoveLevel {
   ElementId level;
 };
@@ -164,6 +166,27 @@ struct RemoveOpening {
   ElementId opening;
 };
 
+// Names the space of the room's level that holds its anchor (docs/adr/0015). The level must
+// exist; whether the anchor lies in a space is not checked here.
+struct AddRoom {
+  Room room;
+};
+
+struct MoveRoom {
+  ElementId room;
+  PointMm anchor;
+};
+
+struct SetRoomKind {
+  ElementId room;
+  RoomKind kind = RoomKind::kRoom;
+};
+
+// Takes the name away; the space stays.
+struct RemoveRoom {
+  ElementId room;
+};
+
 // Sets one of the job's estimating conditions, creating them when the job has none
 // (docs/adr/0009). Conditions::kUnset returns the value to the norm default.
 struct SetCondition {
@@ -177,7 +200,7 @@ using Command =
                  MoveOpening, ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening,
                  SetWallUnit, SetLevelRingBeam, SetLevelJunctionMeshes, SetCondition,
                  SetLevelFooting, SetWallExact, AddWallType, SetWallTypeRole, SetWallLayer,
-                 SetWallType, SetWallMirrored>;
+                 SetWallType, SetWallMirrored, AddRoom, MoveRoom, SetRoomKind, RemoveRoom>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 

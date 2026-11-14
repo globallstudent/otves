@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <otves/core/build.h>
+#include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/geom/openings.h>
@@ -22,6 +23,7 @@ enum class Fill : std::uint8_t {
   kGap,         // what an opening leaves of its wall
   kFacing,      // masonry laid in front of the wall
   kInsulation,  // a layer of insulation
+  kFloor,       // a space the walls close
 };
 
 enum class Stroke : std::uint8_t {
@@ -36,6 +38,8 @@ enum class Stroke : std::uint8_t {
 enum class TextKind : std::uint8_t {
   kLength,       // a wall's length
   kAboutLength,  // one that nobody has typed or measured
+  kRoomName,     // a room's name: the value is its RoomKind
+  kRoomArea,     // a space's floor: the value is its area in cm²
 };
 
 // Every primitive names the element it draws, so a painter can mark the selected one; nil for
@@ -65,12 +69,16 @@ struct Arc {
 
 // A number written with its middle at `at`, along the unit direction `along`, which never points
 // to the left or straight down: text reads from the left, and on an upright wall from the bottom.
+// The value is millimetres unless the kind says otherwise. `fit` is the room there is for the
+// text along its direction, in metres: the painter leaves out a text wider than that. Zero for a
+// text that was fitted here.
 struct Text {
   ElementId element;
   TextKind kind = TextKind::kLength;
-  Mm value;
+  std::int64_t value = 0;
   geom::Vec2 at;
   geom::Vec2 along;
+  double fit = 0.0;
 };
 
 // Painted in this order, each list in the order given.
@@ -94,18 +102,28 @@ struct WallBuild {
   std::vector<BuiltLayer> layers;
 };
 
+// A room of the level: the name of the space that holds its anchor (docs/adr/0015).
+struct NamedRoom {
+  ElementId id;
+  Room room;
+};
+
 // One level to draw: its walls, the openings in them, and the walls of the level under it.
 // `builds` says what walls are built of; a wall with none there is one masonry layer, laid from
-// the wall's own unit. The explicit initializer lets a plan be drawn without them.
+// the wall's own unit. `rooms` name the spaces the walls close. The explicit initializers let a
+// plan be drawn without them.
 struct Plan {
   std::span<const geom::WallInput> walls;
   std::span<const geom::PlacedOpening> openings;
   std::span<const geom::WallInput> below;
   std::span<const WallBuild> builds{};  // NOLINT(readability-redundant-member-init)
+  std::span<const NamedRoom> rooms{};   // NOLINT(readability-redundant-member-init)
 };
 
 // The level as a drawing.
 //  - The walls of the level below, in outline.
+//  - The floor of each space the walls close, the largest first, so a room standing free inside
+//    another is painted over it. A floor names its room, or nothing when the space has no name.
 //  - Each wall's joined outline, filled as masonry or as a wall with no material yet. A wall of
 //    several layers is its layers' strips of that outline, each filled as what it is, under the
 //    outline itself: insulation, facing, masonry, and nothing for a gap.
@@ -115,6 +133,8 @@ struct Plan {
 //  - Each wall's length beside it and along it, by its left face at the middle; where another
 //    wall or another length lies there, by the other face or nearer an end. A length longer than
 //    four fifths of its wall is left out.
+//  - In each space its room's name over its area, in the middle of its widest stretch: along x,
+//    or up the plan in a space too narrow for a name. Each says how much room it has.
 // Precondition: every wall passes validate() and ids are unique. The result does not depend on
 // the order of the inputs.
 [[nodiscard]] Drawing draft(const Plan& plan, TextSize text);

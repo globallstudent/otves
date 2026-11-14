@@ -8,6 +8,7 @@ add_library(otves_core
   src/level.cpp
   src/op.cpp
   src/opening.cpp
+  src/room.cpp
   src/uuid.cpp
   src/wall.cpp
   src/wall_type.cpp)
@@ -28,6 +29,7 @@ if(OTVES_BUILD_TESTS)
     tests/hlc_test.cpp
     tests/level_test.cpp
     tests/opening_test.cpp
+    tests/room_test.cpp
     tests/slot_map_test.cpp
     tests/units_test.cpp
     tests/uuid_test.cpp

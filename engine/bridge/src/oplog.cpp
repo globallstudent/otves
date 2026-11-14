@@ -20,6 +20,7 @@
 #include <otves/core/opening.h>
 #include <otves/core/overloaded.h>
 #include <otves/core/point.h>
+#include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -82,6 +83,14 @@ schema::CommandKind to_code(CommandKind kind) {
       return schema::CommandKind::SetWallType;
     case CommandKind::kSetWallMirrored:
       return schema::CommandKind::SetWallMirrored;
+    case CommandKind::kAddRoom:
+      return schema::CommandKind::AddRoom;
+    case CommandKind::kMoveRoom:
+      return schema::CommandKind::MoveRoom;
+    case CommandKind::kSetRoomKind:
+      return schema::CommandKind::SetRoomKind;
+    case CommandKind::kRemoveRoom:
+      return schema::CommandKind::RemoveRoom;
     case CommandKind::kAddOpening:
       return schema::CommandKind::AddOpening;
     case CommandKind::kMoveOpening:
@@ -162,6 +171,14 @@ std::optional<CommandKind> from_code(schema::CommandKind kind) {
       return CommandKind::kSetWallType;
     case schema::CommandKind::SetWallMirrored:
       return CommandKind::kSetWallMirrored;
+    case schema::CommandKind::AddRoom:
+      return CommandKind::kAddRoom;
+    case schema::CommandKind::MoveRoom:
+      return CommandKind::kMoveRoom;
+    case schema::CommandKind::SetRoomKind:
+      return CommandKind::kSetRoomKind;
+    case schema::CommandKind::RemoveRoom:
+      return CommandKind::kRemoveRoom;
   }
   return std::nullopt;
 }
@@ -429,6 +446,23 @@ flatbuffers::Offset<schema::OpEntry> encode_op(flatbuffers::FlatBufferBuilder& b
                                                                  std::get<Mm>(set.after).value());
             return schema::CreateOpEntry(builder, schema::Op::SetWallLayerFieldOp, value.Union());
           },
+          [&builder](const SetRoomField& set) {
+            const schema::Uuid key = to_schema(set.id);
+            const bool moved = set.field == RoomField::kAnchor;
+            const auto code = [moved](const RoomValue& value) {
+              return moved ? 0 : static_cast<std::int64_t>(to_schema(std::get<RoomKind>(value)));
+            };
+            const auto at = [moved](const RoomValue& value) {
+              return moved ? std::optional{to_schema(std::get<PointMm>(value))} : std::nullopt;
+            };
+            const std::optional<schema::PointMm> before = at(set.before);
+            const std::optional<schema::PointMm> after = at(set.after);
+            const auto value = schema::CreateSetRoomFieldOp(
+                builder, &key, moved ? schema::RoomField::Anchor : schema::RoomField::Kind,
+                code(set.before), code(set.after), before ? &*before : nullptr,
+                after ? &*after : nullptr);
+            return schema::CreateOpEntry(builder, schema::Op::SetRoomFieldOp, value.Union());
+          },
           [&builder](const SetConditionsField& set) {
             const schema::Uuid key = to_schema(set.id);
             const auto value = schema::CreateSetConditionsFieldOp(
@@ -565,6 +599,42 @@ Result<Op> wall_layer_op(const schema::SetWallLayerFieldOp* set) {
                            .after = Mm{set->after()}};
 }
 
+Result<RoomValue> room_value(schema::RoomField field, std::int64_t number,
+                             const schema::PointMm* at) {
+  switch (field) {
+    case schema::RoomField::Anchor:
+      if (at == nullptr) {
+        return corrupt("room anchor is missing");
+      }
+      return to_point(*at);
+    case schema::RoomField::Kind: {
+      const auto code = code_of<schema::RoomKind>(number);
+      const std::optional<RoomKind> kind = code ? from_schema(*code) : std::nullopt;
+      if (!kind) {
+        return corrupt("unknown room kind");
+      }
+      return *kind;
+    }
+  }
+  return corrupt("unknown room field");
+}
+
+Result<Op> room_op(const schema::SetRoomFieldOp* set) {
+  if (set == nullptr) {
+    return corrupt("op is missing");
+  }
+  auto before = room_value(set->field(), set->before(), set->before_point());
+  auto after = room_value(set->field(), set->after(), set->after_point());
+  if (!before || !after) {
+    return std::unexpected{!before ? std::move(before).error() : std::move(after).error()};
+  }
+  return SetRoomField{
+      .id = to_id(set->id()),
+      .field = set->field() == schema::RoomField::Anchor ? RoomField::kAnchor : RoomField::kKind,
+      .before = *before,
+      .after = *after};
+}
+
 Result<OpeningValue> opening_value(OpeningField field, std::int64_t number) {
   if (field != OpeningField::kKind) {
     return Mm{number};
@@ -624,6 +694,8 @@ Result<Op> decode_op(const schema::OpEntry& entry) {
       return wall_type_op(entry.op_as_SetWallTypeFieldOp());
     case schema::Op::SetWallLayerFieldOp:
       return wall_layer_op(entry.op_as_SetWallLayerFieldOp());
+    case schema::Op::SetRoomFieldOp:
+      return room_op(entry.op_as_SetRoomFieldOp());
     case schema::Op::NONE:
       break;
   }

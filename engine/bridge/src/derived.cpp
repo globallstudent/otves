@@ -20,12 +20,14 @@
 #include <otves/core/level.h>
 #include <otves/core/model.h>
 #include <otves/core/opening.h>
+#include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 #include <otves/core/wall_type.h>
 #include <otves/drafting/plan.h>
 #include <otves/geom/openings.h>
+#include <otves/geom/spaces.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 #include <otves/takeoff/layers.h>
@@ -36,6 +38,7 @@
 #include "built.h"
 #include "convert.h"
 #include "engine_generated.h"
+#include "placement.h"
 
 namespace otves::bridge {
 namespace {
@@ -107,6 +110,8 @@ schema::Fill fill_code(drafting::Fill fill) {
       return schema::Fill::Facing;
     case drafting::Fill::kInsulation:
       return schema::Fill::Insulation;
+    case drafting::Fill::kFloor:
+      return schema::Fill::Floor;
   }
   return schema::Fill::None;
 }
@@ -127,6 +132,45 @@ schema::Stroke stroke_code(drafting::Stroke stroke) {
       return schema::Stroke::Layer;
   }
   return schema::Stroke::None;
+}
+
+schema::TextKind text_code(drafting::TextKind kind) {
+  switch (kind) {
+    case drafting::TextKind::kLength:
+      return schema::TextKind::Length;
+    case drafting::TextKind::kAboutLength:
+      return schema::TextKind::AboutLength;
+    case drafting::TextKind::kRoomName:
+      return schema::TextKind::RoomName;
+    case drafting::TextKind::kRoomArea:
+      return schema::TextKind::RoomArea;
+  }
+  return schema::TextKind::Length;
+}
+
+// A room names its level's space that holds its anchor; one that names none is reported, with
+// its anchor as the point (docs/adr/0015).
+void report_rooms(const Model& model,
+                  const std::map<ElementId, std::vector<geom::WallInput>>& levels,
+                  flatbuffers::FlatBufferBuilder& builder, IssueOffsets& issues) {
+  std::map<ElementId, std::vector<geom::Anchor>> anchors;
+  model.for_each<Room>([&anchors](ElementId id, const Room& room) {
+    anchors[room.level].push_back({.room = id, .at = room.anchor});
+  });
+  for (const auto& [level, named] : anchors) {
+    const auto walls = levels.find(level);
+    const std::vector<geom::Space> spaces =
+        walls != levels.end() ? geom::find_spaces(walls->second) : std::vector<geom::Space>{};
+    const schema::Uuid on = to_schema(level);
+    for (const geom::AnchorIssue& issue : geom::name_spaces(spaces, named).issues) {
+      const schema::Uuid room = to_schema(issue.room);
+      const schema::PointMm at = to_schema(model.find<Room>(issue.room)->anchor);
+      const schema::IssueKind kind = issue.kind == geom::AnchorIssueKind::kNoSpace
+                                         ? schema::IssueKind::RoomWithoutSpace
+                                         : schema::IssueKind::RoomSharesSpace;
+      issues.push_back(schema::CreateIssue(builder, kind, &room, &on, &at));
+    }
+  }
 }
 
 TakeoffOffsets failure(flatbuffers::FlatBufferBuilder& builder, const Error& error) {
@@ -288,7 +332,31 @@ OutlinesOffset encode_outlines(flatbuffers::FlatBufferBuilder& builder, const Mo
           builder, &wall, &on, builder.CreateVectorOfStructs(points), length.value()));
     }
   }
+  report_rooms(model, levels, builder, issues);
   return builder.CreateVector(outlines);
+}
+
+flatbuffers::Offset<schema::PickedSpace> encode_space(flatbuffers::FlatBufferBuilder& builder,
+                                                      const FoundSpace& found) {
+  const auto ring = [&builder](const std::vector<geom::Vec2>& outline) {
+    std::vector<schema::PointM> points;
+    points.reserve(outline.size());
+    for (const geom::Vec2 point : outline) {
+      points.emplace_back(point.x, point.y);
+    }
+    return builder.CreateVectorOfStructs(points);
+  };
+  std::vector<flatbuffers::Offset<schema::Ring>> islands;
+  islands.reserve(found.space.islands.size());
+  for (const std::vector<geom::Vec2>& island : found.space.islands) {
+    islands.push_back(schema::CreateRing(builder, ring(island)));
+  }
+  const auto outline = ring(found.space.outline);
+  const auto inside = builder.CreateVector(islands);
+  const schema::Uuid room = to_schema(found.room);
+  return schema::CreatePickedSpace(builder, found.room.is_nil() ? nullptr : &room,
+                                   to_schema(found.kind), found.space.area, found.space.perimeter,
+                                   outline, inside);
 }
 
 OpeningOutlinesOffset encode_openings(flatbuffers::FlatBufferBuilder& builder, const Model& model) {
@@ -359,11 +427,8 @@ flatbuffers::Offset<schema::Drawing> encode_drawing(flatbuffers::FlatBufferBuild
   for (const drafting::Text& text : drawing.texts) {
     const schema::PointM at = point(text.at);
     const schema::PointM along = point(text.along);
-    const schema::TextKind kind = text.kind == drafting::TextKind::kAboutLength
-                                      ? schema::TextKind::AboutLength
-                                      : schema::TextKind::Length;
-    texts.push_back(schema::CreateDrawnText(builder, key(text.element, id), kind,
-                                            text.value.value(), &at, &along));
+    texts.push_back(schema::CreateDrawnText(builder, key(text.element, id), text_code(text.kind),
+                                            text.value, &at, &along, text.fit));
   }
   return schema::CreateDrawing(builder, builder.CreateVector(polygons), builder.CreateVector(lines),
                                builder.CreateVector(arcs), builder.CreateVector(texts));

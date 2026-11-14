@@ -1,6 +1,7 @@
 #include "convert.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <expected>
 #include <optional>
@@ -20,6 +21,7 @@
 #include <otves/core/opening.h>
 #include <otves/core/overloaded.h>
 #include <otves/core/point.h>
+#include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -34,6 +36,29 @@ namespace {
 std::unexpected<Error> corrupt(const std::string& what) {
   return make_error(ErrorCode::kCorruptData, what);
 }
+
+// Every room kind with its code in the schema.
+constexpr std::array<std::pair<RoomKind, schema::RoomKind>, 19> kRoomKinds{{
+    {RoomKind::kRoom, schema::RoomKind::Room},
+    {RoomKind::kLivingRoom, schema::RoomKind::LivingRoom},
+    {RoomKind::kKitchenLiving, schema::RoomKind::KitchenLiving},
+    {RoomKind::kKitchen, schema::RoomKind::Kitchen},
+    {RoomKind::kDining, schema::RoomKind::Dining},
+    {RoomKind::kBedroom, schema::RoomKind::Bedroom},
+    {RoomKind::kChildren, schema::RoomKind::Children},
+    {RoomKind::kStudy, schema::RoomKind::Study},
+    {RoomKind::kHall, schema::RoomKind::Hall},
+    {RoomKind::kCorridor, schema::RoomKind::Corridor},
+    {RoomKind::kBathroom, schema::RoomKind::Bathroom},
+    {RoomKind::kBath, schema::RoomKind::Bath},
+    {RoomKind::kToilet, schema::RoomKind::Toilet},
+    {RoomKind::kBoiler, schema::RoomKind::Boiler},
+    {RoomKind::kStorage, schema::RoomKind::Storage},
+    {RoomKind::kWardrobe, schema::RoomKind::Wardrobe},
+    {RoomKind::kVeranda, schema::RoomKind::Veranda},
+    {RoomKind::kGarage, schema::RoomKind::Garage},
+    {RoomKind::kTambour, schema::RoomKind::Tambour},
+}};
 
 std::optional<WallEnd> to_wall_end(schema::WallEnd end) {
   switch (end) {
@@ -117,6 +142,45 @@ std::expected<WallLayer, Error> to_wall_layer(const schema::WallLayer* layer) {
                    .unit_length = Mm{layer->unit_length()},
                    .unit_width = Mm{layer->unit_width()},
                    .unit_height = Mm{layer->unit_height()}};
+}
+
+std::expected<Room, Error> to_room(const schema::Room* room) {
+  if (room == nullptr || room->anchor() == nullptr) {
+    return corrupt("room or its anchor is missing");
+  }
+  const std::optional<RoomKind> kind = from_schema(room->kind());
+  if (!kind) {
+    return corrupt("unknown room kind");
+  }
+  return Room{.level = to_id(room->level()), .anchor = to_point(*room->anchor()), .kind = *kind};
+}
+
+std::expected<Command, Error> decode_room(const schema::CommandEntry& entry) {
+  switch (entry.command_type()) {
+    case schema::Command::AddRoom:
+      return to_room(entry.command_as_AddRoom()->room()).transform([](const Room& room) {
+        return Command{AddRoom{.room = room}};
+      });
+    case schema::Command::MoveRoom: {
+      const auto* move = entry.command_as_MoveRoom();
+      if (move->anchor() == nullptr) {
+        return corrupt("anchor is missing");
+      }
+      return MoveRoom{.room = to_id(move->room()), .anchor = to_point(*move->anchor())};
+    }
+    case schema::Command::SetRoomKind: {
+      const auto* set = entry.command_as_SetRoomKind();
+      const std::optional<RoomKind> kind = from_schema(set->kind());
+      if (!kind) {
+        return corrupt("unknown room kind");
+      }
+      return SetRoomKind{.room = to_id(set->room()), .kind = *kind};
+    }
+    case schema::Command::RemoveRoom:
+      return RemoveRoom{.room = to_id(entry.command_as_RemoveRoom()->room())};
+    default:
+      return corrupt("not a room command");
+  }
 }
 
 std::expected<Opening, Error> to_opening(const schema::Opening* opening) {
@@ -347,6 +411,18 @@ std::optional<OpeningKind> from_schema(schema::OpeningKind kind) {
   return std::nullopt;
 }
 
+schema::RoomKind to_schema(RoomKind kind) {
+  const auto* const found =
+      std::ranges::find(kRoomKinds, kind, &std::pair<RoomKind, schema::RoomKind>::first);
+  return found != kRoomKinds.end() ? found->second : schema::RoomKind::Room;
+}
+
+std::optional<RoomKind> from_schema(schema::RoomKind kind) {
+  const auto* const found =
+      std::ranges::find(kRoomKinds, kind, &std::pair<RoomKind, schema::RoomKind>::second);
+  return found != kRoomKinds.end() ? std::optional{found->first} : std::nullopt;
+}
+
 schema::WallRole to_schema(WallRole role) {
   switch (role) {
     case WallRole::kExterior:
@@ -516,6 +592,11 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
     case schema::Command::SetOpeningKind:
     case schema::Command::RemoveOpening:
       return decode_opening(entry);
+    case schema::Command::AddRoom:
+    case schema::Command::MoveRoom:
+    case schema::Command::SetRoomKind:
+    case schema::Command::RemoveRoom:
+      return decode_room(entry);
     case schema::Command::SetCondition: {
       const auto* set = entry.command_as_SetCondition();
       const std::optional<ConditionsField> field = from_schema(set->field());
@@ -693,6 +774,13 @@ EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Opening& op
                        .Union()};
 }
 
+EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Room& room) {
+  const schema::Uuid level = to_schema(room.level);
+  const schema::PointMm anchor = to_schema(room.anchor);
+  return {.type = schema::Element::Room,
+          .value = schema::CreateRoom(builder, &level, &anchor, to_schema(room.kind)).Union()};
+}
+
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Conditions& conditions) {
   return {.type = schema::Element::Conditions,
           .value = schema::CreateConditions(builder, conditions.seismic_intensity,
@@ -750,6 +838,8 @@ std::expected<Element, Error> decode(schema::Element type, const void* value) {
       return to_wall_type(static_cast<const schema::WallType*>(value));
     case schema::Element::WallLayer:
       return to_wall_layer(static_cast<const schema::WallLayer*>(value));
+    case schema::Element::Room:
+      return to_room(static_cast<const schema::Room*>(value));
     case schema::Element::NONE:
       break;
   }
@@ -779,6 +869,7 @@ std::expected<Snapshot, Error> decode(const schema::OpenModel* open) {
             [&](const Conditions& conditions) { snapshot.conditions.emplace_back(id, conditions); },
             [&](const WallType& type) { snapshot.wall_types.emplace_back(id, type); },
             [&](const WallLayer& layer) { snapshot.wall_layers.emplace_back(id, layer); },
+            [&](const Room& room) { snapshot.rooms.emplace_back(id, room); },
         },
         *element);
   }
@@ -801,6 +892,8 @@ flatbuffers::Offset<schema::ElementChange> encode_change(flatbuffers::FlatBuffer
     value = encode(builder, *type);
   } else if (const auto* layer = model.find<WallLayer>(id)) {
     value = encode(builder, *layer);
+  } else if (const auto* room = model.find<Room>(id)) {
+    value = encode(builder, *room);
   }
   return schema::CreateElementChange(builder, &key, value.type, value.value);
 }

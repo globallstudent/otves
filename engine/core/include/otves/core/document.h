@@ -16,6 +16,7 @@
 #include <otves/core/model.h>
 #include <otves/core/op.h>
 #include <otves/core/opening.h>
+#include <otves/core/room.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 #include <otves/core/wall_type.h>
@@ -43,6 +44,8 @@ struct Snapshot {
       wall_types{};  // NOLINT(readability-redundant-member-init)
   std::vector<std::pair<ElementId, WallLayer>>
       wall_layers{};  // NOLINT(readability-redundant-member-init)
+  // The names of the job's rooms (docs/adr/0015); none in a job saved before them.
+  std::vector<std::pair<ElementId, Room>> rooms{};  // NOLINT(readability-redundant-member-init)
 };
 
 // Owns a model and its append-only operation log; the only way to change the model.
@@ -63,8 +66,8 @@ class Document {
   // Replaces the model with a saved one and starts an empty log with no undo or redo, as when a
   // job is opened; later stamps sort after the snapshot's clock. Every element of the old and the
   // new model is dirty. Fails with kCorruptData, changing nothing, when an element is invalid,
-  // an id repeats, a wall, opening or layer refers to a missing level, wall or wall type, a wall
-  // names a type with no layers, or the job has more than one set of conditions.
+  // an id repeats, a wall, room, opening or layer refers to a missing level, wall or wall type, a
+  // wall names a type with no layers, or the job has more than one set of conditions.
   [[nodiscard]] std::expected<void, Error> open(const Snapshot& snapshot);
 
   // A gesture still open (its touch-up was lost) is closed first, so its changes reach the log.

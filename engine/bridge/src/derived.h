@@ -10,6 +10,7 @@
 #include <otves/takeoff/rules.h>
 
 #include "engine_generated.h"
+#include "placement.h"
 
 // What the engine derives from the model for the app: plan outlines and the take-off. All are
 // rebuilt whole; the session sends them only when the model or the content changed.
@@ -33,6 +34,10 @@ using OpeningOutlinesOffset =
 // Every opening whose wall exists, cut face to face through it, sorted by id.
 [[nodiscard]] OpeningOutlinesOffset encode_openings(flatbuffers::FlatBufferBuilder& builder,
                                                     const Model& model);
+
+// The space a Pick found, as its answer.
+[[nodiscard]] flatbuffers::Offset<schema::PickedSpace> encode_space(
+    flatbuffers::FlatBufferBuilder& builder, const FoundSpace& found);
 
 // A level's display list, as the answer to a Draw.
 [[nodiscard]] flatbuffers::Offset<schema::Drawing> encode_drawing(

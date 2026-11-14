@@ -81,6 +81,36 @@ table WallLayer {
   unit_height:long;
 }
 
+// What a room is used as (engine/core/room.h). The app writes the name in the builder's language.
+enum RoomKind:ubyte {
+  Room = 0,
+  LivingRoom = 1,
+  KitchenLiving = 2,
+  Kitchen = 3,
+  Dining = 4,
+  Bedroom = 5,
+  Children = 6,
+  Study = 7,
+  Hall = 8,
+  Corridor = 9,
+  Bathroom = 10,  // a bath and a toilet in one room
+  Bath = 11,
+  Toilet = 12,
+  Boiler = 13,
+  Storage = 14,
+  Wardrobe = 15,
+  Veranda = 16,
+  Garage = 17,
+  Tambour = 18,
+}
+
+// A name for the space of `level` that holds `anchor` (docs/adr/0015).
+table Room {
+  level:Uuid;
+  anchor:PointMm;
+  kind:RoomKind = Room;
+}
+
 table Opening {
   wall:Uuid;
   offset:long;
@@ -136,6 +166,14 @@ table SetWallLayer { layer:Uuid; thickness:long; unit_length:long; unit_width:lo
 table SetWallType { wall:Uuid; type:Uuid; }
 table SetWallMirrored { wall:Uuid; mirrored:bool; }
 
+// Names the space that holds the room's anchor (docs/adr/0015). Whether a space is there is not
+// checked: the response's issues say when it is not.
+table AddRoom { room:Room; }
+table MoveRoom { room:Uuid; anchor:PointMm; }
+table SetRoomKind { room:Uuid; kind:RoomKind = Room; }
+// Takes the name away; the space stays.
+table RemoveRoom { room:Uuid; }
+
 table AddOpening { opening:Opening; }
 table MoveOpening { opening:Uuid; offset:long; }
 table ResizeOpening { opening:Uuid; width:long; height:long; }
@@ -172,7 +210,8 @@ table PlaceOpening {
 
 // What the user tapped on `level`: an opening or wall under `at`, else the nearest within
 // `reach`, openings first. Changes nothing; the result's `picked` names the element and is absent
-// when nothing is that near.
+// when nothing is that near. Then the result's `space` is the space `at` lies in, if the walls
+// close one there (docs/adr/0015).
 table Pick {
   level:Uuid;
   at:PointMm;
@@ -246,8 +285,8 @@ table Draw {
 
 // Replaces the open model with a saved job's elements (docs/adr/0007) and starts an empty log
 // with no undo or redo. `clock` is the newest stamp in the job's log; later stamps sort after it.
-// Fails with CorruptData, changing nothing, when an element is invalid, an id repeats, or a wall
-// or opening refers to a missing level or wall.
+// Fails with CorruptData, changing nothing, when an element is invalid, an id repeats, or a wall,
+// room or opening refers to a missing level or wall.
 table OpenModel {
   elements:[ElementChange];
   clock:ulong;
@@ -299,6 +338,10 @@ union Command {
   SetWallLayer,
   SetWallType,
   SetWallMirrored,
+  AddRoom,
+  MoveRoom,
+  SetRoomKind,
+  RemoveRoom,
 }
 
 table CommandEntry {
@@ -369,6 +412,7 @@ enum Fill:ubyte {
   Gap = 3,       // what an opening leaves of its wall
   Facing = 4,    // masonry laid in front of the wall
   Insulation = 5,
+  Floor = 6,     // a space the walls close
 }
 
 enum Stroke:ubyte {
@@ -383,6 +427,8 @@ enum Stroke:ubyte {
 enum TextKind:ubyte {
   Length = 0,       // a wall's length
   AboutLength = 1,  // one that nobody has typed or measured
+  RoomName = 2,     // a room's name: `value` is its RoomKind
+  RoomArea = 3,     // a space's floor: `value` is its area in cm²
 }
 
 // Every primitive names the element it draws; absent for what cannot be picked.
@@ -409,14 +455,17 @@ table DrawnArc {
   to:PointM;
 }
 
-// A number in millimetres written with its middle at `at`, along the unit direction `along`,
-// which never points to the left or straight down.
+// A number in millimetres, or what `kind` says, written with its middle at `at`, along the unit
+// direction `along`, which never points to the left or straight down. `fit` is the room there is
+// for it along that direction, in metres; a text wider than that is left out. Zero for a text
+// the engine fitted itself.
 table DrawnText {
   element:Uuid;
   kind:TextKind = Length;
   value:long;
   at:PointM;
   along:PointM;
+  fit:double;
 }
 
 // One level as a display list (docs/adr/0013), in plan metres: painted in this order, each list
@@ -428,6 +477,21 @@ table Drawing {
   texts:[DrawnText];
 }
 
+// A closed outline in plan metres.
+table Ring {
+  points:[PointM];
+}
+
+// The space under a picked point (docs/adr/0015): the floor the walls close there.
+table PickedSpace {
+  room:Uuid;             // the room that names it; absent for a space with no name
+  kind:RoomKind = Room;  // of that room
+  area:double;           // m², less what stands free inside
+  perimeter:double;      // m, round what stands free inside too
+  outline:[PointM];      // counter-clockwise
+  islands:[Ring];        // clockwise: what stands free inside
+}
+
 table CommandResult {
   error:ErrorCode = None;
   message:string;  // English context for logs; the app shows translated text for `error`
@@ -435,9 +499,10 @@ table CommandResult {
   picked:Uuid;     // the element a Pick found, if any
   aimed:Aimed;     // the answer to an Aim or AimMeasured
   drawing:Drawing;  // the answer to a Draw
+  space:PickedSpace;  // the space a Pick found when no element was there
 }
 
-union Element { Level, Wall, Opening, Conditions, WallType, WallLayer }
+union Element { Level, Wall, Opening, Conditions, WallType, WallLayer, Room }
 
 // What produced an operation-log group (engine/core/op.h).
 enum CommandKind:ubyte {
@@ -470,6 +535,10 @@ enum CommandKind:ubyte {
   SetWallLayer = 26,
   SetWallType = 27,
   SetWallMirrored = 28,
+  AddRoom = 29,
+  MoveRoom = 30,
+  SetRoomKind = 31,
+  RemoveRoom = 32,
 }
 
 enum LevelField:ubyte {
@@ -496,6 +565,7 @@ enum WallField:ubyte {
 enum WallTypeField:ubyte { Role = 0 }
 enum WallLayerField:ubyte { Thickness = 0, UnitLength = 1, UnitWidth = 2, UnitHeight = 3 }
 enum OpeningField:ubyte { Offset = 0, Width = 1, Height = 2, Sill = 3, Kind = 4 }
+enum RoomField:ubyte { Anchor = 0, Kind = 1 }
 
 // Property-level changes (engine/core/op.h). Create and delete carry the whole element.
 table CreateOp { id:Uuid; element:Element; }
@@ -523,6 +593,15 @@ table SetConditionsFieldOp { id:Uuid; field:ConditionsField; before:long; after:
 table SetWallTypeFieldOp { id:Uuid; field:WallTypeField; before:long; after:long; }
 // Millimetres.
 table SetWallLayerFieldOp { id:Uuid; field:WallLayerField; before:long; after:long; }
+// Anchor uses the points; Kind its code in before and after.
+table SetRoomFieldOp {
+  id:Uuid;
+  field:RoomField;
+  before:long;
+  after:long;
+  before_point:PointMm;
+  after_point:PointMm;
+}
 
 union Op {
   CreateOp,
@@ -533,6 +612,7 @@ union Op {
   SetConditionsFieldOp,
   SetWallTypeFieldOp,
   SetWallLayerFieldOp,
+  SetRoomFieldOp,
 }
 
 table OpEntry {
@@ -590,6 +670,10 @@ enum IssueKind:ubyte {
   // level only.
   RingBeamMissing = 8,
   JunctionMeshesMissing = 9,
+  // A room's anchor lies in no space, or in a space an older room names (docs/adr/0015). These
+  // name the room, with its anchor as the point.
+  RoomWithoutSpace = 10,
+  RoomSharesSpace = 11,
 }
 
 // Something in the model a builder has to fix (engine/geom, engine/takeoff). An opening or

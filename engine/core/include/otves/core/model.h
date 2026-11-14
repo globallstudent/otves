@@ -8,6 +8,7 @@
 #include <otves/core/conditions.h>
 #include <otves/core/level.h>
 #include <otves/core/opening.h>
+#include <otves/core/room.h>
 #include <otves/core/slot_map.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -119,7 +120,8 @@ class Model {
   }
 
   std::tuple<ElementStore<Level>, ElementStore<Wall>, ElementStore<Opening>,
-             ElementStore<Conditions>, ElementStore<WallType>, ElementStore<WallLayer>>
+             ElementStore<Conditions>, ElementStore<WallType>, ElementStore<WallLayer>,
+             ElementStore<Room>>
       stores_;
 };
 

@@ -34,3 +34,21 @@ flowchart LR
 - A wall with a type stores thickness 0 and no unit; setting either on it is refused with `kTypeDecides`.
 - A layer names a type that exists, and a wall a type that has layers. A saved job that breaks this does not open.
 - The outer face of a wall is its right face, looking from start to end, and its left when `mirrored` is set.
+- A room keeps the point the user gave. Whether a space lies under it is derived, because the walls may change later (ADR 0015).
+
+## Adding an element type
+
+`Room` (ADR 0015) is the last one added; follow it file by file.
+
+| Step | Where |
+|---|---|
+| The value, `validate`, the field enum, `get_field`, `set_field`, `ElementTraits` | `include/otves/core/<type>.h`, `src/<type>.cpp` |
+| A store in the model's tuple | `model.h` |
+| `Create`, `Delete` and `SetField` in the `Op` variant; command kinds at the end of the enum | `op.h` |
+| Commands and their kinds | `command.h`, `command.cpp` |
+| Planning each command; what goes with a removed parent; the saved elements, their ids and parents | `document.h` (`Snapshot`), `document.cpp` (`plan`, `remove_level`, `load`, `collect_ids`) |
+| The table, the `Element` and `Op` unions, command and kind codes, appended | `schema/engine.fbs` |
+| Decode, encode, the snapshot, `encode_change`; the op and its field codes | `bridge/src/convert.*`, `bridge/src/oplog.cpp` |
+| The Kotlin value, commands, encoder and decoder | `android/engine-bridge` |
+| A row, its mapping, the DAO, a new file version with a migration test | `android/data/project` |
+| The mirrored map | `JobSession` |

@@ -1,5 +1,6 @@
 add_library(otves_drafting
-  src/plan.cpp)
+  src/plan.cpp
+  src/rooms.cpp)
 add_library(otves::drafting ALIAS otves_drafting)
 
 target_include_directories(otves_drafting PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
@@ -10,6 +11,7 @@ target_link_libraries(otves_drafting
 
 if(OTVES_BUILD_TESTS)
   otves_add_test(otves_drafting_tests
-    tests/plan_test.cpp)
+    tests/plan_test.cpp
+    tests/rooms_test.cpp)
   target_link_libraries(otves_drafting_tests PRIVATE otves::drafting)
 endif()

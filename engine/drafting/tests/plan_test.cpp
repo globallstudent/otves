@@ -142,7 +142,7 @@ TEST(Draft, ALengthIsWrittenByTheLeftFaceAtTheMiddle) {
   const Text& length = drawing.texts[0];
   EXPECT_EQ(length.element, id(1));
   EXPECT_EQ(length.kind, TextKind::kLength);
-  EXPECT_EQ(length.value, 6000_mm);
+  EXPECT_EQ(length.value, 6000);
   expect_near(length.at, {.x = 3.0, .y = kBeside});
   expect_near(length.along, {.x = 1.0, .y = 0.0});
 }

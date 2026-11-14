@@ -6,9 +6,11 @@
 #include <otves/core/command.h>
 #include <otves/core/error.h>
 #include <otves/core/model.h>
+#include <otves/core/room.h>
 #include <otves/core/uuid.h>
 #include <otves/drafting/plan.h>
 #include <otves/geom/editing.h>
+#include <otves/geom/spaces.h>
 
 #include "convert.h"
 
@@ -37,8 +39,22 @@ namespace otves::bridge {
 // level under it. kNotFound when the level does not exist.
 [[nodiscard]] Result<drafting::Drawing> draw(const Model& model, const View& view);
 
-// The element a tap picks on its level: an opening or wall under the point, else the nearest
-// opening, else the nearest wall within reach. kNotFound when the level does not exist.
-[[nodiscard]] Result<std::optional<ElementId>> pick(const Model& model, const Tap& tap);
+// A space the walls of a level close, with the room that names it (docs/adr/0015).
+struct FoundSpace {
+  geom::Space space;
+  ElementId room;  // nil for a space with no name
+  RoomKind kind = RoomKind::kRoom;
+};
+
+// What a tap found: an element, or else the space it lies in.
+struct Found {
+  std::optional<ElementId> element;
+  std::optional<FoundSpace> space;
+};
+
+// What a tap picks on its level: an opening or wall under the point, else the nearest opening,
+// else the nearest wall within reach, else the space the point lies in. kNotFound when the level
+// does not exist.
+[[nodiscard]] Result<Found> pick(const Model& model, const Tap& tap);
 
 }  // namespace otves::bridge

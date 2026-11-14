@@ -14,6 +14,7 @@
 #include <otves/core/error.h>
 #include <otves/core/op.h>
 #include <otves/core/opening.h>
+#include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -39,6 +40,15 @@ DocumentEnvironment test_environment() {
 ElementId created(const Result<std::optional<ElementId>>& result) {
   EXPECT_TRUE(result.has_value() && result->has_value());
   return result.value_or(std::nullopt).value_or(ElementId{});
+}
+
+// A room named, renamed, moved and unnamed.
+void name_a_room(Document& document, ElementId level) {
+  const ElementId room = created(document.execute(AddRoom{
+      .room = {.level = level, .anchor = {.x = 2000_mm, .y = 1500_mm}, .kind = RoomKind::kHall}}));
+  EXPECT_TRUE(document.execute(SetRoomKind{.room = room, .kind = RoomKind::kTambour}));
+  EXPECT_TRUE(document.execute(MoveRoom{.room = room, .anchor = {.x = -300_mm, .y = 900_mm}}));
+  EXPECT_TRUE(document.execute(RemoveRoom{.room = room}));
 }
 
 // Every kind of op: creates, each field of each element, deletions by a cascade, undo and redo.
@@ -108,6 +118,7 @@ Document edited_document() {
   for (const Command& edit : typing) {
     EXPECT_TRUE(document.execute(edit));
   }
+  name_a_room(document, level);
   EXPECT_TRUE(document.undo());
   EXPECT_TRUE(document.redo());
   return document;
@@ -125,7 +136,7 @@ void expect_round_trip(const OpGroup& group) {
 
 TEST(OpLog, EveryGroupComesBackFromItsBuffer) {
   const Document document = edited_document();
-  ASSERT_EQ(document.log().size(), 23U);
+  ASSERT_EQ(document.log().size(), 27U);
 
   for (const OpGroup& group : document.log()) {
     expect_round_trip(group);

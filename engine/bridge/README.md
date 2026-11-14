@@ -33,8 +33,8 @@ sequenceDiagram
 
 | Field | Content |
 |---|---|
-| `results` | One per command, in order: `ErrorCode`, an English message for logs, the created element's id, the element a `Pick` found, where an `Aim` or `AimMeasured` says a wall would end, the `Drawing` a `Draw` asked for |
-| `changes` | Each changed level, wall type, wall layer, wall or opening with its full value, or with no value when deleted; sorted by id |
+| `results` | One per command, in order: `ErrorCode`, an English message for logs, the created element's id, the element a `Pick` found or else the space under it, where an `Aim` or `AimMeasured` says a wall would end, the `Drawing` a `Draw` asked for |
+| `changes` | Each changed level, wall type, wall layer, wall, opening or room with its full value, or with no value when deleted; sorted by id |
 | `can_undo`, `can_redo` | For the toolbar |
 | `outlines` | Every wall's joined plan outline in metres, level by level; only when the model or the content changed |
 | `takeoff`, `takeoff_error` | Material lines from the loaded rules, or why they could not run; absent until `LoadContent` |
@@ -44,6 +44,8 @@ sequenceDiagram
 `AddSketch` asks `geom::straighten` what walls a stroke means and runs them as `AddWall` commands in one undo step, each wall not exact ([ADR 0012](../../docs/adr/0012-a-sketch-becomes-walls-in-the-engine.md)). Both check every command before running the first, so a refusal changes nothing.
 
 `AddWallType` makes a type and its layers in one undo step and answers with the type's id. `SetWallType` gives a wall a type and clears its own thickness and unit in the same step ([ADR 0014](../../docs/adr/0014-wall-types-are-job-elements-made-of-layers.md)). Geometry, the drawing and the take-off read every wall through `core::build_of`, so a wall with a type and one without take one path. A sketch of a type drawn clockwise comes out mirrored, so its outer layer stays outside.
+
+`AddRoom` names the space that holds its anchor, `SetRoomKind` renames it, `MoveRoom` moves the anchor and `RemoveRoom` takes the name away ([ADR 0015](../../docs/adr/0015-rooms-are-spaces-the-walls-close.md)). None checks that a space is there: the response's issues name a room whose anchor lies in no space, or in a space an older room names. A `Pick` that finds no wall or opening within reach answers with the space under the point: its outline, islands, floor area, perimeter and the room that names it.
 
 `LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.
 

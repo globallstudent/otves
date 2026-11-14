@@ -25,6 +25,7 @@
 #include <otves/core/op.h>
 #include <otves/core/opening.h>
 #include <otves/core/overloaded.h>
+#include <otves/core/room.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 #include <otves/core/wall_type.h>
@@ -98,9 +99,16 @@ std::expected<Ops, Error> remove_wall(const Model& model, ElementId id) {
   });
 }
 
-// The level goes last, after its walls and their openings.
+// The level goes last, after the names of its rooms, its walls and their openings.
 std::expected<Ops, Error> remove_level(const Model& model, ElementId id) {
   return find_element<Level>(model, id).transform([&model, id](const Level* level) {
+    std::vector<DeleteRoom> named;
+    model.for_each<Room>([&named, id](ElementId room_id, const Room& room) {
+      if (room.level == id) {
+        named.push_back({.id = room_id, .element = room});
+      }
+    });
+    std::ranges::sort(named, {}, &DeleteRoom::id);
     std::vector<DeleteWall> standing;
     model.for_each<Wall>([&standing, id](ElementId wall_id, const Wall& wall) {
       if (wall.level == id) {
@@ -108,7 +116,7 @@ std::expected<Ops, Error> remove_level(const Model& model, ElementId id) {
       }
     });
     std::ranges::sort(standing, {}, &DeleteWall::id);
-    Ops ops;
+    Ops ops(named.begin(), named.end());
     for (const DeleteWall& wall : standing) {
       delete_wall(model, wall.id, wall.element, ops);
     }
@@ -210,7 +218,7 @@ std::expected<Model, Error> load(const Snapshot& snapshot) {
   std::vector<ElementId> ids;
   ids.reserve(snapshot.levels.size() + snapshot.walls.size() + snapshot.openings.size() +
               snapshot.conditions.size() + snapshot.wall_types.size() +
-              snapshot.wall_layers.size());
+              snapshot.wall_layers.size() + snapshot.rooms.size());
   for (const auto& [id, level] : snapshot.levels) {
     ids.push_back(id);
   }
@@ -227,6 +235,9 @@ std::expected<Model, Error> load(const Snapshot& snapshot) {
     ids.push_back(id);
   }
   for (const auto& [id, layer] : snapshot.wall_layers) {
+    ids.push_back(id);
+  }
+  for (const auto& [id, room] : snapshot.rooms) {
     ids.push_back(id);
   }
   if (snapshot.conditions.size() > 1) {
@@ -264,12 +275,19 @@ std::expected<Model, Error> load(const Snapshot& snapshot) {
   const auto no_owner = [](const Model&, const WallType&) -> std::expected<void, Error> {
     return {};
   };
+  const auto of_level = [](const Model& into, const Room& room) -> std::expected<void, Error> {
+    if (into.find<Level>(room.level) == nullptr) {
+      return make_error(ErrorCode::kCorruptData, "saved room on a missing level");
+    }
+    return {};
+  };
   auto loaded =
       insert_saved(model, snapshot.levels, no_parent)
           .and_then([&] { return insert_saved(model, snapshot.wall_types, no_owner); })
           .and_then([&] { return insert_saved(model, snapshot.wall_layers, of_type); })
           .and_then([&] { return insert_saved(model, snapshot.walls, on_level); })
           .and_then([&] { return insert_saved(model, snapshot.openings, in_wall); })
+          .and_then([&] { return insert_saved(model, snapshot.rooms, of_level); })
           .and_then([&] {
             const auto alone = [](const Model&, const Conditions&) -> std::expected<void, Error> {
               return {};
@@ -290,6 +308,7 @@ void collect_ids(const Model& model, std::vector<ElementId>& ids) {
   model.for_each<Conditions>(add);
   model.for_each<WallType>(add);
   model.for_each<WallLayer>(add);
+  model.for_each<Room>(add);
 }
 
 }  // namespace
@@ -539,6 +558,26 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
               return Ops{};
             }
             return Ops{CreateConditions{.id = ElementId{next_uuid()}, .element = conditions}};
+          },
+          [this](const AddRoom& add) -> std::expected<Ops, Error> {
+            if (auto valid = validate(add.room); !valid) {
+              return std::unexpected(std::move(valid.error()));
+            }
+            return find_element<Level>(model_, add.room.level)
+                .transform([this, &add](const Level*) {
+                  return Ops{CreateRoom{.id = ElementId{next_uuid()}, .element = add.room}};
+                });
+          },
+          [&model](const MoveRoom& move) {
+            return edit<Room>(model, move.room, {{RoomField::kAnchor, move.anchor}});
+          },
+          [&model](const SetRoomKind& set) {
+            return edit<Room>(model, set.room, {{RoomField::kKind, set.kind}});
+          },
+          [&model](const RemoveRoom& remove) {
+            return find_element<Room>(model, remove.room).transform([&remove](const Room* room) {
+              return Ops{DeleteRoom{.id = remove.room, .element = *room}};
+            });
           },
           [&model](const RemoveOpening& remove) {
             return find_element<Opening>(model, remove.opening)

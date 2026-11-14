@@ -225,6 +225,28 @@ class Request {
     return add(Command::RemoveWall, schema::CreateRemoveWall(builder_, &id).Union());
   }
 
+  // A name for the space at `at`.
+  Request& name_room(ElementId level, schema::PointMm at, schema::RoomKind kind) {
+    const schema::Uuid on = key(level);
+    const auto room = schema::CreateRoom(builder_, &on, &at, kind);
+    return add(Command::AddRoom, schema::CreateAddRoom(builder_, room).Union());
+  }
+
+  Request& set_room_kind(ElementId room, schema::RoomKind kind) {
+    const schema::Uuid id = key(room);
+    return add(Command::SetRoomKind, schema::CreateSetRoomKind(builder_, &id, kind).Union());
+  }
+
+  Request& move_room(ElementId room, schema::PointMm anchor) {
+    const schema::Uuid id = key(room);
+    return add(Command::MoveRoom, schema::CreateMoveRoom(builder_, &id, &anchor).Union());
+  }
+
+  Request& remove_room(ElementId room) {
+    const schema::Uuid id = key(room);
+    return add(Command::RemoveRoom, schema::CreateRemoveRoom(builder_, &id).Union());
+  }
+
   // What a tap with a 300 mm reach picks.
   Request& pick(ElementId level, schema::PointMm at) {
     const schema::Uuid on = key(level);
@@ -928,21 +950,24 @@ TEST(Session, ADrawingIsTheLevelAsADisplayListAndChangesNothing) {
   ASSERT_EQ(asked.results()->size(), 3U);
   const schema::Drawing* drawing = asked.results()->Get(0)->drawing();
   ASSERT_NE(drawing, nullptr);
-  // Four walls with no material yet and the window's gap; its jambs, faces and glazing; a
-  // length by each wall.
-  ASSERT_EQ(drawing->polygons()->size(), 5U);
-  EXPECT_EQ(to_id(drawing->polygons()->Get(0)->element()), room[0]);
-  EXPECT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Unchosen);
-  EXPECT_EQ(drawing->polygons()->Get(0)->stroke(), schema::Stroke::WallEdge);
-  EXPECT_EQ(drawing->polygons()->Get(4)->fill(), schema::Fill::Gap);
+  // The floor the walls close; four walls with no material yet and the window's gap; its
+  // jambs, faces and glazing; the floor's area and a length by each wall.
+  ASSERT_EQ(drawing->polygons()->size(), 6U);
+  EXPECT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Floor);
+  EXPECT_EQ(drawing->polygons()->Get(0)->element(), nullptr);
+  EXPECT_EQ(to_id(drawing->polygons()->Get(1)->element()), room[0]);
+  EXPECT_EQ(drawing->polygons()->Get(1)->fill(), schema::Fill::Unchosen);
+  EXPECT_EQ(drawing->polygons()->Get(1)->stroke(), schema::Stroke::WallEdge);
+  EXPECT_EQ(drawing->polygons()->Get(5)->fill(), schema::Fill::Gap);
   EXPECT_EQ(drawing->lines()->size(), 5U);
   EXPECT_EQ(drawing->arcs()->size(), 0U);
-  ASSERT_EQ(drawing->texts()->size(), 4U);
-  EXPECT_EQ(to_id(drawing->texts()->Get(0)->element()), room[0]);
-  EXPECT_EQ(drawing->texts()->Get(0)->kind(), schema::TextKind::Length);
-  EXPECT_EQ(drawing->texts()->Get(0)->value(), 6000);
-  EXPECT_DOUBLE_EQ(drawing->texts()->Get(0)->at()->x(), 3.0);
-  EXPECT_DOUBLE_EQ(drawing->texts()->Get(0)->along()->x(), 1.0);
+  ASSERT_EQ(drawing->texts()->size(), 5U);
+  EXPECT_EQ(drawing->texts()->Get(0)->kind(), schema::TextKind::RoomArea);
+  EXPECT_EQ(to_id(drawing->texts()->Get(1)->element()), room[0]);
+  EXPECT_EQ(drawing->texts()->Get(1)->kind(), schema::TextKind::Length);
+  EXPECT_EQ(drawing->texts()->Get(1)->value(), 6000);
+  EXPECT_DOUBLE_EQ(drawing->texts()->Get(1)->at()->x(), 3.0);
+  EXPECT_DOUBLE_EQ(drawing->texts()->Get(1)->along()->x(), 1.0);
 
   EXPECT_EQ(asked.results()->Get(1)->error(), schema::ErrorCode::NotFound);
   EXPECT_EQ(asked.results()->Get(2)->error(), schema::ErrorCode::CorruptData);
@@ -1498,10 +1523,12 @@ TEST(Session, ALoopSketchedClockwiseStartsItsLayersFromTheLeftFace) {
   ASSERT_NE(first, nullptr);
   EXPECT_EQ(to_id(first->type()), type);
   EXPECT_FALSE(first->exact());
-  // The first wall runs up the left side; its facing is its outermost 120 mm.
+  // After the room's floor comes the first wall, up the left side; its facing is its outermost
+  // 120 mm.
   const schema::Drawing* drawing = drawn.results()->Get(1)->drawing();
-  ASSERT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Facing);
-  EXPECT_EQ(across(*drawing->polygons()->Get(0), &schema::PointM::x), (Range{-0.205, -0.085}));
+  ASSERT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Floor);
+  ASSERT_EQ(drawing->polygons()->Get(1)->fill(), schema::Fill::Facing);
+  EXPECT_EQ(across(*drawing->polygons()->Get(1), &schema::PointM::x), (Range{-0.205, -0.085}));
 
   // The other way round nothing is mirrored.
   respond(session, Request{}.undo().bytes());
@@ -1512,6 +1539,168 @@ TEST(Session, ALoopSketchedClockwiseStartsItsLayersFromTheLeftFace) {
           .bytes());
   ASSERT_EQ(again.changes()->size(), 4U);
   EXPECT_EQ(mirrored_walls(again), 0);
+}
+
+// The texts of a drawing of one kind.
+std::vector<const schema::DrawnText*> texts(const schema::Drawing& drawing, schema::TextKind kind) {
+  std::vector<const schema::DrawnText*> found;
+  for (const schema::DrawnText* text : *drawing.texts()) {
+    if (text->kind() == kind) {
+      found.push_back(text);
+    }
+  }
+  return found;
+}
+
+// The issues of a kind, as the rooms they name.
+std::vector<ElementId> rooms_with(const schema::Response& response, schema::IssueKind kind) {
+  std::vector<ElementId> rooms;
+  for (const schema::Issue* issue : *response.issues()) {
+    if (issue->kind() == kind) {
+      rooms.push_back(to_id(issue->element()));
+    }
+  }
+  return rooms;
+}
+
+TEST(Session, ARoomNamesTheSpaceThatHoldsItsAnchor) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const std::vector<ElementId> walls = add_room(session, level);
+
+  const auto& named =
+      respond(session, Request{}.name_room(level, {1000, 1000}, schema::RoomKind::Bedroom).bytes());
+  ASSERT_EQ(named.results()->Get(0)->error(), schema::ErrorCode::None);
+  const ElementId room = to_id(named.results()->Get(0)->created());
+  ASSERT_EQ(named.changes()->size(), 1U);
+  const schema::Room* saved = named.changes()->Get(0)->element_as_Room();
+  ASSERT_NE(saved, nullptr);
+  EXPECT_EQ(to_id(saved->level()), level);
+  EXPECT_EQ(saved->anchor()->x(), 1000);
+  EXPECT_EQ(saved->kind(), schema::RoomKind::Bedroom);
+  EXPECT_EQ(named.log()->Get(0)->kind(), schema::CommandKind::AddRoom);
+  EXPECT_EQ(named.issues()->size(), 0U);
+
+  // A tap in the middle finds the space with its room; beside a wall, the wall; outside, nothing.
+  const auto& picked = respond(session, Request{}
+                                            .pick(level, {3000, 2000})
+                                            .pick(level, {3000, 300})
+                                            .pick(level, {9000, 2000})
+                                            .draw(level)
+                                            .bytes());
+  const schema::PickedSpace* space = picked.results()->Get(0)->space();
+  ASSERT_NE(space, nullptr);
+  EXPECT_EQ(picked.results()->Get(0)->picked(), nullptr);
+  EXPECT_EQ(to_id(space->room()), room);
+  EXPECT_EQ(space->kind(), schema::RoomKind::Bedroom);
+  // Between the faces of 380 mm walls on their centre lines.
+  EXPECT_NEAR(space->area(), 5.62 * 3.62, 1e-9);
+  EXPECT_NEAR(space->perimeter(), 2 * (5.62 + 3.62), 1e-9);
+  EXPECT_EQ(space->outline()->size(), 4U);
+  EXPECT_EQ(space->islands()->size(), 0U);
+  EXPECT_EQ(to_id(picked.results()->Get(1)->picked()), walls[0]);
+  EXPECT_EQ(picked.results()->Get(1)->space(), nullptr);
+  EXPECT_EQ(picked.results()->Get(2)->picked(), nullptr);
+  EXPECT_EQ(picked.results()->Get(2)->space(), nullptr);
+
+  // The drawing has the floor, named, and the room's name over its area.
+  const schema::Drawing* drawing = picked.results()->Get(3)->drawing();
+  ASSERT_NE(drawing, nullptr);
+  EXPECT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Floor);
+  EXPECT_EQ(to_id(drawing->polygons()->Get(0)->element()), room);
+  const auto names = texts(*drawing, schema::TextKind::RoomName);
+  const auto areas = texts(*drawing, schema::TextKind::RoomArea);
+  ASSERT_EQ(names.size(), 1U);
+  ASSERT_EQ(areas.size(), 1U);
+  EXPECT_EQ(names[0]->value(), static_cast<std::int64_t>(schema::RoomKind::Bedroom));
+  EXPECT_EQ(to_id(names[0]->element()), room);
+  EXPECT_EQ(areas[0]->value(), 203'444);
+  EXPECT_NEAR(names[0]->fit(), 5.62 * 0.8, 1e-9);
+  EXPECT_DOUBLE_EQ(names[0]->at()->x(), 3.0);
+
+  // Renamed, and the name before it comes back with undo.
+  const auto& renamed =
+      respond(session, Request{}.set_room_kind(room, schema::RoomKind::Study).bytes());
+  EXPECT_EQ(renamed.changes()->Get(0)->element_as_Room()->kind(), schema::RoomKind::Study);
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(undone.changes()->Get(0)->element_as_Room()->kind(), schema::RoomKind::Bedroom);
+}
+
+// The first issue of a kind, or null.
+const schema::Issue* issue_of(const schema::Response& response, schema::IssueKind kind) {
+  const auto found = std::ranges::find(*response.issues(), kind, &schema::Issue::kind);
+  return found != response.issues()->end() ? *found : nullptr;
+}
+
+TEST(Session, ARoomWithNoSpaceOfItsOwnIsReported) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_room(session, level);
+  const auto& named =
+      respond(session, Request{}
+                           .name_room(level, {1000, 1000}, schema::RoomKind::Kitchen)
+                           .name_room(level, {5000, 3000}, schema::RoomKind::Hall)
+                           .name_room(level, {9000, 9000}, schema::RoomKind::Garage)
+                           .bytes());
+  const ElementId hall = to_id(named.results()->Get(1)->created());
+  const ElementId garage = to_id(named.results()->Get(2)->created());
+
+  // The kitchen was there first; the garage stands where no walls close.
+  EXPECT_EQ(rooms_with(named, schema::IssueKind::RoomSharesSpace), std::vector{hall});
+  EXPECT_EQ(rooms_with(named, schema::IssueKind::RoomWithoutSpace), std::vector{garage});
+  const schema::Issue* outside = issue_of(named, schema::IssueKind::RoomWithoutSpace);
+  ASSERT_NE(outside, nullptr);
+  EXPECT_EQ(to_id(outside->level()), level);
+  ASSERT_NE(outside->at(), nullptr);
+  EXPECT_EQ(outside->at()->x(), 9000);
+
+  // Moved into the space, the garage shares it too; taken off, both are in order again.
+  const auto& moved = respond(session, Request{}.move_room(garage, {3000, 3000}).bytes());
+  EXPECT_EQ(rooms_with(moved, schema::IssueKind::RoomSharesSpace), (std::vector{hall, garage}));
+  const auto& fixed = respond(session, Request{}.remove_room(hall).remove_room(garage).bytes());
+  EXPECT_EQ(fixed.issues()->size(), 0U);
+  EXPECT_EQ(deleted(fixed).size(), 2U);
+}
+
+TEST(Session, ARoomLosesItsSpaceWhenItsWallsNoLongerClose) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const std::vector<ElementId> walls = add_room(session, level);
+  const auto& named =
+      respond(session, Request{}.name_room(level, {1000, 1000}, schema::RoomKind::Kitchen).bytes());
+  const ElementId kitchen = to_id(named.results()->Get(0)->created());
+
+  const auto& opened = respond(session, Request{}.remove_wall(walls[2]).bytes());
+  EXPECT_EQ(rooms_with(opened, schema::IssueKind::RoomWithoutSpace), std::vector{kitchen});
+  const auto& asked = respond(session, Request{}.pick(level, {3000, 2000}).draw(level).bytes());
+  EXPECT_EQ(asked.results()->Get(0)->space(), nullptr);
+  EXPECT_TRUE(texts(*asked.results()->Get(1)->drawing(), schema::TextKind::RoomName).empty());
+
+  // The wall back, the kitchen is a room again.
+  const auto& closed = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(closed.issues()->size(), 0U);
+}
+
+TEST(Session, ARoomCommandWithAnUnknownKindOrNoPointIsCorrupt) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  // An app built against a newer schema may name a room this engine does not know.
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+  const auto no_such_kind = static_cast<schema::RoomKind>(200);
+
+  const auto& refused =
+      respond(session, Request{}
+                           .name_room(level, {1000, 1000}, no_such_kind)
+                           .name_room(ElementId{Uuid{7, 7}}, {1000, 1000}, schema::RoomKind::Room)
+                           .remove_room(ElementId{Uuid{7, 7}})
+                           .empty(Command::AddRoom)
+                           .bytes());
+
+  EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(refused.results()->Get(1)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(refused.results()->Get(2)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(refused.results()->Get(3)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(refused.changes()->size(), 0U);
 }
 
 }  // namespace

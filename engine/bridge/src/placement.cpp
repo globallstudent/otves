@@ -18,6 +18,7 @@
 #include <otves/core/model.h>
 #include <otves/core/opening.h>
 #include <otves/core/point.h>
+#include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
@@ -26,6 +27,7 @@
 #include <otves/geom/editing.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/sketch.h>
+#include <otves/geom/spaces.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 #include <otves/takeoff/layers.h>
@@ -89,6 +91,40 @@ std::vector<geom::WallInput> sorted_walls_on(const Model& model, ElementId level
   std::vector<geom::WallInput> walls = walls_on(model, level);
   std::ranges::sort(walls, {}, &geom::WallInput::id);
   return walls;
+}
+
+// The rooms of `level`, in the order of their ids.
+std::vector<drafting::NamedRoom> rooms_on(const Model& model, ElementId level) {
+  std::vector<drafting::NamedRoom> rooms;
+  model.for_each<Room>([&rooms, level](ElementId id, const Room& room) {
+    if (room.level == level) {
+      rooms.push_back({.id = id, .room = room});
+    }
+  });
+  std::ranges::sort(rooms, {}, &drafting::NamedRoom::id);
+  return rooms;
+}
+
+// The space of the level that holds the point, with the room that names it.
+std::optional<FoundSpace> space_at(const Model& model, std::span<const geom::WallInput> walls,
+                                   ElementId level, geom::Vec2 at) {
+  std::vector<geom::Space> spaces = geom::find_spaces(walls);
+  std::vector<geom::Anchor> anchors;
+  for (const drafting::NamedRoom& named : rooms_on(model, level)) {
+    anchors.push_back({.room = named.id, .at = named.room.anchor});
+  }
+  const geom::Names names = geom::name_spaces(spaces, anchors);
+  for (std::size_t i = 0; i < spaces.size(); ++i) {
+    if (!geom::holds(spaces[i], at)) {
+      continue;
+    }
+    FoundSpace found{.space = std::move(spaces[i]), .room = names.rooms[i].value_or(ElementId{})};
+    if (const Room* room = model.find<Room>(found.room)) {
+      found.kind = room->kind;
+    }
+    return found;
+  }
+  return std::nullopt;
 }
 
 // The wall ends of the level under `level`, so walls stand on walls.
@@ -201,11 +237,13 @@ Result<drafting::Drawing> draw(const Model& model, const View& view) {
   if (const std::optional<ElementId> under = level_below(model, view.level)) {
     below = walls_on(model, *under);
   }
-  return drafting::draft({.walls = walls, .openings = openings, .below = below, .builds = builds},
-                         view.text);
+  const std::vector<drafting::NamedRoom> rooms = rooms_on(model, view.level);
+  return drafting::draft(
+      {.walls = walls, .openings = openings, .below = below, .builds = builds, .rooms = rooms},
+      view.text);
 }
 
-Result<std::optional<ElementId>> pick(const Model& model, const Tap& tap) {
+Result<Found> pick(const Model& model, const Tap& tap) {
   if (model.find<Level>(tap.level) == nullptr) {
     return make_error(ErrorCode::kNotFound, "level not found");
   }
@@ -214,19 +252,20 @@ Result<std::optional<ElementId>> pick(const Model& model, const Tap& tap) {
   const geom::Vec2 at = geom::to_vec2(tap.at);
   const double reach = to_metres(std::max(tap.reach, Mm{0}));
   // Under the finger first, so a wall beside an opening stays easy to pick.
-  if (auto opening = geom::hit_opening(openings, at, 0.0)) {
-    return opening;
+  if (const auto opening = geom::hit_opening(openings, at, 0.0)) {
+    return Found{.element = opening, .space = std::nullopt};
   }
-  if (auto wall = geom::hit_wall(walls, at, 0.0)) {
-    return wall->wall;
+  if (const auto wall = geom::hit_wall(walls, at, 0.0)) {
+    return Found{.element = wall->wall, .space = std::nullopt};
   }
-  if (auto opening = geom::hit_opening(openings, at, reach)) {
-    return opening;
+  if (const auto opening = geom::hit_opening(openings, at, reach)) {
+    return Found{.element = opening, .space = std::nullopt};
   }
-  if (auto wall = geom::hit_wall(walls, at, reach)) {
-    return wall->wall;
+  if (const auto wall = geom::hit_wall(walls, at, reach)) {
+    return Found{.element = wall->wall, .space = std::nullopt};
   }
-  return std::nullopt;
+  // Nothing built is that near: the floor under the finger.
+  return Found{.element = std::nullopt, .space = space_at(model, walls, tap.level, at)};
 }
 
 Result<AddOpening> place_opening(const Model& model, const OpeningPlacement& placement) {

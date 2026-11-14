@@ -9,6 +9,7 @@
 #include <otves/core/hlc.h>
 #include <otves/core/level.h>
 #include <otves/core/opening.h>
+#include <otves/core/room.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 #include <otves/core/wall_type.h>
@@ -61,12 +62,15 @@ using SetWallTypeField = SetField<WallType>;
 using CreateWallLayer = Create<WallLayer>;
 using DeleteWallLayer = Delete<WallLayer>;
 using SetWallLayerField = SetField<WallLayer>;
+using CreateRoom = Create<Room>;
+using DeleteRoom = Delete<Room>;
+using SetRoomField = SetField<Room>;
 
-using Op =
-    std::variant<CreateLevel, DeleteLevel, SetLevelField, CreateWall, DeleteWall, SetWallField,
-                 CreateOpening, DeleteOpening, SetOpeningField, CreateConditions, DeleteConditions,
-                 SetConditionsField, CreateWallType, DeleteWallType, SetWallTypeField,
-                 CreateWallLayer, DeleteWallLayer, SetWallLayerField>;
+using Op = std::variant<CreateLevel, DeleteLevel, SetLevelField, CreateWall, DeleteWall,
+                        SetWallField, CreateOpening, DeleteOpening, SetOpeningField,
+                        CreateConditions, DeleteConditions, SetConditionsField, CreateWallType,
+                        DeleteWallType, SetWallTypeField, CreateWallLayer, DeleteWallLayer,
+                        SetWallLayerField, CreateRoom, DeleteRoom, SetRoomField>;
 
 [[nodiscard]] Op inverse(const Op& op);
 [[nodiscard]] ElementId target(const Op& op);
@@ -102,6 +106,10 @@ enum class CommandKind : std::uint8_t {
   kSetWallLayer,
   kSetWallType,
   kSetWallMirrored,
+  kAddRoom,
+  kMoveRoom,
+  kSetRoomKind,
+  kRemoveRoom,
 };
 
 // Orders groups across devices: last writer wins per property.

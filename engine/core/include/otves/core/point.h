@@ -18,4 +18,9 @@ struct PointMm {
 // int64 without overflow.
 inline constexpr Mm kMaxCoordinate{100'000'000};
 
+[[nodiscard]] constexpr bool on_plan(PointMm point) {
+  const auto within = [](Mm value) { return value >= -kMaxCoordinate && value <= kMaxCoordinate; };
+  return within(point.x) && within(point.y);
+}
+
 }  // namespace otves

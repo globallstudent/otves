@@ -20,6 +20,8 @@
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
+#include "rooms.h"
+
 namespace otves::drafting {
 namespace {
 
@@ -200,7 +202,7 @@ void write_lengths(std::span<const geom::WallInput> walls,
     const bool turned = dir.x < 0.0 || (dir.x == 0.0 && dir.y < 0.0);
     drawing.texts.push_back({.element = footprint.id,
                              .kind = wall->exact ? TextKind::kLength : TextKind::kAboutLength,
-                             .value = value,
+                             .value = value.value(),
                              .at = place != places.end() ? *place : places.front(),
                              .along = turned ? -dir : dir});
   }
@@ -212,6 +214,8 @@ Drawing draft(const Plan& plan, TextSize text) {
   Drawing drawing;
   outline_below(plan.below, drawing);
   const std::vector<geom::WallInput> walls = sorted(plan.walls);
+  const std::vector<RoomSpace> spaces = room_spaces(walls, plan.rooms);
+  draw_floors(spaces, drawing);
   const geom::WallJoins joins = geom::join_walls(walls);
   for (const geom::WallFootprint& footprint : joins.footprints) {
     const Wall* wall = find(walls, footprint.id);
@@ -231,9 +235,10 @@ Drawing draft(const Plan& plan, TextSize text) {
     draw_layers(*wall, footprint, build->layers, drawing);
   }
   draw_openings(plan.openings, drawing);
-  write_lengths(walls, joins.footprints,
-                {.height = std::max(text.height, 0.0), .digit = std::max(text.digit, 0.0)},
-                drawing);
+  const TextSize size{.height = std::max(text.height, 0.0), .digit = std::max(text.digit, 0.0)};
+  // Rooms are written first, so a wall's length keeps clear of them.
+  write_rooms(spaces, size, drawing);
+  write_lengths(walls, joins.footprints, size, drawing);
   return drawing;
 }
 

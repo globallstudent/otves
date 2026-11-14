@@ -20,6 +20,9 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | `runs_clockwise(legs)` | Whether a sketch's legs enclose their area clockwise, so its outside is on the left of each leg |
 | `layer_strips(wall, thicknesses)` | The strip of each layer across a wall, in metres left of its location line, from the outer face in |
 | `clip(wall, outline, strip)` | The part of a wall's joined outline that lies in one strip |
+| `find_spaces(walls)` | The spaces the walls of a level close: each with its outline along the inner faces of its walls, the islands standing free in it, its floor area and its perimeter |
+| `holds(space, point)` | Whether a point lies on a space's floor: inside its outline and outside its islands |
+| `name_spaces(spaces, anchors)` | The room that names each space, by the anchor it holds; anchors in no space and second anchors in one space as issues |
 
 ## Joins
 
@@ -80,6 +83,30 @@ A layer is a strip of its wall's joined outline ([ADR 0014](../../docs/adr/0014-
 | A mitred corner of two walls of one type | Each layer ends on the mitre, so the layers meet |
 | Walls of different types at a corner | Layers end on the mitre and do not wrap round the corner |
 
+## Spaces
+
+A space is a bounded face of the walls' graph ([ADR 0015](../../docs/adr/0015-rooms-are-spaces-the-walls-close.md)). The graph has a node at every point where wall ends sit, and each wall runs from node to node: its ends, and between them the points where other walls stand against it.
+
+```mermaid
+flowchart LR
+  W["walls"] --> N["nodes<br/>joints of ends · T points"]
+  N --> R["round each node<br/>ways out sorted by direction"]
+  R --> F["faces<br/>at each node take the first way<br/>clockwise from the way back"]
+  F --> O["outline<br/>where the wall faces of two<br/>neighbouring ways cross"]
+  O --> S["spaces<br/>faces that run counter-clockwise"]
+  O --> I["islands<br/>the outsides of groups of walls<br/>that stand in a space"]
+```
+
+| Plan | Spaces |
+|---|---|
+| Four walls round a room | One, with four corners at the walls' inner faces |
+| A partition standing against two of them | Two; walls and floors still tile the plan |
+| A wall from one side ending inside the room | One, whose outline runs round the wall's end |
+| A wall, or a closed group of walls, joined to nothing round it | An island of the space it stands in; a closed group is a space of its own too |
+| Walls that leave a gap, even 10 mm | None |
+| Walls of different thickness in one line | The outline steps where they meet |
+| Walls crossing away from their ends | Not split: both sides read as one space; the join reports the overlap |
+
 ## Invariants
 
 - Outlines are counter-clockwise. Joined outlines share edges and never overlap, so their areas add up to the masonry area.
@@ -89,4 +116,5 @@ A layer is a strip of its wall's joined outline ([ADR 0014](../../docs/adr/0014-
 - Coordinates use only correctly rounded operations (`+ − × ÷ √`) with `-ffp-contract=off`, so arm64 and x86-64 give the same bits. A golden test checks this.
 - Input walls pass `validate()` and have unique ids. Input order does not change the result.
 - The strips of a wall's layers tile its thickness, so their clipped outlines add up to the wall's outline.
+- Which walls close a space, the order of walls round a point and which faces are bounded are decided on whole millimetres. The floors of all spaces and the footprints of all walls add up to the plan out to its outer faces.
 - A stroke's points are checked to lie on the plan before any arithmetic, and its reach and grid are held within the plan's size.

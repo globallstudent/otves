@@ -161,7 +161,7 @@ struct Session::Impl {
     return schema::CreateCommandResult(builder, schema::ErrorCode::None, 0, &created);
   }
 
-  // A pick reads the model and answers with the element it found.
+  // A pick reads the model and answers with the element it found, or else the space.
   flatbuffers::Offset<schema::CommandResult> picked(const schema::CommandEntry& entry) {
     const auto found = decode(entry.command_as_Pick()).and_then([this](const Tap& tap) {
       return pick(document.model(), tap);
@@ -169,10 +169,15 @@ struct Session::Impl {
     if (!found) {
       return error(found.error().code, found.error().message);
     }
-    if (!found->has_value()) {
+    if (found->space) {
+      const auto space = encode_space(builder, *found->space);
+      return schema::CreateCommandResult(builder, schema::ErrorCode::None, 0, nullptr, nullptr, 0,
+                                         0, space);
+    }
+    if (!found->element) {
       return schema::CreateCommandResult(builder);
     }
-    const schema::Uuid id = to_schema(**found);
+    const schema::Uuid id = to_schema(*found->element);
     return schema::CreateCommandResult(builder, schema::ErrorCode::None, 0, nullptr, &id);
   }
 

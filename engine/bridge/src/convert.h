@@ -40,6 +40,8 @@ namespace otves::bridge {
 [[nodiscard]] schema::LayerFunction to_schema(LayerFunction function);
 [[nodiscard]] std::optional<LayerFunction> from_schema(schema::LayerFunction function);
 [[nodiscard]] std::optional<LocationLine> from_schema(schema::LocationLine line);
+[[nodiscard]] schema::RoomKind to_schema(RoomKind kind);
+[[nodiscard]] std::optional<RoomKind> from_schema(schema::RoomKind kind);
 [[nodiscard]] schema::PointMm to_schema(PointMm point);
 [[nodiscard]] PointMm to_point(const schema::PointMm& point);
 
@@ -132,11 +134,12 @@ struct EncodedElement {
 [[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const WallType& type);
 [[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder,
                                     const WallLayer& layer);
+[[nodiscard]] EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Room& room);
 
 [[nodiscard]] schema::ConditionsField to_schema(ConditionsField field);
 [[nodiscard]] std::optional<ConditionsField> from_schema(schema::ConditionsField field);
 
-using Element = std::variant<Level, Wall, Opening, Conditions, WallType, WallLayer>;
+using Element = std::variant<Level, Wall, Opening, Conditions, WallType, WallLayer, Room>;
 
 // The element in a schema union, or kCorruptData when it is absent or holds an unknown value.
 [[nodiscard]] std::expected<Element, Error> decode(schema::Element type, const void* value);

@@ -36,6 +36,10 @@ CommandKind kind_of(const Command& command) {
           [](const SetWallLayer&) { return CommandKind::kSetWallLayer; },
           [](const SetWallType&) { return CommandKind::kSetWallType; },
           [](const SetWallMirrored&) { return CommandKind::kSetWallMirrored; },
+          [](const AddRoom&) { return CommandKind::kAddRoom; },
+          [](const MoveRoom&) { return CommandKind::kMoveRoom; },
+          [](const SetRoomKind&) { return CommandKind::kSetRoomKind; },
+          [](const RemoveRoom&) { return CommandKind::kRemoveRoom; },
       },
       command);
 }
