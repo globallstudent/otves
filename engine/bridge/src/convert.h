@@ -84,6 +84,15 @@ struct Partition {
 // unknown.
 [[nodiscard]] std::expected<Partition, Error> decode(const schema::AddWallAcross* add);
 
+// A room to build from its clear size (schema AddRoomWalls).
+struct RoomBuild {
+  Wall wall;  // on the room's level; its points and location line are unset
+  geom::RoomAsk ask;
+};
+
+// kCorruptData when the wall or the point is missing or the wall's location line is unknown.
+[[nodiscard]] std::expected<RoomBuild, Error> decode(const schema::AddRoomWalls* add);
+
 // A touch on a level while a wall is drawn (schema Aim).
 struct Sight {
   ElementId level;

@@ -37,17 +37,6 @@ constexpr PointMm point_at(const Wall& wall, WallEnd end) {
   return end == WallEnd::kStart ? wall.start : wall.end;
 }
 
-// The nearest multiple of `grid`, a half going up; `value` itself when there is no grid.
-constexpr Mm on_grid(Mm value, Mm grid) {
-  if (grid <= Mm{0}) {
-    return value;
-  }
-  const std::int64_t cell = grid.value();
-  const std::int64_t shifted = value.value() + (cell / 2);
-  const std::int64_t cells = shifted >= 0 ? shifted / cell : -((-shifted + cell - 1) / cell);
-  return Mm{cells * cell};
-}
-
 // `from` moved `length` along `heading`, to the millimetre. Exact along an axis.
 // Precondition: `heading` is not zero.
 PointMm reached(PointMm from, StepMm heading, Mm length) {

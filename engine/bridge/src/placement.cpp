@@ -267,7 +267,7 @@ Result<AddWall> put_across(const Model& model, const Partition& partition) {
     return make_error(ErrorCode::kNotFound, "wall type not found");
   }
   return geom::across(walls_on(model, level), partition.across)
-      .and_then([&partition](const geom::Crossing& crossing) -> Result<AddWall> {
+      .and_then([&partition](const geom::WallLine& crossing) -> Result<AddWall> {
         Wall wall = partition.wall;
         wall.start = crossing.start;
         wall.end = crossing.end;
@@ -277,6 +277,35 @@ Result<AddWall> put_across(const Model& model, const Partition& partition) {
           return std::unexpected{std::move(valid).error()};
         }
         return AddWall{.wall = wall};
+      });
+}
+
+Result<std::vector<Command>> room(const Model& model, const RoomBuild& build) {
+  const ElementId level = build.wall.level;
+  if (model.find<Level>(level) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "level not found");
+  }
+  if (!build.wall.type.is_nil() && model.find<WallType>(build.wall.type) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "wall type not found");
+  }
+  return geom::room_walls(walls_on(model, level), build.ask)
+      .and_then([&build](const std::vector<geom::WallLine>& lines) -> Result<std::vector<Command>> {
+        std::vector<Command> commands;
+        commands.reserve(lines.size());
+        for (const geom::WallLine& line : lines) {
+          // The walls run counter-clockwise round the room, so a type's layers start outside.
+          Wall wall = build.wall;
+          wall.start = line.start;
+          wall.end = line.end;
+          wall.location_line = line.line;
+          wall.exact = true;
+          wall.mirrored = false;
+          if (auto valid = validate(wall); !valid) {
+            return std::unexpected{std::move(valid).error()};
+          }
+          commands.emplace_back(AddWall{.wall = wall});
+        }
+        return commands;
       });
 }
 

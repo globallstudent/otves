@@ -18,6 +18,7 @@ The editor writes one length per wall, along its location line. No room has a si
 - **On a sheet a wall is sized once.** A wall between two rooms has its chain in the wider of them, so a corridor does not repeat the chains of its rooms. A room's name is written after the sizes, where they leave room for it.
 - **A number is a handle.** A text of a size says what a typed value changes: an opening's width, the opening a piece of wall leads to, or the two walls a clear size lies between. The app sends the handle back with the value as `SetDimension`, and the engine turns it into commands in one undo step.
 - **A wall goes across a room at a typed distance.** `AddWallAcross` names a point of the room, which of its walls to measure from, as the hand it is on, and the distance. The engine runs the wall from the wall it meets on one hand to the one on the other. The new wall lies along its nearer face, so the distance holds whatever the wall is made of.
+- **A room is built from its clear size.** `AddRoomWalls` names where one corner was touched, the width, the depth and which way the room lies from that corner. The corner goes to the nearest corner or face of what is built, within reach. A side along a wall already there gets no wall; the new walls lie along their inner faces and end on the walls they meet.
 - **Sizes scale with the text.** Offsets and ticks are ratios of the label text's height, so a drawing reads the same at every zoom. Paper sizes of СПДС join them with the sheets.
 
 | Size | Where | A typed value |
@@ -49,6 +50,7 @@ flowchart LR
 
 - Bridge schema: `Draw.focus`, strokes for dimension lines, text kinds for the four sizes, a handle on a text, and `SetDimension` are appended.
 - `geom::translate_wall` moves a wall across the plan with what is joined to it, and `geom::set_distance` finds the move for a clear size. The app asks which of the two walls gives way.
+- `geom::room_walls` finds the walls a room of a clear size needs. `AddRoomWalls` is appended to the bridge schema. A room is refused when a wall stands in it or runs along part of a side only; a new wall's inner face goes through the corner touched, so a room built against an outer corner is not flush with it.
 - `geom::across` finds where a wall across a room runs. `Hand` and `AddWallAcross` are appended to the bridge schema. A wall that stands free in the room is no wall to measure from or to stand against.
 - The label of a selected space gives way to its sizes, so the panel names it.
 - The app remembers where it painted each number to find the one a finger taps. It still places nothing.

@@ -36,14 +36,14 @@ std::vector<WallInput> box() {
 }
 
 // Where the wall goes, or nothing when it is refused.
-std::optional<Crossing> crossing(const std::vector<WallInput>& walls, const Across& asked) {
-  const Result<Crossing> found = across(walls, asked);
+std::optional<WallLine> crossing(const std::vector<WallInput>& walls, const Across& asked) {
+  const Result<WallLine> found = across(walls, asked);
   return found ? std::optional{*found} : std::nullopt;
 }
 
 // Why the wall is refused, or nothing when it is not.
 std::optional<ErrorCode> refusal(const std::vector<WallInput>& walls, const Across& asked) {
-  const Result<Crossing> found = across(walls, asked);
+  const Result<WallLine> found = across(walls, asked);
   return found ? std::nullopt : std::optional{found.error().code};
 }
 
@@ -52,14 +52,14 @@ TEST(Across, AWallRunsFromWallToWallAtTheDistanceFromTheWallNamed) {
 
   // 1.5 m under the top wall's face at 3.8 m, from the right wall's line to the left wall's.
   const Across asked{.in = at(3000, 2000), .from = Hand::kTop, .distance = 1500_mm};
-  const Crossing under_top{
+  const WallLine under_top{
       .start = at(6000, 2300), .end = at(0, 2300), .line = LocationLine::kRightFace};
   EXPECT_EQ(crossing(walls, asked), under_top);
 
   // 2 m from the left wall's face at 0.2 m, from the top wall down to the bottom one.
   EXPECT_EQ(
       crossing(walls, {.in = at(3000, 2000), .from = Hand::kLeft, .distance = 2000_mm}),
-      (Crossing{.start = at(2200, 4000), .end = at(2200, 0), .line = LocationLine::kRightFace}));
+      (WallLine{.start = at(2200, 4000), .end = at(2200, 0), .line = LocationLine::kRightFace}));
 
   // The order of the walls does not matter.
   std::vector<WallInput> reversed = walls;
@@ -69,10 +69,10 @@ TEST(Across, AWallRunsFromWallToWallAtTheDistanceFromTheWallNamed) {
 
 TEST(Across, TheWallJoinsTheWallsItMeetsAndLeavesTheDistanceClear) {
   std::vector<WallInput> walls = box();
-  const std::optional<Crossing> found =
+  const std::optional<WallLine> found =
       crossing(walls, {.in = at(3000, 2000), .from = Hand::kTop, .distance = 1500_mm});
   ASSERT_TRUE(found.has_value());
-  const Crossing placed = found.value_or(Crossing{});
+  const WallLine placed = found.value_or(WallLine{});
   WallInput partition = wall(5, placed.start, placed.end, 120_mm);
   partition.wall.location_line = placed.line;
   walls.push_back(partition);
@@ -97,7 +97,7 @@ TEST(Across, InARoomWithACornerCutOutTheWallCrossesThePartBesideThePoint) {
       wall(5, at(3000, 6000), at(0, 6000)),    wall(6, at(0, 6000), at(0, 0))};
 
   // 4 m over the bottom wall's face the room is only its left arm wide.
-  const Crossing arm{.start = at(0, 4200), .end = at(3000, 4200), .line = LocationLine::kRightFace};
+  const WallLine arm{.start = at(0, 4200), .end = at(3000, 4200), .line = LocationLine::kRightFace};
   EXPECT_EQ(crossing(walls, {.in = at(1500, 4500), .from = Hand::kBottom, .distance = 4000_mm}),
             arm);
   // A point that the new wall does not pass beside gets the longest stretch there is.

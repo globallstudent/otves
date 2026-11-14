@@ -53,6 +53,8 @@ sequenceDiagram
 
 `AddWallAcross` builds a wall across the room that holds a point, a typed distance from the wall on one hand of it ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)). `geom::across` says where it runs; it is added as `AddWall`, exact and along its nearer face, and the request's wall gives what it is made of.
 
+`AddRoomWalls` builds a room from its clear size with one corner where the plan was touched ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)). `geom::room_walls` says which walls it needs and where they run; they are added as `AddWall` commands in one undo step, each exact and along its inner face.
+
 `Draw.sheet` asks for the level as a sheet prints it: every space with its sizes beside its name. Every `Drawing` carries the schedules a sheet prints beside the plan: `rooms`, the level's spaces in reading order with the room that names each and its floor area, and `openings`, the job's marks with their sizes and counts.
 
 `LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.

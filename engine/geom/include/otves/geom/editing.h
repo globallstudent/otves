@@ -144,14 +144,14 @@ struct Across {
   Mm distance;  // between that wall's face and the nearer face of the new wall
 };
 
-// Where a wall across a space goes. Its points lie along its nearer face, so the distance holds
-// whatever the wall is made of, and its body stands to the left of its direction.
-struct Crossing {
+// Where a wall to build goes: its points and the line of the wall they lie on. The points lie
+// along a face, so a typed size holds whatever the wall is made of.
+struct WallLine {
   PointMm start;
   PointMm end;
   LocationLine line = LocationLine::kRightFace;
 
-  constexpr auto operator<=>(const Crossing&) const = default;
+  constexpr auto operator<=>(const WallLine&) const = default;
 };
 
 // A wall across the space that holds `in`, side by side with the wall it is measured from and
@@ -160,6 +160,28 @@ struct Crossing {
 // lines, so it joins them. Fails with kNotFound when no space holds the point, kDoesNotFit when
 // the distance is not positive, the space ends before it, or a wall standing free in the space
 // is in the way, and kOffPlan when a point would leave the plan. Precondition: as for the touch.
-[[nodiscard]] Result<Crossing> across(std::span<const WallInput> walls, const Across& across);
+[[nodiscard]] Result<WallLine> across(std::span<const WallInput> walls, const Across& across);
+
+// A room to build from its clear size (docs/adr/0016).
+struct RoomAsk {
+  PointMm at;         // where one of its corners was touched
+  Mm reach;           // how far a corner or a face of what is built still counts as touched
+  Mm grid;            // a corner touched in the open falls on a multiple of this, if positive
+  Mm width;           // clear, across the plan
+  Mm depth;           // clear, up the plan
+  bool right = true;  // the room lies to the right of that corner, else to its left
+  bool up = true;     // and above it, else below
+};
+
+// The walls that close a room `width` by `depth` clear, counter-clockwise from its bottom side,
+// each along its inner face with its body outside. The corner is the corner of what is built
+// nearest the touch within reach, or else the nearest point of a face within reach, or else the
+// touch on the grid. A side that lies along the face of a wall already there gets no wall: that
+// wall is the room's, and the new walls that meet it end on its line. Fails with kDoesNotFit
+// when a size is not positive, a wall stands in the room, a side lies along a wall for part of
+// its length only, or every side is a wall already; and with kOffPlan when a point would leave
+// the plan. Precondition: as for the touch.
+[[nodiscard]] Result<std::vector<WallLine>> room_walls(std::span<const WallInput> walls,
+                                                       const RoomAsk& ask);
 
 }  // namespace otves::geom

@@ -47,6 +47,11 @@ namespace otves::bridge {
 // or the space does not exist.
 [[nodiscard]] Result<AddWall> put_across(const Model& model, const Partition& partition);
 
+// The walls that close a room of a typed clear size (geom::room_walls, docs/adr/0016), each
+// checked to be buildable and exact. kNotFound when the level or the wall's type does not
+// exist.
+[[nodiscard]] Result<std::vector<Command>> room(const Model& model, const RoomBuild& build);
+
 // The walls a stroke means on its level (geom::straighten), each checked to be buildable and
 // not exact. kNotFound when the level does not exist.
 [[nodiscard]] Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke);

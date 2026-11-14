@@ -135,7 +135,7 @@ std::optional<PointMm> meeting(std::span<const WallInput> walls, ElementId wall,
 
 }  // namespace
 
-Result<Crossing> across(std::span<const WallInput> walls, const Across& across) {
+Result<WallLine> across(std::span<const WallInput> walls, const Across& across) {
   const Vec2 in = to_vec2(across.in);
   const std::vector<Space> spaces = find_spaces(walls);
   const auto space =
@@ -164,7 +164,7 @@ Result<Crossing> across(std::span<const WallInput> walls, const Across& across) 
   if (!on_plan(*start) || !on_plan(*end)) {
     return make_error(ErrorCode::kOffPlan, "the new wall would leave the plan");
   }
-  return Crossing{.start = *start, .end = *end, .line = LocationLine::kRightFace};
+  return WallLine{.start = *start, .end = *end, .line = LocationLine::kRightFace};
 }
 
 }  // namespace otves::geom

@@ -773,6 +773,22 @@ std::expected<Partition, Error> decode(const schema::AddWallAcross* add) {
   });
 }
 
+std::expected<RoomBuild, Error> decode(const schema::AddRoomWalls* add) {
+  if (add == nullptr || add->at() == nullptr) {
+    return corrupt("room or its corner is missing");
+  }
+  const geom::RoomAsk ask{.at = to_point(*add->at()),
+                          .reach = Mm{add->reach()},
+                          .grid = Mm{add->grid()},
+                          .width = Mm{add->width()},
+                          .depth = Mm{add->depth()},
+                          .right = add->right(),
+                          .up = add->up()};
+  return to_wall_like(add->wall()).transform([&ask](const Wall& wall) {
+    return RoomBuild{.wall = wall, .ask = ask};
+  });
+}
+
 std::expected<Stroke, Error> decode(const schema::AddSketch* sketch) {
   if (sketch == nullptr) {
     return corrupt("sketch is missing");

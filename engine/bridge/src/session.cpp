@@ -95,6 +95,10 @@ struct Session::Impl {
               return put_across(document.model(), partition);
             })
             .and_then([this](const AddWall& add) { return document.execute(add); });
+      case schema::Command::AddRoomWalls:
+        return decode(entry.command_as_AddRoomWalls())
+            .and_then([this](const RoomBuild& build) { return room(document.model(), build); })
+            .and_then([this](const std::vector<Command>& walls) { return together(walls); });
       case schema::Command::AddSketch:
         return decode(entry.command_as_AddSketch())
             .and_then([this](const Stroke& stroke) { return sketch(document.model(), stroke); })

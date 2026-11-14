@@ -4,6 +4,7 @@ add_library(otves_geom
   src/layers.cpp
   src/openings.cpp
   src/polygon.cpp
+  src/room_walls.cpp
   src/sketch.cpp
   src/spaces.cpp
   src/wall_joins.cpp)
@@ -22,6 +23,7 @@ if(OTVES_BUILD_TESTS)
     tests/layers_test.cpp
     tests/openings_test.cpp
     tests/polygon_test.cpp
+    tests/room_walls_test.cpp
     tests/sketch_test.cpp
     tests/spaces_test.cpp
     tests/wall_joins_test.cpp)

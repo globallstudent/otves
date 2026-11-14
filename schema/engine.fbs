@@ -215,6 +215,25 @@ table AddWallAcross {
   distance:long;
 }
 
+// The walls of a room `width` by `depth` millimetres clear, one corner where `at` was touched
+// (docs/adr/0016): the corner of what is built nearest the touch within `reach`, else a point
+// of a face within reach, else the touch on the `grid`. The room lies to the `right` of that
+// corner, or its left, and `up` the plan from it, or down. `wall` is the wall to build, on its
+// level; its start, end, location line and exact are not read: each wall lies along its inner
+// face, so the sizes hold whatever it is made of. A side that lies along a wall already there
+// gets none. Runs as AddWall commands in one undo step, each wall exact. Changes nothing when
+// the room does not fit (DoesNotFit) or a point would leave the plan (OffPlan).
+table AddRoomWalls {
+  wall:Wall;
+  at:PointMm;
+  reach:long;
+  grid:long;
+  width:long;
+  depth:long;
+  right:bool = true;
+  up:bool = true;
+}
+
 // A Luau file from content/ (docs/adr/0005); the name is the file's stem.
 table Script {
   name:string;
@@ -423,6 +442,7 @@ union Command {
   SetOpeningSwing,
   CenterOpening,
   AddWallAcross,
+  AddRoomWalls,
 }
 
 table CommandEntry {
