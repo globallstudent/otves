@@ -241,8 +241,13 @@ std::optional<PointMm> meeting(const Wall& wall, const Aim& aim, PointMm settled
 // direction (docs/adr/0011).
 class Carry {
  public:
+  // For a wall that gets a length: it stretches from `anchor`, which stays.
   Carry(const Plan& plan, std::size_t resized, PointMm anchor, StepMm by)
       : plan_(&plan), resized_(resized), anchor_(anchor), by_(by) {}
+
+  // For a wall that moves `whole`, across itself: nothing stays, and a wall counts as running
+  // along the move when the move keeps its end on its line to the millimetre.
+  Carry(const Plan& plan, std::size_t whole, StepMm by) : plan_(&plan), whole_(whole), by_(by) {}
 
   // Every end that moves when the joint at `joint` does, sorted by wall and end.
   [[nodiscard]] std::vector<EndMove> from(PointMm joint) && {
@@ -283,7 +288,7 @@ class Carry {
   // the wall ends standing against it go too; unless it reaches the anchor, about which it turns.
   void follow(std::size_t index) {
     const Wall& wall = plan_->wall(index);
-    const bool stretches = index == resized_ || cross(step(wall.start, wall.end), by_) == 0;
+    const bool stretches = index != whole_ && (index == resized_ || runs_along(wall));
     if (stretches || wall.start == anchor_ || wall.end == anchor_) {
       return;
     }
@@ -294,9 +299,18 @@ class Carry {
     }
   }
 
+  // Whether the move keeps a point of the wall on the wall's line: exactly, or when a wall moves
+  // whole, to the millimetre, since a move across a wall that is not along an axis is rounded.
+  [[nodiscard]] bool runs_along(const Wall& wall) const {
+    const StepMm run = step(wall.start, wall.end);
+    const auto off = static_cast<double>(cross(run, by_));
+    return whole_ ? off * off <= static_cast<double>(dot(run, run)) : off == 0.0;
+  }
+
   const Plan* plan_;
-  std::size_t resized_;
-  PointMm anchor_;
+  std::optional<std::size_t> resized_;
+  std::optional<std::size_t> whole_;
+  std::optional<PointMm> anchor_;
   StepMm by_;
   std::set<PointMm> moving_;
   std::deque<PointMm> queue_;
@@ -434,6 +448,54 @@ Result<std::vector<EndMove>> resize_wall(std::span<const WallInput> walls, Eleme
     return std::unexpected{std::move(fits).error()};
   }
   return moves;
+}
+
+Result<std::vector<EndMove>> translate_wall(std::span<const WallInput> walls, ElementId wall,
+                                            Shift by) {
+  const Plan plan{walls};
+  const std::optional<std::size_t> moved = plan.find(wall);
+  if (!moved) {
+    return make_error(ErrorCode::kNotFound, "wall not found");
+  }
+  const StepMm step_by{.x = by.x.value(), .y = by.y.value()};
+  if (step_by == StepMm{}) {
+    return std::vector<EndMove>{};
+  }
+  // The wall's other end and what stands against it follow its start.
+  std::vector<EndMove> moves = Carry{plan, *moved, step_by}.from(plan.wall(*moved).start);
+  if (auto fits = check(plan, moves); !fits) {
+    return std::unexpected{std::move(fits).error()};
+  }
+  return moves;
+}
+
+Result<std::vector<EndMove>> set_distance(std::span<const WallInput> walls, Facing facing,
+                                          Mm distance) {
+  const Plan plan{walls};
+  const std::optional<std::size_t> moving = plan.find(facing.moves);
+  const std::optional<std::size_t> fixed = plan.find(facing.stays);
+  if (!moving || !fixed) {
+    return make_error(ErrorCode::kNotFound, "wall not found");
+  }
+  const Wall& stays = plan.wall(*fixed);
+  const Wall& goes = plan.wall(*moving);
+  const StepMm run = step(stays.start, stays.end);
+  const StepMm other = step(goes.start, goes.end);
+  if (cross(run, other) != 0 || distance <= Mm{0}) {
+    return make_error(ErrorCode::kDoesNotFit, "the walls do not run side by side");
+  }
+  const Axis line = axis(stays);
+  // How far the moving wall's line lies to the left of the fixed one's, and the faces the two
+  // walls turn to each other.
+  const double apart = dot(to_vec2(goes.start) - line.start, line.left);
+  const bool on_left = apart > 0.0;
+  const bool same_way = dot(run, other) > 0;
+  const Faces of_fixed = faces(stays);
+  const Faces of_moving = faces(goes);
+  const double gap = std::abs(apart) - (on_left ? of_fixed.left : of_fixed.right) -
+                     (on_left == same_way ? of_moving.right : of_moving.left);
+  const Vec2 by = line.left * ((on_left ? 1.0 : -1.0) * (to_metres(distance) - gap));
+  return translate_wall(walls, facing.moves, {.x = round_to_mm(by.x), .y = round_to_mm(by.y)});
 }
 
 }  // namespace otves::geom

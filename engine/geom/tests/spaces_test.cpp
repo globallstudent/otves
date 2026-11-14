@@ -71,6 +71,10 @@ TEST(FindSpaces, ARoomIsBoundedByTheInnerFacesOfItsWalls) {
   const std::vector<Space> spaces = find_spaces(box(1, at(0, 0), 6000, 4000));
   ASSERT_EQ(spaces.size(), 1U);
   EXPECT_EQ(spaces[0].outline.size(), 4U);
+  // Each side runs along one of the four walls.
+  std::vector<ElementId> sides = spaces[0].sides;
+  std::ranges::sort(sides);
+  EXPECT_EQ(sides, (std::vector{id(1), id(2), id(3), id(4)}));
   EXPECT_NEAR(spaces[0].area, 5.6 * 3.6, 1e-12);
   EXPECT_NEAR(spaces[0].perimeter, 2 * (5.6 + 3.6), 1e-12);
   EXPECT_TRUE(spaces[0].islands.empty());
@@ -147,6 +151,10 @@ TEST(FindSpaces, AWallEndingInsideARoomStandsInIt) {
   const std::vector<Space> spaces = find_spaces(walls);
   ASSERT_EQ(spaces.size(), 1U);
   EXPECT_EQ(spaces[0].outline.size(), 8U);
+  // Three sides run round the wall that stands in the room, and two along the wall it stands
+  // against, one on each side of it.
+  EXPECT_EQ(std::ranges::count(spaces[0].sides, id(5)), 3);
+  EXPECT_EQ(std::ranges::count(spaces[0].sides, id(1)), 2);
   EXPECT_NEAR(spaces[0].area, (5.6 * 3.6) - (0.2 * 0.8), 1e-12);
   EXPECT_NEAR(floors(spaces) + footprints(walls), 6.4 * 4.4, 1e-12);
   EXPECT_FALSE(holds(spaces[0], {3.0, 0.5}));

@@ -26,6 +26,7 @@
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 #include <otves/core/wall_type.h>
+#include <otves/drafting/plan.h>
 #include <otves/geom/editing.h>
 
 #include "engine_generated.h"
@@ -724,8 +725,38 @@ std::expected<View, Error> decode(const schema::Draw* draw) {
   const auto size = [](std::int64_t millimetres) {
     return to_metres(std::clamp(Mm{millimetres}, Mm{0}, kMaxCoordinate));
   };
-  return View{.level = to_id(draw->level()),
-              .text = {.height = size(draw->text_height()), .digit = size(draw->digit_width())}};
+  return View{
+      .level = to_id(draw->level()),
+      .text = {.height = size(draw->text_height()), .digit = size(draw->digit_width())},
+      .focus = draw->focus() != nullptr ? std::optional{to_point(*draw->focus())} : std::nullopt};
+}
+
+std::expected<Sized, Error> decode(const schema::SetDimension* set) {
+  if (set == nullptr) {
+    return corrupt("size is missing");
+  }
+  Sized sized{.element = to_id(set->element()),
+              .from = Mm{set->from()},
+              .forward = set->forward(),
+              .value = Mm{set->value()},
+              .other = to_id(set->other())};
+  switch (set->kind()) {
+    case schema::TextKind::Length:
+    case schema::TextKind::AboutLength:
+      sized.kind = drafting::TextKind::kLength;
+      return sized;
+    case schema::TextKind::Pier:
+      sized.kind = drafting::TextKind::kPier;
+      return sized;
+    case schema::TextKind::OpeningWidth:
+      sized.kind = drafting::TextKind::kOpeningWidth;
+      return sized;
+    case schema::TextKind::Clear:
+      sized.kind = drafting::TextKind::kClear;
+      return sized;
+    default:
+      return corrupt("not a size a typed value changes");
+  }
 }
 
 EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Level& level) {

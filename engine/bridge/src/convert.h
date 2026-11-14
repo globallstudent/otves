@@ -110,11 +110,27 @@ struct Stroke {
 // kCorruptData when the wall is missing or its location line is unknown.
 [[nodiscard]] std::expected<Stroke, Error> decode(const schema::AddSketch* sketch);
 
-// A level to draw and how big the app's label text is on its plan (schema Draw).
+// A level to draw, how big the app's label text is on its plan and the point whose space is
+// drawn with its sizes (schema Draw).
 struct View {
   ElementId level;
   drafting::TextSize text;
+  std::optional<PointMm> focus;
 };
+
+// A size on the plan and the value typed for it (schema SetDimension): the handle a drawing's
+// text carried, see drafting::Text.
+struct Sized {
+  drafting::TextKind kind = drafting::TextKind::kLength;
+  ElementId element;
+  Mm from;
+  bool forward = false;
+  Mm value;
+  ElementId other;  // for a clear size, the wall that stays
+};
+
+// kCorruptData when the size is missing or of an unknown kind.
+[[nodiscard]] std::expected<Sized, Error> decode(const schema::SetDimension* set);
 
 // kCorruptData when the query is missing.
 [[nodiscard]] std::expected<View, Error> decode(const schema::Draw* draw);

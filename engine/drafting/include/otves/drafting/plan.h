@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
 #include <otves/core/build.h>
+#include <otves/core/point.h>
 #include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
@@ -29,10 +31,12 @@ enum class Fill : std::uint8_t {
 enum class Stroke : std::uint8_t {
   kNone,
   kWallEdge,
-  kBelow,  // a wall of the level below
-  kFrame,  // a window's faces and glazing
-  kLeaf,   // a door's leaf and swing
-  kLayer,  // where two layers of a wall meet
+  kBelow,      // a wall of the level below
+  kFrame,      // a window's faces and glazing
+  kLeaf,       // a door's leaf and swing
+  kLayer,      // where two layers of a wall meet
+  kDimension,  // a dimension line, its ticks and the lines that lead to it
+  kChain,      // the same for the sizes of the space in focus
 };
 
 enum class TextKind : std::uint8_t {
@@ -40,6 +44,12 @@ enum class TextKind : std::uint8_t {
   kAboutLength,  // one that nobody has typed or measured
   kRoomName,     // a room's name: the value is its RoomKind
   kRoomArea,     // a space's floor: the value is its area in cm²
+  // Sizes in millimetres (docs/adr/0016). All but the first are handles: a typed value changes
+  // the model.
+  kOverall,       // the plan from outer face to outer face
+  kClear,         // across the space in focus, between two of its walls
+  kPier,          // a piece of wall between a corner or an opening and the next opening
+  kOpeningWidth,  // an opening's width
 };
 
 // Every primitive names the element it draws, so a painter can mark the selected one; nil for
@@ -72,6 +82,12 @@ struct Arc {
 // The value is millimetres unless the kind says otherwise. `fit` is the room there is for the
 // text along its direction, in metres: the painter leaves out a text wider than that. Zero for a
 // text that was fitted here.
+// A size that is a handle says what a typed value changes (docs/adr/0016): `element` is the
+// opening whose width it is, or the opening a piece of wall leads to. For a piece of wall,
+// `from` is where its fixed end lies along the opening's wall from that wall's start, and
+// `forward` whether the opening lies further along the wall than that end. For a clear size,
+// `element` is the wall at its far end, to the right or the top of the plan, and `other` the
+// wall at its near end; both nil where a typed value cannot move a wall.
 struct Text {
   ElementId element;
   TextKind kind = TextKind::kLength;
@@ -79,6 +95,9 @@ struct Text {
   geom::Vec2 at;
   geom::Vec2 along;
   double fit = 0.0;
+  Mm from{};  // NOLINT(readability-redundant-member-init)
+  bool forward = false;
+  ElementId other{};  // NOLINT(readability-redundant-member-init)
 };
 
 // Painted in this order, each list in the order given.
@@ -118,6 +137,8 @@ struct Plan {
   std::span<const geom::WallInput> below;
   std::span<const WallBuild> builds{};  // NOLINT(readability-redundant-member-init)
   std::span<const NamedRoom> rooms{};   // NOLINT(readability-redundant-member-init)
+  // The space that holds this point is drawn with its sizes instead of its name.
+  std::optional<PointMm> focus{};  // NOLINT(readability-redundant-member-init)
 };
 
 // The level as a drawing.
@@ -132,9 +153,13 @@ struct Plan {
 //    with its swing.
 //  - Each wall's length beside it and along it, by its left face at the middle; where another
 //    wall or another length lies there, by the other face or nearer an end. A length longer than
-//    four fifths of its wall is left out.
+//    four fifths of its wall is left out, and so is the length of a wall round a space once it
+//    was typed or measured: the space's sizes say more.
 //  - In each space its room's name over its area, in the middle of its widest stretch: along x,
 //    or up the plan in a space too narrow for a name. Each says how much room it has.
+//  - In the space in focus, in place of its name, its clear size across and up the plan and a
+//    chain along each side with openings: wall, opening, wall (docs/adr/0016).
+//  - Once the walls close a space, the plan's overall size across its top and up its left side.
 // Precondition: every wall passes validate() and ids are unique. The result does not depend on
 // the order of the inputs.
 [[nodiscard]] Drawing draft(const Plan& plan, TextSize text);

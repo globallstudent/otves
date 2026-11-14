@@ -38,7 +38,7 @@ Painting order is the order of the lists: polygons, lines, arcs, texts. Floors c
 |---|---|
 | First place | The middle of the wall, by its left face, a quarter of a text height clear |
 | Next places | The other face, then 0,3 and 0,7 of the way along, each by the left face first |
-| A place is taken | When the text's middle or either end lies on another wall, or nearer another length than the text is wide |
+| A place is taken | When the text's middle or either end lies on another wall, or the text comes within a quarter of a text height of one written before it: a room's name or area, a size, another length |
 | No free place | The first one is used |
 | Left out | A text wider than four fifths of its wall |
 | Reading | From the left; on an upright wall from the bottom up |
@@ -57,6 +57,19 @@ Text width is the count of digits times the width of one. «≈» and its space 
 | Room for the text | Four fifths of the stretch it lies along goes out as `fit`: the painter knows how wide a name is in the builder's language, and leaves out a text that is wider |
 
 Rooms are written before wall lengths, so a length keeps clear of them.
+
+## Sizes
+
+Dimension lines, ticks and numbers are lines and texts of the drawing ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)). Their offsets are ratios of the text height, so they read the same at every zoom.
+
+| Size | Line | Number |
+|---|---|---|
+| Overall, once the walls close a space | Two text heights outside the plan's outer faces: across the top and up the left side, with a line out to it from each corner | Over the line; no handle |
+| Clear size of the space in focus | Across, 2,6 text heights under the top of the space; up, 2,6 from its left. A line that would run through a number goes 1,3 further in at a time; in a low or narrow space it runs through the middle | Over the line; names the wall at each end, so a typed value moves one of them |
+| Chain along a side with openings | 1,2 text heights inside the wall's face, a tick at every corner and opening edge | A piece of wall leads to the next opening, the last one back to the opening before it; an opening's width is its own |
+| A number wider than nine tenths of its piece | — | Left out |
+
+A wall round a space has no length of its own once it was typed or measured. The space in focus has its sizes in place of its name and area.
 
 ## Invariants
 

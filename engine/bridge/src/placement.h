@@ -31,6 +31,12 @@ namespace otves::bridge {
 // when the wall does not exist.
 [[nodiscard]] Result<std::vector<Command>> resize(const Model& model, const Resize& resize);
 
+// The commands that give a size on the plan its typed value (docs/adr/0016): an opening's width
+// with its near edge kept, a piece of wall by moving the opening it leads to, a wall's length as
+// resize() gives it. kNotFound when the element does not exist, kDoesNotFit when the opening
+// would leave its wall.
+[[nodiscard]] Result<std::vector<Command>> dimension(const Model& model, const Sized& sized);
+
 // The walls a stroke means on its level (geom::straighten), each checked to be buildable and
 // not exact. kNotFound when the level does not exist.
 [[nodiscard]] Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke);

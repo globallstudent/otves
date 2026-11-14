@@ -16,6 +16,8 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | `aim(walls, below, touch)` | Where a wall being drawn would end under the finger, its length, the wall ends it lined up with and whether it meets the plan there |
 | `aim(walls, measured)` | Where a wall of a typed length ends, turning left, straight or right from the wall before it |
 | `resize_wall(walls, wall, length, fixed)` | Every wall end that moves when a wall gets a length, so what is joined stays joined |
+| `translate_wall(walls, wall, by)` | Every wall end that moves when a wall goes across the plan without turning, so what is joined stays joined |
+| `set_distance(walls, facing, distance)` | The same for the move that puts two walls side by side a clear distance apart, face to face |
 | `straighten(walls, below, sketch, like)` | The walls a stroke drawn with a finger means: corners found, legs laid on the axes, a loop closed, joined to the plan as `aim` joins a wall |
 | `runs_clockwise(legs)` | Whether a sketch's legs enclose their area clockwise, so its outside is on the left of each leg |
 | `layer_strips(wall, thicknesses)` | The strip of each layer across a wall, in metres left of its location line, from the outer face in |
@@ -47,7 +49,9 @@ Editing reads the walls as a graph by the definition the joins use ([ADR 0011](.
 | A touch elsewhere | The wall turns onto the nearer axis, always with the 90° lock and otherwise within about 6° of it; each free coordinate lines up with a wall end within reach or falls on the grid |
 | A touch on or beside a wall's body | The point moves onto that wall's line, so the new wall meets it along its length |
 | A typed length for a wall | Its fixed end stays and its far joint moves along it. Unless one is named, the fixed end is the one joined to other walls when the other is free, so a partition grows from the wall it stands against; else the start. A wall at a moving point stretches if it runs along the move and otherwise goes whole, with the ends standing against it; a wall reaching the fixed end turns about it |
-| A length that would make a joined wall vanish or turn back, or leave a wall end off the wall it stands against | Refused with `kBreaksJoin`; nothing moves |
+| A move of a wall across the plan | Both its ends go, and what stands against it. A wall the move keeps on its own line, to the millimetre, stretches; any other wall with a moving point on it moves whole |
+| A clear distance for two walls side by side | One of them moves across the plan until its face stands that far from the other's ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)) |
+| A length or a move that would make a joined wall vanish or turn back, or leave a wall end off the wall it stands against | Refused with `kBreaksJoin`; nothing moves |
 
 ## Sketches
 

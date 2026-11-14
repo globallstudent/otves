@@ -130,6 +130,10 @@ schema::Stroke stroke_code(drafting::Stroke stroke) {
       return schema::Stroke::Leaf;
     case drafting::Stroke::kLayer:
       return schema::Stroke::Layer;
+    case drafting::Stroke::kDimension:
+      return schema::Stroke::Dimension;
+    case drafting::Stroke::kChain:
+      return schema::Stroke::Chain;
   }
   return schema::Stroke::None;
 }
@@ -144,6 +148,14 @@ schema::TextKind text_code(drafting::TextKind kind) {
       return schema::TextKind::RoomName;
     case drafting::TextKind::kRoomArea:
       return schema::TextKind::RoomArea;
+    case drafting::TextKind::kOverall:
+      return schema::TextKind::Overall;
+    case drafting::TextKind::kClear:
+      return schema::TextKind::Clear;
+    case drafting::TextKind::kPier:
+      return schema::TextKind::Pier;
+    case drafting::TextKind::kOpeningWidth:
+      return schema::TextKind::OpeningWidth;
   }
   return schema::TextKind::Length;
 }
@@ -427,8 +439,11 @@ flatbuffers::Offset<schema::Drawing> encode_drawing(flatbuffers::FlatBufferBuild
   for (const drafting::Text& text : drawing.texts) {
     const schema::PointM at = point(text.at);
     const schema::PointM along = point(text.along);
+    schema::Uuid other;
+    const schema::Uuid* far = key(text.other, other);
     texts.push_back(schema::CreateDrawnText(builder, key(text.element, id), text_code(text.kind),
-                                            text.value, &at, &along, text.fit));
+                                            text.value, &at, &along, text.fit, text.from.value(),
+                                            text.forward, far));
   }
   return schema::CreateDrawing(builder, builder.CreateVector(polygons), builder.CreateVector(lines),
                                builder.CreateVector(arcs), builder.CreateVector(texts));

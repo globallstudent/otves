@@ -17,6 +17,9 @@ namespace otves::geom {
 // faces of its walls (docs/adr/0015). In metres and m².
 struct Space {
   std::vector<Vec2> outline;  // counter-clockwise
+  // For each point of the outline, the wall whose face the outline runs along from that point to
+  // the next one.
+  std::vector<ElementId> sides;
   // What stands free inside: a wall or a closed group of walls joined to nothing round it,
   // each as its outer faces, clockwise.
   std::vector<std::vector<Vec2>> islands;

@@ -39,13 +39,15 @@ sequenceDiagram
 | `outlines` | Every wall's joined plan outline in metres, level by level; only when the model or the content changed |
 | `takeoff`, `takeoff_error` | Material lines from the loaded rules, or why they could not run; absent until `LoadContent` |
 
-`Pick`, `Aim`, `AimMeasured` and `Draw` are questions: they read the model and change nothing. `Draw` answers with one level as a display list from `drafting::draft` ([ADR 0013](../../docs/adr/0013-the-engine-drafts-the-plan.md)); sent after the commands of a request, it shows what they did. `SetWallLength` asks `geom::resize_wall` what moves and runs it as `MoveWallEnd` commands in one undo step ([ADR 0011](../../docs/adr/0011-plan-editing-in-the-engine.md)); it also makes the wall exact.
+`Pick`, `Aim`, `AimMeasured` and `Draw` are questions: they read the model and change nothing. `Draw` answers with one level as a display list from `drafting::draft` ([ADR 0013](../../docs/adr/0013-the-engine-drafts-the-plan.md)); sent after the commands of a request, it shows what they did. The space that holds its `focus` is drawn with its sizes in place of its name. `SetWallLength` asks `geom::resize_wall` what moves and runs it as `MoveWallEnd` commands in one undo step ([ADR 0011](../../docs/adr/0011-plan-editing-in-the-engine.md)); it also makes the wall exact.
 
 `AddSketch` asks `geom::straighten` what walls a stroke means and runs them as `AddWall` commands in one undo step, each wall not exact ([ADR 0012](../../docs/adr/0012-a-sketch-becomes-walls-in-the-engine.md)). Both check every command before running the first, so a refusal changes nothing.
 
 `AddWallType` makes a type and its layers in one undo step and answers with the type's id. `SetWallType` gives a wall a type and clears its own thickness and unit in the same step ([ADR 0014](../../docs/adr/0014-wall-types-are-job-elements-made-of-layers.md)). Geometry, the drawing and the take-off read every wall through `core::build_of`, so a wall with a type and one without take one path. A sketch of a type drawn clockwise comes out mirrored, so its outer layer stays outside.
 
 `AddRoom` names the space that holds its anchor, `SetRoomKind` renames it, `MoveRoom` moves the anchor and `RemoveRoom` takes the name away ([ADR 0015](../../docs/adr/0015-rooms-are-spaces-the-walls-close.md)). None checks that a space is there: the response's issues name a room whose anchor lies in no space, or in a space an older room names. A `Pick` that finds no wall or opening within reach answers with the space under the point: its outline, islands, floor area, perimeter and the room that names it.
+
+`SetDimension` gives a size on the plan a typed value ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)): it carries the handle of the text that showed the size. An opening's width runs as `ResizeOpening`, a piece of wall as `MoveOpening`, a wall's length as `SetWallLength`, and a clear size as the `MoveWallEnd` commands of `geom::set_distance`, in one undo step. Each is checked before anything runs.
 
 `LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.
 

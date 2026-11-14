@@ -360,5 +360,114 @@ TEST(ResizeWall, RefusesToLeaveAPartitionOffItsWall) {
   EXPECT_EQ(shorter.error().code, ErrorCode::kBreaksJoin);
 }
 
+Shift by(std::int64_t x, std::int64_t y) { return {.x = Mm{x}, .y = Mm{y}}; }
+
+TEST(TranslateWall, AWallOfARoomTakesItsCornersAndTheWallsAtThemStretch) {
+  // The right wall 500 mm further out: the room is 6 500 long.
+  const auto moves = translate_wall(room(), id(2), by(500, 0));
+
+  ASSERT_TRUE(moves.has_value());
+  const std::vector<EndMove> expected{
+      to(1, WallEnd::kEnd, at(6500, 0)), to(2, WallEnd::kStart, at(6500, 0)),
+      to(2, WallEnd::kEnd, at(6500, 4000)), to(3, WallEnd::kStart, at(6500, 4000))};
+  EXPECT_EQ(*moves, expected);
+}
+
+TEST(TranslateWall, APartitionSlidesAlongTheWallsItStandsAgainst) {
+  std::vector<WallInput> walls = room();
+  walls.push_back(wall(5, at(2000, 0), at(2000, 4000), 120_mm));
+
+  const auto moves = translate_wall(walls, id(5), by(-300, 0));
+
+  ASSERT_TRUE(moves.has_value());
+  const std::vector<EndMove> expected{to(5, WallEnd::kStart, at(1700, 0)),
+                                      to(5, WallEnd::kEnd, at(1700, 4000))};
+  EXPECT_EQ(*moves, expected);
+}
+
+TEST(TranslateWall, WhatStandsAgainstTheWallGoesWithIt) {
+  std::vector<WallInput> walls = room();
+  // A partition from the middle of the room to the right wall.
+  walls.push_back(wall(5, at(3000, 2000), at(6000, 2000), 120_mm));
+
+  const auto moves = translate_wall(walls, id(2), by(400, 0));
+
+  ASSERT_TRUE(moves.has_value());
+  EXPECT_EQ(moves->size(), 5U);
+  EXPECT_TRUE(std::ranges::contains(*moves, to(5, WallEnd::kEnd, at(6400, 2000))));
+  // Its free end stays: the partition is 400 mm longer.
+  EXPECT_FALSE(std::ranges::contains(*moves, to(5, WallEnd::kStart, at(3400, 2000))));
+}
+
+TEST(TranslateWall, AMoveThatWouldTurnAJoinedWallBackIsRefused) {
+  // The right wall past the left one.
+  const auto past = translate_wall(room(), id(2), by(-7000, 0));
+  ASSERT_FALSE(past.has_value());
+  EXPECT_EQ(past.error().code, ErrorCode::kBreaksJoin);
+
+  const auto unknown = translate_wall(room(), id(9), by(100, 0));
+  ASSERT_FALSE(unknown.has_value());
+  EXPECT_EQ(unknown.error().code, ErrorCode::kNotFound);
+
+  const auto still = translate_wall(room(), id(2), by(0, 0));
+  ASSERT_TRUE(still.has_value());
+  EXPECT_TRUE(still->empty());
+}
+
+TEST(TranslateWall, WallsOffTheAxesStretchAlongAMoveRoundedToTheMillimetre) {
+  // A room turned by the 3-4-5 angle: sides along (4, 3) and (-3, 4), 5 m and 2.5 m long.
+  const std::vector<WallInput> walls{
+      wall(1, at(0, 0), at(4000, 3000)), wall(2, at(4000, 3000), at(2500, 5000)),
+      wall(3, at(2500, 5000), at(-1500, 2000)), wall(4, at(-1500, 2000), at(0, 0))};
+  // The far short wall 333 mm on along the long sides: (266.4, 199.8) to the millimetre.
+  const auto moves = translate_wall(walls, id(2), by(266, 200));
+
+  ASSERT_TRUE(moves.has_value());
+  const std::vector<EndMove> expected{
+      to(1, WallEnd::kEnd, at(4266, 3200)), to(2, WallEnd::kStart, at(4266, 3200)),
+      to(2, WallEnd::kEnd, at(2766, 5200)), to(3, WallEnd::kStart, at(2766, 5200))};
+  EXPECT_EQ(*moves, expected);
+}
+
+TEST(SetDistance, AWallGoesToStandAClearDistanceFromTheOneItFaces) {
+  // The room is 5 620 mm clear between its side walls, 380 mm thick on their centre lines.
+  const auto moves = set_distance(room(), {.moves = id(2), .stays = id(4)}, 5000_mm);
+
+  ASSERT_TRUE(moves.has_value());
+  const std::vector<EndMove> expected{
+      to(1, WallEnd::kEnd, at(5380, 0)), to(2, WallEnd::kStart, at(5380, 0)),
+      to(2, WallEnd::kEnd, at(5380, 4000)), to(3, WallEnd::kStart, at(5380, 4000))};
+  EXPECT_EQ(*moves, expected);
+
+  // The other wall may move instead: the left one goes right.
+  const auto other = set_distance(room(), {.moves = id(4), .stays = id(2)}, 5000_mm);
+  ASSERT_TRUE(other.has_value());
+  EXPECT_TRUE(std::ranges::contains(*other, to(4, WallEnd::kStart, at(620, 4000))));
+}
+
+TEST(SetDistance, IsMeasuredBetweenFacesWhereverTheWallsLinesLie) {
+  std::vector<WallInput> walls = room();
+  // The right wall's points lie on its right face, the outer one: its body is to their left.
+  walls[1].wall.location_line = LocationLine::kRightFace;
+  // A partition 120 mm thick, 2 m from the left wall's line, drawn downwards.
+  walls.push_back(wall(5, at(2000, 4000), at(2000, 0), 120_mm));
+
+  // From the partition's far face, 2 060, to the right wall's inner face, 5 620: 3 560 clear.
+  const auto moves = set_distance(walls, {.moves = id(5), .stays = id(2)}, 3000_mm);
+  ASSERT_TRUE(moves.has_value());
+  const std::vector<EndMove> expected{to(5, WallEnd::kStart, at(2560, 4000)),
+                                      to(5, WallEnd::kEnd, at(2560, 0))};
+  EXPECT_EQ(*moves, expected);
+}
+
+TEST(SetDistance, NeedsTwoWallsSideBySideAndADistance) {
+  EXPECT_EQ(set_distance(room(), {.moves = id(2), .stays = id(1)}, 5000_mm).error().code,
+            ErrorCode::kDoesNotFit);
+  EXPECT_EQ(set_distance(room(), {.moves = id(2), .stays = id(4)}, 0_mm).error().code,
+            ErrorCode::kDoesNotFit);
+  EXPECT_EQ(set_distance(room(), {.moves = id(2), .stays = id(9)}, 5000_mm).error().code,
+            ErrorCode::kNotFound);
+}
+
 }  // namespace
 }  // namespace otves::geom

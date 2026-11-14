@@ -32,16 +32,6 @@ constexpr double kCm2PerM2 = 10'000.0;
 // The centre of area divides the sum over an outline's edges by three times its doubled area.
 constexpr double kCentreShare = 3.0;
 
-// A stretch of a space's floor along a line across or up the plan.
-struct Stretch {
-  double from = 0.0;
-  double to = 0.0;
-
-  [[nodiscard]] constexpr double length() const { return to - from; }
-  [[nodiscard]] constexpr double middle() const { return (from + to) / 2; }
-  [[nodiscard]] constexpr bool holds(double value) const { return value >= from && value <= to; }
-};
-
 // Along which axis a stretch runs. The other coordinate is the line it lies on.
 enum class Axis : std::uint8_t { kX, kY };
 
@@ -112,6 +102,14 @@ geom::Vec2 centre(std::span<const geom::Vec2> outline) {
 
 }  // namespace
 
+std::optional<Stretch> stretch_across(const geom::Space& space, double y, double x) {
+  return pick(stretches(space, Axis::kX, y), x);
+}
+
+std::optional<Stretch> stretch_up(const geom::Space& space, double x, double y) {
+  return pick(stretches(space, Axis::kY, x), y);
+}
+
 std::vector<RoomSpace> room_spaces(std::span<const geom::WallInput> walls,
                                    std::span<const NamedRoom> rooms) {
   std::vector<geom::Space> spaces = geom::find_spaces(walls);
@@ -161,12 +159,16 @@ std::optional<RoomLabel> label_of(const geom::Space& space, TextSize text) {
     return RoomLabel{.at = at,
                      .along = {.x = 0.0, .y = 1.0},
                      .fit = tall->length() * kLabelFill,
-                     .across = level.length()};
+                     .across = level.length(),
+                     .wide = level,
+                     .tall = *tall};
   }
   return RoomLabel{.at = at,
                    .along = {.x = 1.0, .y = 0.0},
                    .fit = level.length() * kLabelFill,
-                   .across = tall->length()};
+                   .across = tall->length(),
+                   .wide = level,
+                   .tall = *tall};
 }
 
 void draw_floors(std::span<const RoomSpace> spaces, Drawing& drawing) {
@@ -178,10 +180,11 @@ void draw_floors(std::span<const RoomSpace> spaces, Drawing& drawing) {
   }
 }
 
-void write_rooms(std::span<const RoomSpace> spaces, TextSize text, Drawing& drawing) {
+void write_rooms(std::span<const RoomSpace> spaces, const RoomSpace* focused, TextSize text,
+                 Drawing& drawing) {
   for (const RoomSpace& room : spaces) {
     const std::optional<RoomLabel> label = label_of(room.space, text);
-    if (!label || label->across < text.height) {
+    if (&room == focused || !label || label->across < text.height) {
       continue;
     }
     const bool named = !room.room.is_nil() && label->across >= 2 * text.height;

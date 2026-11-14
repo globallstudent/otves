@@ -93,6 +93,26 @@ class Request {
     return add(Command::Draw, schema::CreateDraw(builder_, &on, 300, 150).Union());
   }
 
+  // The level with the space at `focus` drawn with its sizes.
+  Request& draw(ElementId level, schema::PointMm focus) {
+    const schema::Uuid on = key(level);
+    return add(Command::Draw, schema::CreateDraw(builder_, &on, 300, 150, &focus).Union());
+  }
+
+  // A typed value for the size a drawing's text showed.
+  Request& set_dimension(const schema::DrawnText& text, std::int64_t value) {
+    return add(Command::SetDimension,
+               schema::CreateSetDimension(builder_, text.kind(), text.element(), text.from(),
+                                          text.forward(), value, text.other())
+                   .Union());
+  }
+
+  Request& set_dimension(schema::TextKind kind, ElementId element, std::int64_t value) {
+    const schema::Uuid id = key(element);
+    return add(Command::SetDimension,
+               schema::CreateSetDimension(builder_, kind, &id, 0, false, value).Union());
+  }
+
   // The outside wall of the reference plans: 120 of facing brick, 100 of insulation and 190 of
   // block from the outer face in, or as many millimetres of insulation as asked.
   Request& add_wall_type(schema::WallRole role = schema::WallRole::Exterior,
@@ -951,7 +971,8 @@ TEST(Session, ADrawingIsTheLevelAsADisplayListAndChangesNothing) {
   const schema::Drawing* drawing = asked.results()->Get(0)->drawing();
   ASSERT_NE(drawing, nullptr);
   // The floor the walls close; four walls with no material yet and the window's gap; its
-  // jambs, faces and glazing; the floor's area and a length by each wall.
+  // jambs, faces and glazing; the floor's area and the plan's size across and up, each a line
+  // with two ticks and two lines out to it.
   ASSERT_EQ(drawing->polygons()->size(), 6U);
   EXPECT_EQ(drawing->polygons()->Get(0)->fill(), schema::Fill::Floor);
   EXPECT_EQ(drawing->polygons()->Get(0)->element(), nullptr);
@@ -959,15 +980,17 @@ TEST(Session, ADrawingIsTheLevelAsADisplayListAndChangesNothing) {
   EXPECT_EQ(drawing->polygons()->Get(1)->fill(), schema::Fill::Unchosen);
   EXPECT_EQ(drawing->polygons()->Get(1)->stroke(), schema::Stroke::WallEdge);
   EXPECT_EQ(drawing->polygons()->Get(5)->fill(), schema::Fill::Gap);
-  EXPECT_EQ(drawing->lines()->size(), 5U);
+  EXPECT_EQ(drawing->lines()->size(), 15U);
   EXPECT_EQ(drawing->arcs()->size(), 0U);
-  ASSERT_EQ(drawing->texts()->size(), 5U);
+  // The walls were drawn to their lengths and close a space, so its sizes speak for them.
+  ASSERT_EQ(drawing->texts()->size(), 3U);
   EXPECT_EQ(drawing->texts()->Get(0)->kind(), schema::TextKind::RoomArea);
-  EXPECT_EQ(to_id(drawing->texts()->Get(1)->element()), room[0]);
-  EXPECT_EQ(drawing->texts()->Get(1)->kind(), schema::TextKind::Length);
-  EXPECT_EQ(drawing->texts()->Get(1)->value(), 6000);
+  EXPECT_EQ(drawing->texts()->Get(1)->kind(), schema::TextKind::Overall);
+  EXPECT_EQ(drawing->texts()->Get(1)->element(), nullptr);
+  EXPECT_EQ(drawing->texts()->Get(1)->value(), 6380);
   EXPECT_DOUBLE_EQ(drawing->texts()->Get(1)->at()->x(), 3.0);
   EXPECT_DOUBLE_EQ(drawing->texts()->Get(1)->along()->x(), 1.0);
+  EXPECT_EQ(drawing->texts()->Get(2)->value(), 4380);
 
   EXPECT_EQ(asked.results()->Get(1)->error(), schema::ErrorCode::NotFound);
   EXPECT_EQ(asked.results()->Get(2)->error(), schema::ErrorCode::CorruptData);
@@ -1701,6 +1724,120 @@ TEST(Session, ARoomCommandWithAnUnknownKindOrNoPointIsCorrupt) {
   EXPECT_EQ(refused.results()->Get(2)->error(), schema::ErrorCode::NotFound);
   EXPECT_EQ(refused.results()->Get(3)->error(), schema::ErrorCode::CorruptData);
   EXPECT_EQ(refused.changes()->size(), 0U);
+}
+
+// The values of a drawing's texts of one kind, in order.
+std::vector<std::int64_t> sizes(const schema::Drawing& drawing, schema::TextKind kind) {
+  std::vector<std::int64_t> values;
+  for (const schema::DrawnText* text : texts(drawing, kind)) {
+    values.push_back(text->value());
+  }
+  return values;
+}
+
+// The opening as the response reports it changed.
+const schema::Opening* changed_opening(const schema::Response& response) {
+  return response.changes()->size() == 1 ? response.changes()->Get(0)->element_as_Opening()
+                                         : nullptr;
+}
+
+TEST(Session, TheSpaceInFocusIsDrawnWithItsSizes) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_room(session, level);
+  const auto& placed = respond(session, Request{}.place(level, {3000, 0}).bytes());
+  const ElementId window = to_id(placed.results()->Get(0)->created());
+
+  const auto& asked = respond(session, Request{}.draw(level, {3000, 2000}).bytes());
+  const schema::Drawing* drawing = asked.results()->Get(0)->drawing();
+  ASSERT_NE(drawing, nullptr);
+
+  // Between the faces of 380 mm walls; the window, 1.5 m wide, in the middle of the lower one.
+  EXPECT_EQ(sizes(*drawing, schema::TextKind::Clear), (std::vector<std::int64_t>{5620, 3620}));
+  EXPECT_EQ(sizes(*drawing, schema::TextKind::Pier), (std::vector<std::int64_t>{2060, 2060}));
+  EXPECT_EQ(sizes(*drawing, schema::TextKind::OpeningWidth), std::vector<std::int64_t>{1500});
+  EXPECT_EQ(sizes(*drawing, schema::TextKind::Overall), (std::vector<std::int64_t>{6380, 4380}));
+  EXPECT_TRUE(texts(*drawing, schema::TextKind::RoomArea).empty());
+  const schema::DrawnText* pier = texts(*drawing, schema::TextKind::Pier)[0];
+  EXPECT_EQ(to_id(pier->element()), window);
+  EXPECT_EQ(pier->from(), 190);
+  EXPECT_TRUE(pier->forward());
+  EXPECT_EQ(asked.changes()->size(), 0U);
+}
+
+TEST(Session, ATypedSizeMovesOrResizesWhatItMeasures) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const std::vector<ElementId> walls = add_room(session, level);
+  respond(session, Request{}.place(level, {3000, 0}).bytes());
+  const auto& asked = respond(session, Request{}.draw(level, {3000, 2000}).bytes());
+  const schema::Drawing* drawing = asked.results()->Get(0)->drawing();
+  // The request is built while the drawing is still there to read.
+  const std::vector<std::uint8_t> typed =
+      Request{}
+          .set_dimension(*texts(*drawing, schema::TextKind::Pier)[0], 1000)
+          .set_dimension(*texts(*drawing, schema::TextKind::OpeningWidth)[0], 1200)
+          .bytes();
+  const std::vector<std::uint8_t> too_far =
+      Request{}.set_dimension(*texts(*drawing, schema::TextKind::Pier)[1], 9000).bytes();
+
+  // 1 000 mm of wall from the room's corner, 190 mm along the wall, to the window; then the
+  // window 1 200 mm wide from there.
+  const auto& sized = respond(session, typed);
+  ASSERT_EQ(sized.results()->Get(0)->error(), schema::ErrorCode::None);
+  ASSERT_EQ(sized.results()->Get(1)->error(), schema::ErrorCode::None);
+  const schema::Opening* moved = changed_opening(sized);
+  ASSERT_NE(moved, nullptr);
+  EXPECT_EQ(moved->offset(), 1190);
+  EXPECT_EQ(moved->width(), 1200);
+  EXPECT_EQ(sized.log()->size(), 2U);
+
+  // A piece of wall longer than the wall has room for is refused, and nothing changes.
+  const auto& refused = respond(session, too_far);
+  EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::DoesNotFit);
+  EXPECT_EQ(refused.changes()->size(), 0U);
+
+  // A wall's length is a size too; the plan's overall size is not one to type.
+  const auto& other =
+      respond(session, Request{}
+                           .set_dimension(schema::TextKind::Length, walls[0], 5000)
+                           .set_dimension(schema::TextKind::Overall, walls[0], 5000)
+                           .set_dimension(schema::TextKind::Pier, ElementId{Uuid{7, 7}}, 500)
+                           .bytes());
+  EXPECT_EQ(other.results()->Get(0)->error(), schema::ErrorCode::None);
+  EXPECT_EQ(other.results()->Get(1)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(other.results()->Get(2)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(line(other, walls[0]), (Line{0, 0, 5000, 0}));
+}
+
+TEST(Session, ATypedClearSizeMovesAWallWithWhatIsJoinedToIt) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  const std::vector<ElementId> walls = add_room(session, level);
+  const auto& asked = respond(session, Request{}.draw(level, {3000, 2000}).bytes());
+  const schema::DrawnText* across =
+      texts(*asked.results()->Get(0)->drawing(), schema::TextKind::Clear)[0];
+  // Between the left wall and the right one, which is the one to move.
+  EXPECT_EQ(to_id(across->other()), walls[3]);
+  EXPECT_EQ(to_id(across->element()), walls[1]);
+  const std::vector<std::uint8_t> typed = Request{}.set_dimension(*across, 5000).bytes();
+
+  // 5 620 mm clear becomes 5 000: the right wall comes 620 mm in, and the walls at its ends
+  // with it, in one step.
+  const auto& sized = respond(session, typed);
+  ASSERT_EQ(sized.results()->Get(0)->error(), schema::ErrorCode::None);
+  EXPECT_EQ(line(sized, walls[1]), (Line{5380, 0, 5380, 4000}));
+  EXPECT_EQ(line(sized, walls[0]), (Line{0, 0, 5380, 0}));
+  EXPECT_EQ(sized.changes()->size(), 3U);
+  EXPECT_EQ(sized.log()->size(), 1U);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  EXPECT_EQ(line(undone, walls[1]), (Line{6000, 0, 6000, 4000}));
+
+  // Walls that do not run side by side have no clear size between them.
+  const auto& refused =
+      respond(session, Request{}.set_dimension(schema::TextKind::Clear, walls[1], 5000).bytes());
+  EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::NotFound);
 }
 
 }  // namespace

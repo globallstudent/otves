@@ -167,16 +167,29 @@ TEST(DraftRooms, ARoomStandingFreeInAnotherIsPaintedOverIt) {
   expect_near(outer->at, {.x = 7.95, .y = 4.15});
 }
 
+// Whether the text is written up the plan and outside the 2 m room at the origin.
+bool upright_outside(const Text& text) {
+  return text.along.y > 0.5 && (text.at.x < 0.0 || text.at.x > 2.0);
+}
+
 TEST(DraftRooms, WallLengthsKeepClearOfARoomsLabel) {
-  // A room 1.6 m clear each way: the lengths of its walls, written inside by their left faces,
-  // would lie on its label.
-  const Drawing drawing =
-      draft_rooms(box(2000, 2000), {room(10, at(1000, 1000), RoomKind::kToilet)});
+  // A room 1.6 m clear each way, sketched: the lengths of its walls, written inside by their
+  // left faces until somebody gives them, would lie on its label.
+  std::vector<geom::WallInput> walls = box(2000, 2000);
+  for (geom::WallInput& input : walls) {
+    input.wall.exact = false;
+  }
+  const Drawing drawing = draft_rooms(walls, {room(10, at(1000, 1000), RoomKind::kToilet)});
   const std::vector<Text> names = texts(drawing, TextKind::kRoomName);
   ASSERT_EQ(names.size(), 1U);
-  for (const Text& length : texts(drawing, TextKind::kLength)) {
-    EXPECT_GE(geom::length(length.at - names[0].at), 0.5);
-  }
+  const std::vector<Text> lengths = texts(drawing, TextKind::kAboutLength);
+  ASSERT_EQ(lengths.size(), 4U);
+  // Over and under the label there is room for a line; beside it there is not, so the lengths
+  // of the two upright walls went to their other faces, outside the room.
+  EXPECT_TRUE(std::ranges::all_of(lengths, [&names](const Text& length) {
+    return geom::length(length.at - names[0].at) >= 0.4;
+  }));
+  EXPECT_EQ(std::ranges::count_if(lengths, upright_outside), 2);
 }
 
 }  // namespace

@@ -16,6 +16,7 @@
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
+#include "axis.h"
 #include "frame.h"
 #include "step.h"
 
@@ -38,6 +39,30 @@ struct Node {
   PointMm at;
   std::vector<std::size_t> out;  // half-edges leaving, counter-clockwise from +x
 };
+
+// A corner of a face, and the wall whose face the outline runs along after it.
+struct Corner {
+  Vec2 at;
+  std::size_t wall = 0;
+};
+
+// The corners without those that repeat the one before them, the last against the first too. The
+// side after a repeated corner has no length, so the corner that stays leads to the later wall.
+std::vector<Corner> drop_repeats(const std::vector<Corner>& corners) {
+  std::vector<Corner> kept;
+  kept.reserve(corners.size());
+  for (const Corner& corner : corners) {
+    if (!kept.empty() && length(corner.at - kept.back().at) <= kEpsilon) {
+      kept.back().wall = corner.wall;
+    } else {
+      kept.push_back(corner);
+    }
+  }
+  while (kept.size() > 1 && length(kept.front().at - kept.back().at) <= kEpsilon) {
+    kept.pop_back();
+  }
+  return kept;
+}
 
 // A point of a wall's body where the ends of other walls stand against it.
 struct Stop {
@@ -91,10 +116,20 @@ class Graph {
         walked[edge] = true;
         face.push_back(edge);
       }
-      std::vector<Vec2> outline = outline_of(face);
+      const std::vector<Corner> corners = corners_of(face);
+      std::vector<Vec2> outline;
+      outline.reserve(corners.size());
+      for (const Corner& corner : corners) {
+        outline.push_back(corner.at);
+      }
       const std::size_t group = component[edges_[first].from];
       if (signed_area(outline) > 0.0 && turns_left(face)) {
-        found.push_back({.outline = std::move(outline), .islands = {}, .area = 0.0});
+        Space space{.outline = std::move(outline), .sides = {}, .islands = {}, .area = 0.0};
+        space.sides.reserve(corners.size());
+        for (const Corner& corner : corners) {
+          space.sides.push_back(walls_[corner.wall].id);
+        }
+        found.push_back(std::move(space));
         found_in.push_back(group);
       } else if (!turns_left(face)) {
         outsides.emplace_back(std::move(outline), group);
@@ -232,15 +267,15 @@ class Graph {
   }
 
   // The face as the plan shows it: each corner is where the wall faces of two half-edges cross.
-  [[nodiscard]] std::vector<Vec2> outline_of(std::span<const std::size_t> face) const {
-    std::vector<Vec2> outline;
+  [[nodiscard]] std::vector<Corner> corners_of(std::span<const std::size_t> face) const {
+    std::vector<Corner> corners;
     for (std::size_t i = 0; i < face.size(); ++i) {
-      add_corner(outline, face[i], face[(i + 1) % face.size()]);
+      add_corner(corners, face[i], face[(i + 1) % face.size()]);
     }
-    return drop_repeats(outline);
+    return drop_repeats(corners);
   }
 
-  void add_corner(std::vector<Vec2>& outline, std::size_t before, std::size_t after) const {
+  void add_corner(std::vector<Corner>& corners, std::size_t before, std::size_t after) const {
     const HalfEdge& in = edges_[before];
     const HalfEdge& out = edges_[after];
     if (in.wall == out.wall && in.forward == out.forward) {
@@ -254,13 +289,14 @@ class Graph {
           kMaxMitre * std::max(frames_[in.wall].thickness, frames_[out.wall].thickness);
       const std::optional<Vec2> corner = intersect(first, second);
       if (corner && length(*corner - point) <= limit) {
-        outline.push_back(*corner);
+        corners.push_back({.at = *corner, .wall = out.wall});
         return;
       }
     }
     // Square ends: a wall's free end, walls running on in one line, or a mitre too sharp to cut.
-    outline.push_back(foot(first, point));
-    outline.push_back(foot(second, point));
+    // The end itself belongs to the wall that reaches it.
+    corners.push_back({.at = foot(first, point), .wall = in.wall});
+    corners.push_back({.at = foot(second, point), .wall = out.wall});
   }
 
   [[nodiscard]] static Vec2 foot(const Line& line, Vec2 point) {

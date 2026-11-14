@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <span>
 #include <string>
@@ -17,10 +18,12 @@
 #include <otves/geom/layers.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/polygon.h>
+#include <otves/geom/spaces.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
 #include "rooms.h"
+#include "sizes.h"
 
 namespace otves::drafting {
 namespace {
@@ -33,6 +36,11 @@ constexpr double kLabelGap = 0.25;
 
 // «≈» and the space after it are about as wide as two digits.
 constexpr int kAboutDigits = 2;
+
+// A room's name is taken to be at most this many digits wide, and its area this many: the
+// engine does not know the words.
+constexpr double kNameDigits = 16.0;
+constexpr double kAreaDigits = 7.0;
 
 // Where along a wall its length may be written, the middle first.
 constexpr std::array kLabelPlaces{0.5, 0.3, 0.7};
@@ -157,14 +165,70 @@ double label_width(Mm length, bool exact, TextSize text) {
   return (digits + (exact ? 0 : kAboutDigits)) * text.digit;
 }
 
+// How wide a written text is along its direction, at most.
+double width_of(const Text& written, TextSize text) {
+  switch (written.kind) {
+    case TextKind::kRoomName:
+      return std::min(written.fit, kNameDigits * text.digit);
+    case TextKind::kRoomArea:
+      return kAreaDigits * text.digit;
+    case TextKind::kAboutLength:
+      return label_width(Mm{written.value}, false, text);
+    case TextKind::kLength:
+    case TextKind::kOverall:
+    case TextKind::kClear:
+    case TextKind::kPier:
+    case TextKind::kOpeningWidth:
+      break;
+  }
+  return label_width(Mm{written.value}, true, text);
+}
+
+// A text as the box it fills: its middle, its direction and half its size along and across.
+struct Box {
+  geom::Vec2 at;
+  geom::Vec2 along;
+  double half_along = 0.0;
+  double half_across = 0.0;
+};
+
+// Whether the boxes lie apart along `axis`, a unit direction.
+bool apart_along(geom::Vec2 axis, const Box& a, const Box& b) {
+  const auto reach = [axis](const Box& box) {
+    return (box.half_along * std::abs(geom::dot(box.along, axis))) +
+           (box.half_across * std::abs(geom::dot(geom::perp(box.along), axis)));
+  };
+  return std::abs(geom::dot(b.at - a.at, axis)) > reach(a) + reach(b);
+}
+
+// Two boxes meet unless a line along a side of one of them parts them.
+bool meet(const Box& a, const Box& b) {
+  return !apart_along(a.along, a, b) && !apart_along(geom::perp(a.along), a, b) &&
+         !apart_along(b.along, a, b) && !apart_along(geom::perp(b.along), a, b);
+}
+
+// The walls that some space's outline runs along, sorted.
+std::vector<ElementId> walls_round(std::span<const RoomSpace> spaces) {
+  std::vector<ElementId> round;
+  for (const RoomSpace& room : spaces) {
+    round.insert(round.end(), room.space.sides.begin(), room.space.sides.end());
+  }
+  std::ranges::sort(round);
+  const auto [first, last] = std::ranges::unique(round);
+  round.erase(first, last);
+  return round;
+}
+
 // Writes each wall's length where it is clear of the other walls and of the lengths already
-// written.
+// written. `round_spaces` are the walls round spaces, sorted.
 void write_lengths(std::span<const geom::WallInput> walls,
-                   std::span<const geom::WallFootprint> footprints, TextSize text,
-                   Drawing& drawing) {
+                   std::span<const geom::WallFootprint> footprints,
+                   std::span<const ElementId> round_spaces, TextSize text, Drawing& drawing) {
   for (const geom::WallFootprint& footprint : footprints) {
     const Wall* wall = find(walls, footprint.id);
-    if (wall == nullptr) {
+    // A wall round a space is sized by the space, once somebody has given its length.
+    if (wall == nullptr ||
+        (wall->exact && std::ranges::binary_search(round_spaces, footprint.id))) {
       continue;
     }
     const geom::Vec2 start = geom::to_vec2(wall->start);
@@ -186,10 +250,18 @@ void write_lengths(std::span<const geom::WallInput> walls,
                (geom::contains(other.outline, at) || geom::contains(other.outline, at - half) ||
                 geom::contains(other.outline, at + half));
       });
-      const bool on_a_length = std::ranges::any_of(drawing.texts, [&](const Text& written) {
-        return geom::length(written.at - at) < width;
+      // The length keeps a quarter of a text height clear of every text written before it.
+      const Box box{.at = at,
+                    .along = dir,
+                    .half_along = width / 2,
+                    .half_across = (text.height / 2) + (kLabelGap * text.height)};
+      const bool on_a_text = std::ranges::any_of(drawing.texts, [&](const Text& written) {
+        return meet(box, {.at = written.at,
+                          .along = written.along,
+                          .half_along = width_of(written, text) / 2,
+                          .half_across = text.height / 2});
       });
-      return !on_a_wall && !on_a_length;
+      return !on_a_wall && !on_a_text;
     };
     std::vector<geom::Vec2> places;
     for (const double part : kLabelPlaces) {
@@ -236,9 +308,21 @@ Drawing draft(const Plan& plan, TextSize text) {
   }
   draw_openings(plan.openings, drawing);
   const TextSize size{.height = std::max(text.height, 0.0), .digit = std::max(text.digit, 0.0)};
-  // Rooms are written first, so a wall's length keeps clear of them.
-  write_rooms(spaces, size, drawing);
-  write_lengths(walls, joins.footprints, size, drawing);
+  const auto focused =
+      plan.focus ? std::ranges::find_if(spaces,
+                                        [at = geom::to_vec2(*plan.focus)](const RoomSpace& room) {
+                                          return geom::holds(room.space, at);
+                                        })
+                 : spaces.end();
+  // Rooms and sizes are written first, so a wall's length keeps clear of them.
+  write_rooms(spaces, focused != spaces.end() ? &*focused : nullptr, size, drawing);
+  if (focused != spaces.end()) {
+    write_sizes(*focused, walls, plan.openings, size, drawing);
+  }
+  if (!spaces.empty()) {
+    write_overall(joins.footprints, size, drawing);
+  }
+  write_lengths(walls, joins.footprints, walls_round(spaces), size, drawing);
   return drawing;
 }
 

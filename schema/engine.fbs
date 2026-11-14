@@ -273,14 +273,46 @@ table AddSketch {
   square:bool;
 }
 
+// What a text of a drawing says (engine/drafting/plan.h).
+enum TextKind:ubyte {
+  Length = 0,       // a wall's length
+  AboutLength = 1,  // one that nobody has typed or measured
+  RoomName = 2,     // a room's name: `value` is its RoomKind
+  RoomArea = 3,     // a space's floor: `value` is its area in cm²
+  // Sizes in millimetres (docs/adr/0016). All but Overall are handles for SetDimension.
+  Overall = 4,       // the plan from outer face to outer face
+  Clear = 5,         // across the space in focus, between two of its walls
+  Pier = 6,          // a piece of wall between a corner or an opening and the next opening
+  OpeningWidth = 7,  // an opening's width
+}
+
 // The drawing of `level` (docs/adr/0013). Changes nothing; the result's `drawing` holds it.
 // `text_height` and `digit_width` say how big the app's label text is on the plan at its zoom:
 // the height of a line and the width of a digit, in millimetres. The engine places labels with
-// them and leaves out the ones that do not fit.
+// them and leaves out the ones that do not fit. The space that holds `focus` is drawn with its
+// sizes in place of its name (docs/adr/0016).
 table Draw {
   level:Uuid;
   text_height:long;
   digit_width:long;
+  focus:PointMm;
+}
+
+// Gives a size on the plan a typed value (docs/adr/0016). `kind`, `element`, `from` and
+// `forward` are those of the text that showed the size; `value` is in millimetres. An opening's
+// width keeps its near edge; a piece of wall moves the opening it leads to; a wall's length
+// runs as SetWallLength. A clear size moves the wall `element` so that it stands `value` from
+// the wall `other`, face to face, with what is joined to it; the app may swap the two the text
+// named to move the other wall. One undo step. Fails with DoesNotFit when the opening would
+// leave its wall or the walls do not face each other, and with CorruptData for a kind that is
+// no handle.
+table SetDimension {
+  kind:TextKind = Length;
+  element:Uuid;
+  from:long;
+  forward:bool;
+  value:long;
+  other:Uuid;
 }
 
 // Replaces the open model with a saved job's elements (docs/adr/0007) and starts an empty log
@@ -342,6 +374,7 @@ union Command {
   MoveRoom,
   SetRoomKind,
   RemoveRoom,
+  SetDimension,
 }
 
 table CommandEntry {
@@ -422,13 +455,8 @@ enum Stroke:ubyte {
   Frame = 3,  // a window's faces and glazing
   Leaf = 4,   // a door's leaf and swing
   Layer = 5,  // where two layers of a wall meet
-}
-
-enum TextKind:ubyte {
-  Length = 0,       // a wall's length
-  AboutLength = 1,  // one that nobody has typed or measured
-  RoomName = 2,     // a room's name: `value` is its RoomKind
-  RoomArea = 3,     // a space's floor: `value` is its area in cm²
+  Dimension = 6,  // a dimension line, its ticks and the lines that lead to it
+  Chain = 7,      // the same for the sizes of the space in focus
 }
 
 // Every primitive names the element it draws; absent for what cannot be picked.
@@ -466,6 +494,15 @@ table DrawnText {
   at:PointM;
   along:PointM;
   fit:double;
+  // For a size that is a handle (docs/adr/0016): `element` is the opening or wall a typed value
+  // changes. For a piece of wall, `from` is where its fixed end lies along the opening's wall
+  // from that wall's start, in millimetres, and `forward` whether the opening lies further
+  // along the wall than that end.
+  from:long;
+  forward:bool;
+  // For a clear size: the wall at its other end. `element` is the wall at its far end, to the
+  // right or the top of the plan. Both absent when a typed value cannot move a wall there.
+  other:Uuid;
 }
 
 // One level as a display list (docs/adr/0013), in plan metres: painted in this order, each list

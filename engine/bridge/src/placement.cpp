@@ -139,6 +139,24 @@ std::vector<PointMm> ends_below(const Model& model, ElementId level) {
   return below;
 }
 
+// The moves as commands, one wall end at a time.
+std::vector<Command> as_commands(const Model& model, std::span<const geom::EndMove> moves) {
+  std::vector<MoveWallEnd> ordered;
+  ordered.reserve(moves.size());
+  for (const geom::EndMove& move : moves) {
+    ordered.push_back({.wall = move.wall, .end = move.end, .to = move.to});
+    // A wall sliding along its own line by its own length would put its start on its end, so
+    // its end goes first.
+    const Wall* moved = model.find<Wall>(move.wall);
+    const std::size_t count = ordered.size();
+    if (move.end == WallEnd::kEnd && count > 1 && ordered[count - 2].wall == move.wall &&
+        moved != nullptr && ordered[count - 2].to == moved->end) {
+      std::swap(ordered[count - 2], ordered[count - 1]);
+    }
+  }
+  return {ordered.begin(), ordered.end()};
+}
+
 }  // namespace
 
 Result<geom::Aimed> aim(const Model& model, const Sight& sight) {
@@ -162,26 +180,55 @@ Result<std::vector<Command>> resize(const Model& model, const Resize& resize) {
   }
   return geom::resize_wall(walls_on(model, wall->level), resize.wall, resize.length, resize.fixed)
       .transform([&model, &resize, wall](const std::vector<geom::EndMove>& moves) {
-        std::vector<MoveWallEnd> ordered;
-        ordered.reserve(moves.size());
-        for (const geom::EndMove& move : moves) {
-          ordered.push_back({.wall = move.wall, .end = move.end, .to = move.to});
-          // One end moves at a time. A wall sliding along its own line by its own length would
-          // put its start on its end, so its end goes first.
-          const Wall* moved = model.find<Wall>(move.wall);
-          const std::size_t count = ordered.size();
-          if (move.end == WallEnd::kEnd && count > 1 && ordered[count - 2].wall == move.wall &&
-              moved != nullptr && ordered[count - 2].to == moved->end) {
-            std::swap(ordered[count - 2], ordered[count - 1]);
-          }
-        }
-        std::vector<Command> commands(ordered.begin(), ordered.end());
+        std::vector<Command> commands = as_commands(model, moves);
         // A typed length is a measured one, also when it is the length the wall already has.
         if (!wall->exact) {
           commands.emplace_back(SetWallExact{.wall = resize.wall, .exact = true});
         }
         return commands;
       });
+}
+
+Result<std::vector<Command>> dimension(const Model& model, const Sized& sized) {
+  if (sized.kind == drafting::TextKind::kLength) {
+    return resize(model, {.wall = sized.element, .length = sized.value, .fixed = std::nullopt});
+  }
+  if (sized.kind == drafting::TextKind::kClear) {
+    const Wall* wall = model.find<Wall>(sized.element);
+    if (wall == nullptr) {
+      return make_error(ErrorCode::kNotFound, "wall not found");
+    }
+    return geom::set_distance(walls_on(model, wall->level),
+                              {.moves = sized.element, .stays = sized.other}, sized.value)
+        .transform([&model](const std::vector<geom::EndMove>& moves) {
+          return as_commands(model, moves);
+        });
+  }
+  const auto* opening = model.find<Opening>(sized.element);
+  const Wall* wall = opening != nullptr ? model.find<Wall>(opening->wall) : nullptr;
+  if (wall == nullptr) {
+    return make_error(ErrorCode::kNotFound, "opening not found");
+  }
+  Opening changed = *opening;
+  if (sized.kind == drafting::TextKind::kOpeningWidth) {
+    changed.width = sized.value;
+  } else {
+    // The piece of wall runs from its fixed end to the opening's nearer edge.
+    changed.offset =
+        sized.forward ? sized.from + sized.value : sized.from - sized.value - opening->width;
+  }
+  if (sized.value < Mm{0} || changed.offset < Mm{0} ||
+      changed.offset + changed.width > axis_length(*wall)) {
+    return make_error(ErrorCode::kDoesNotFit, "the opening would leave its wall");
+  }
+  if (auto valid = validate(changed); !valid) {
+    return std::unexpected{std::move(valid).error()};
+  }
+  if (sized.kind == drafting::TextKind::kOpeningWidth) {
+    return std::vector<Command>{
+        ResizeOpening{.opening = sized.element, .width = changed.width, .height = changed.height}};
+  }
+  return std::vector<Command>{MoveOpening{.opening = sized.element, .offset = changed.offset}};
 }
 
 Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke) {
@@ -238,9 +285,13 @@ Result<drafting::Drawing> draw(const Model& model, const View& view) {
     below = walls_on(model, *under);
   }
   const std::vector<drafting::NamedRoom> rooms = rooms_on(model, view.level);
-  return drafting::draft(
-      {.walls = walls, .openings = openings, .below = below, .builds = builds, .rooms = rooms},
-      view.text);
+  return drafting::draft({.walls = walls,
+                          .openings = openings,
+                          .below = below,
+                          .builds = builds,
+                          .rooms = rooms,
+                          .focus = view.focus},
+                         view.text);
 }
 
 Result<Found> pick(const Model& model, const Tap& tap) {

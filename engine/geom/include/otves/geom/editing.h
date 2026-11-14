@@ -99,4 +99,33 @@ struct EndMove {
                                                        ElementId wall, Mm length,
                                                        std::optional<WallEnd> fixed = std::nullopt);
 
+// A move on the plan, in whole millimetres.
+struct Shift {
+  Mm x;
+  Mm y;
+};
+
+// Every wall end that moves when `wall` goes `by` across the plan without turning, sorted by
+// wall and end (docs/adr/0016). What is joined goes with it as for resize_wall: a wall that the
+// move keeps on its own line, to the millimetre, stretches; any other wall with a moving point
+// on it moves whole, with the wall ends that stand against it. Fails with kNotFound for an
+// unknown wall, kOffPlan when a point would leave the plan, and kBreaksJoin when a joined wall
+// would vanish or turn back on itself or an end would come off the wall it stands against.
+// Precondition: as for the touch.
+[[nodiscard]] Result<std::vector<EndMove>> translate_wall(std::span<const WallInput> walls,
+                                                          ElementId wall, Shift by);
+
+// Two walls that run side by side: the one that moves and the one it is measured from.
+struct Facing {
+  ElementId moves;
+  ElementId stays;
+};
+
+// Every wall end that moves when one wall goes across the plan to stand `distance` from another,
+// measured between the faces they turn to each other. The move is translate_wall's. Fails with
+// kNotFound for an unknown wall, kDoesNotFit when the walls do not run side by side or the
+// distance is not positive, and as translate_wall does. Precondition: as for the touch.
+[[nodiscard]] Result<std::vector<EndMove>> set_distance(std::span<const WallInput> walls,
+                                                        Facing facing, Mm distance);
+
 }  // namespace otves::geom
