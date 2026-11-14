@@ -128,4 +128,38 @@ struct Facing {
 [[nodiscard]] Result<std::vector<EndMove>> set_distance(std::span<const WallInput> walls,
                                                         Facing facing, Mm distance);
 
+// Which way from a point of the plan, looking at it.
+enum class Hand : std::uint8_t {
+  kTop,
+  kBottom,
+  kLeft,
+  kRight,
+};
+
+// A wall to put across a space (docs/adr/0016).
+struct Across {
+  PointMm in;  // a point of the space
+  // The wall it is measured from: the one that bounds the space that way from `in`.
+  Hand from = Hand::kTop;
+  Mm distance;  // between that wall's face and the nearer face of the new wall
+};
+
+// Where a wall across a space goes. Its points lie along its nearer face, so the distance holds
+// whatever the wall is made of, and its body stands to the left of its direction.
+struct Crossing {
+  PointMm start;
+  PointMm end;
+  LocationLine line = LocationLine::kRightFace;
+
+  constexpr auto operator<=>(const Crossing&) const = default;
+};
+
+// A wall across the space that holds `in`, side by side with the wall it is measured from and
+// `distance` clear of its face. It runs from the wall it meets on one hand to the one on the
+// other, through the part of the space that `in` lies beside, and its points lie on those walls'
+// lines, so it joins them. Fails with kNotFound when no space holds the point, kDoesNotFit when
+// the distance is not positive, the space ends before it, or a wall standing free in the space
+// is in the way, and kOffPlan when a point would leave the plan. Precondition: as for the touch.
+[[nodiscard]] Result<Crossing> across(std::span<const WallInput> walls, const Across& across);
+
 }  // namespace otves::geom

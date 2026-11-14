@@ -42,6 +42,11 @@ namespace otves::bridge {
 // (docs/adr/0017). kNotFound when the opening does not exist.
 [[nodiscard]] Result<MoveOpening> center(const Model& model, ElementId id);
 
+// The wall that stands across a space at a typed distance from one of its walls (geom::across,
+// docs/adr/0016), checked to be buildable and exact. kNotFound when the level, the wall's type
+// or the space does not exist.
+[[nodiscard]] Result<AddWall> put_across(const Model& model, const Partition& partition);
+
 // The walls a stroke means on its level (geom::straighten), each checked to be buildable and
 // not exact. kNotFound when the level does not exist.
 [[nodiscard]] Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke);

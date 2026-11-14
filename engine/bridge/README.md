@@ -51,6 +51,8 @@ sequenceDiagram
 
 `SetOpeningHinge` and `SetOpeningSwing` say how a door hangs. `CenterOpening` runs as `MoveOpening`: to the middle of the side of the room the opening is in, or of its wall when no room is there. `Draw` takes the selected element, and marks every opening of the level by its size among all the job's openings ([ADR 0017](../../docs/adr/0017-openings-carry-hinge-and-swing-marks-are-derived.md)).
 
+`AddWallAcross` builds a wall across the room that holds a point, a typed distance from the wall on one hand of it ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)). `geom::across` says where it runs; it is added as `AddWall`, exact and along its nearer face, and the request's wall gives what it is made of.
+
 `Draw.sheet` asks for the level as a sheet prints it: every space with its sizes beside its name. Every `Drawing` carries the schedules a sheet prints beside the plan: `rooms`, the level's spaces in reading order with the room that names each and its floor area, and `openings`, the job's marks with their sizes and counts.
 
 `LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.

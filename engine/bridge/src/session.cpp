@@ -89,6 +89,12 @@ struct Session::Impl {
         return decode(entry.command_as_SetDimension())
             .and_then([this](const Sized& sized) { return dimension(document.model(), sized); })
             .and_then([this](const std::vector<Command>& steps) { return together(steps); });
+      case schema::Command::AddWallAcross:
+        return decode(entry.command_as_AddWallAcross())
+            .and_then([this](const Partition& partition) {
+              return put_across(document.model(), partition);
+            })
+            .and_then([this](const AddWall& add) { return document.execute(add); });
       case schema::Command::AddSketch:
         return decode(entry.command_as_AddSketch())
             .and_then([this](const Stroke& stroke) { return sketch(document.model(), stroke); })

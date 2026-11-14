@@ -16,6 +16,7 @@ The editor writes one length per wall, along its location line. No room has a si
 - **A wall round a space has no length of its own on the plan**, unless nobody has typed or measured it yet. Its room's sizes say more.
 - **A sheet has the sizes of every space**, beside its name and in ink. `Draw.sheet` asks for it; no wall round a space keeps a length there.
 - **A number is a handle.** A text of a size says what a typed value changes: an opening's width, the opening a piece of wall leads to, or the two walls a clear size lies between. The app sends the handle back with the value as `SetDimension`, and the engine turns it into commands in one undo step.
+- **A wall goes across a room at a typed distance.** `AddWallAcross` names a point of the room, which of its walls to measure from, as the hand it is on, and the distance. The engine runs the wall from the wall it meets on one hand to the one on the other. The new wall lies along its nearer face, so the distance holds whatever the wall is made of.
 - **Sizes scale with the text.** Offsets and ticks are ratios of the label text's height, so a drawing reads the same at every zoom. Paper sizes of СПДС join them with the sheets.
 
 | Size | Where | A typed value |
@@ -47,6 +48,7 @@ flowchart LR
 
 - Bridge schema: `Draw.focus`, strokes for dimension lines, text kinds for the four sizes, a handle on a text, and `SetDimension` are appended.
 - `geom::translate_wall` moves a wall across the plan with what is joined to it, and `geom::set_distance` finds the move for a clear size. The app asks which of the two walls gives way.
+- `geom::across` finds where a wall across a room runs. `Hand` and `AddWallAcross` are appended to the bridge schema. A wall that stands free in the room is no wall to measure from or to stand against.
 - The label of a selected space gives way to its sizes, so the panel names it.
 - The app remembers where it painted each number to find the one a finger taps. It still places nothing.
 - A space that is not a rectangle gets the sizes of its stretches through its label point, not every side.

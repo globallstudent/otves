@@ -747,6 +747,32 @@ std::expected<Resize, Error> decode(const schema::SetWallLength* set) {
   return resize;
 }
 
+std::expected<Partition, Error> decode(const schema::AddWallAcross* add) {
+  if (add == nullptr || add->at() == nullptr) {
+    return corrupt("wall across or its point is missing");
+  }
+  geom::Across across{
+      .in = to_point(*add->at()), .from = geom::Hand::kTop, .distance = Mm{add->distance()}};
+  switch (add->from()) {
+    case schema::Hand::Top:
+      break;
+    case schema::Hand::Bottom:
+      across.from = geom::Hand::kBottom;
+      break;
+    case schema::Hand::Left:
+      across.from = geom::Hand::kLeft;
+      break;
+    case schema::Hand::Right:
+      across.from = geom::Hand::kRight;
+      break;
+    default:
+      return corrupt("unknown hand");
+  }
+  return to_wall_like(add->wall()).transform([&across](const Wall& wall) {
+    return Partition{.wall = wall, .across = across};
+  });
+}
+
 std::expected<Stroke, Error> decode(const schema::AddSketch* sketch) {
   if (sketch == nullptr) {
     return corrupt("sketch is missing");

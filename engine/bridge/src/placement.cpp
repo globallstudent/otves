@@ -258,6 +258,28 @@ Result<MoveOpening> center(const Model& model, ElementId id) {
   return MoveOpening{.opening = id, .offset = std::max(round_to_mm(near), Mm{0})};
 }
 
+Result<AddWall> put_across(const Model& model, const Partition& partition) {
+  const ElementId level = partition.wall.level;
+  if (model.find<Level>(level) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "level not found");
+  }
+  if (!partition.wall.type.is_nil() && model.find<WallType>(partition.wall.type) == nullptr) {
+    return make_error(ErrorCode::kNotFound, "wall type not found");
+  }
+  return geom::across(walls_on(model, level), partition.across)
+      .and_then([&partition](const geom::Crossing& crossing) -> Result<AddWall> {
+        Wall wall = partition.wall;
+        wall.start = crossing.start;
+        wall.end = crossing.end;
+        wall.location_line = crossing.line;
+        wall.exact = true;
+        if (auto valid = validate(wall); !valid) {
+          return std::unexpected{std::move(valid).error()};
+        }
+        return AddWall{.wall = wall};
+      });
+}
+
 Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke) {
   const ElementId level = stroke.wall.level;
   if (model.find<Level>(level) == nullptr) {

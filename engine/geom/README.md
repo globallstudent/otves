@@ -18,6 +18,7 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | `resize_wall(walls, wall, length, fixed)` | Every wall end that moves when a wall gets a length, so what is joined stays joined |
 | `translate_wall(walls, wall, by)` | Every wall end that moves when a wall goes across the plan without turning, so what is joined stays joined |
 | `set_distance(walls, facing, distance)` | The same for the move that puts two walls side by side a clear distance apart, face to face |
+| `across(walls, across)` | Where a wall goes that crosses the space holding a point, a clear distance from the wall that bounds the space on one hand of it: from the wall it meets on one side to the one on the other, along its own nearer face |
 | `straighten(walls, below, sketch, like)` | The walls a stroke drawn with a finger means: corners found, legs laid on the axes, a loop closed, joined to the plan as `aim` joins a wall |
 | `runs_clockwise(legs)` | Whether a sketch's legs enclose their area clockwise, so its outside is on the left of each leg |
 | `layer_strips(wall, thicknesses)` | The strip of each layer across a wall, in metres left of its location line, from the outer face in |

@@ -267,6 +267,22 @@ class Request {
     return add(Command::RemoveRoom, schema::CreateRemoveRoom(builder_, &id).Union());
   }
 
+  // A partition 120 mm thick across the room at `at`, `distance` from the wall on that hand.
+  Request& add_wall_across(ElementId level, schema::PointMm at, schema::Hand from,
+                           std::int64_t distance) {
+    const schema::Uuid on = key(level);
+    const auto wall = schema::CreateWall(builder_, &on, nullptr, nullptr, 120, 2800);
+    return add(Command::AddWallAcross,
+               schema::CreateAddWallAcross(builder_, wall, &at, from, distance).Union());
+  }
+
+  // The same with no point to say which room.
+  Request& add_wall_across(ElementId level) {
+    const schema::Uuid on = key(level);
+    const auto wall = schema::CreateWall(builder_, &on, nullptr, nullptr, 120, 2800);
+    return add(Command::AddWallAcross, schema::CreateAddWallAcross(builder_, wall).Union());
+  }
+
   // The level as a sheet has it: every room with its sizes.
   Request& draw_sheet(ElementId level) {
     const schema::Uuid on = key(level);
@@ -2008,6 +2024,50 @@ TEST(Session, ASheetHasEveryRoomsSizesAndTheSchedules) {
   EXPECT_EQ(windows->count(), 2);
   EXPECT_EQ(sheet->openings()->Get(1)->kind(), schema::TextKind::DoorMark);
   EXPECT_EQ(sheet->openings()->Get(1)->count(), 1);
+}
+
+TEST(Session, AWallGoesAcrossARoomAtATypedDistanceFromOneOfItsWalls) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_room(session, level);
+
+  // 1.5 m under the top wall, whose face is at 3 810: from the right wall's line to the left
+  // one's, along the face that looks at the top wall.
+  const auto& built =
+      respond(session, Request{}
+                           .add_wall_across(level, {3000, 2000}, schema::Hand::Top, 1500)
+                           .draw(level, {3000, 3000})
+                           .bytes());
+  ASSERT_EQ(built.results()->Get(0)->error(), schema::ErrorCode::None);
+  const ElementId partition = to_id(built.results()->Get(0)->created());
+  EXPECT_EQ(line(built, partition), (Line{6000, 2310, 0, 2310}));
+  const schema::Wall* wall = built.changes()->Get(0)->element_as_Wall();
+  ASSERT_NE(wall, nullptr);
+  EXPECT_EQ(wall->location_line(), schema::LocationLine::RightFace);
+  EXPECT_TRUE(wall->exact());
+  EXPECT_EQ(wall->thickness(), 120);
+  EXPECT_EQ(built.log()->size(), 1U);
+  // The room over it is as deep as was typed.
+  EXPECT_EQ(sizes(*built.results()->Get(1)->drawing(), schema::TextKind::Clear),
+            (std::vector<std::int64_t>{5620, 1500}));
+
+  // A point in no room, a distance the room is too small for and a request with no point
+  // change nothing.
+  const auto& refused =
+      respond(session, Request{}
+                           .add_wall_across(level, {9000, 2000}, schema::Hand::Top, 1500)
+                           .add_wall_across(level, {3000, 1000}, schema::Hand::Left, 6000)
+                           .add_wall_across(level)
+                           .bytes());
+  EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::NotFound);
+  EXPECT_EQ(refused.results()->Get(1)->error(), schema::ErrorCode::DoesNotFit);
+  EXPECT_EQ(refused.results()->Get(2)->error(), schema::ErrorCode::CorruptData);
+  EXPECT_EQ(refused.changes()->size(), 0U);
+
+  const auto& undone = respond(session, Request{}.undo().bytes());
+  ASSERT_EQ(undone.changes()->size(), 1U);
+  EXPECT_EQ(to_id(undone.changes()->Get(0)->id()), partition);
+  EXPECT_EQ(undone.changes()->Get(0)->element_type(), schema::Element::NONE);
 }
 
 }  // namespace

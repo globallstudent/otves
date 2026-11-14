@@ -1,4 +1,5 @@
 add_library(otves_geom
+  src/across.cpp
   src/editing.cpp
   src/layers.cpp
   src/openings.cpp
@@ -16,6 +17,7 @@ target_link_libraries(otves_geom
 
 if(OTVES_BUILD_TESTS)
   otves_add_test(otves_geom_tests
+    tests/across_test.cpp
     tests/editing_test.cpp
     tests/layers_test.cpp
     tests/openings_test.cpp

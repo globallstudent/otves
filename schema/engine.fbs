@@ -193,6 +193,28 @@ table SetOpeningSwing { opening:Uuid; swing:Swing = Left; }
 // is there (docs/adr/0017). Runs as MoveOpening.
 table CenterOpening { opening:Uuid; }
 
+// Which way from a point of the plan, looking at it.
+enum Hand:ubyte {
+  Top = 0,
+  Bottom = 1,
+  Left = 2,
+  Right = 3,
+}
+
+// A wall across the space that holds `at`, side by side with the wall that bounds the space on
+// the `from` hand of that point and `distance` millimetres clear of its face (docs/adr/0016).
+// `wall` is the wall to build, on its level; its start, end, location line and exact are not
+// read: the wall lies along its nearer face, so the distance holds whatever it is made of, and
+// runs from the wall it meets on one hand to the one on the other. Runs as AddWall, the wall
+// exact. Changes nothing when no space holds the point (NotFound) or the wall does not fit
+// (DoesNotFit).
+table AddWallAcross {
+  wall:Wall;
+  at:PointMm;
+  from:Hand = Top;
+  distance:long;
+}
+
 // A Luau file from content/ (docs/adr/0005); the name is the file's stem.
 table Script {
   name:string;
@@ -400,6 +422,7 @@ union Command {
   SetOpeningHinge,
   SetOpeningSwing,
   CenterOpening,
+  AddWallAcross,
 }
 
 table CommandEntry {

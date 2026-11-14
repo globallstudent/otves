@@ -74,6 +74,16 @@ struct OpeningPlacement {
 // kCorruptData when the point is missing or the kind is unknown.
 [[nodiscard]] std::expected<OpeningPlacement, Error> decode(const schema::PlaceOpening* place);
 
+// A wall to put across a space at a typed distance from one of its walls (schema AddWallAcross).
+struct Partition {
+  Wall wall;  // on the space's level; its points and location line are unset
+  geom::Across across;
+};
+
+// kCorruptData when the wall or the point is missing, or the hand or the wall's location line is
+// unknown.
+[[nodiscard]] std::expected<Partition, Error> decode(const schema::AddWallAcross* add);
+
 // A touch on a level while a wall is drawn (schema Aim).
 struct Sight {
   ElementId level;
