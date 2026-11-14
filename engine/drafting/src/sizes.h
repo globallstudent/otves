@@ -21,4 +21,11 @@ void write_overall(std::span<const geom::WallFootprint> footprints, TextSize tex
 void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
                  std::span<const geom::PlacedOpening> openings, TextSize text, Drawing& drawing);
 
+// The chain of the side the selected opening is in: wall, opening, wall along that side of a
+// space, the one a door opens into where there is one (docs/adr/0017). Nothing when `selected`
+// is no opening of the plan or its wall is round no space.
+void write_opening_sizes(std::span<const RoomSpace> spaces, std::span<const geom::WallInput> walls,
+                         std::span<const geom::PlacedOpening> openings, ElementId selected,
+                         TextSize text, Drawing& drawing);
+
 }  // namespace otves::drafting

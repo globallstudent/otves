@@ -110,6 +110,8 @@ enum class CommandKind : std::uint8_t {
   kMoveRoom,
   kSetRoomKind,
   kRemoveRoom,
+  kSetOpeningHinge,
+  kSetOpeningSwing,
 };
 
 // Orders groups across devices: last writer wins per property.

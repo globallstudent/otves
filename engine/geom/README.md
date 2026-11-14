@@ -24,6 +24,8 @@ Pure geometry over wall parameters: plan outlines in metres, with corners and ju
 | `clip(wall, outline, strip)` | The part of a wall's joined outline that lies in one strip |
 | `find_spaces(walls)` | The spaces the walls of a level close: each with its outline along the inner faces of its walls, the islands standing free in it, its floor area and its perimeter |
 | `holds(space, point)` | Whether a point lies on a space's floor: inside its outline and outside its islands |
+| `sides_of(space, walls)` | The sides of a space: each a stretch of one wall's face, with where it lies along that wall |
+| `span_on(side, opening)` | The stretch of a side an opening of its wall takes |
 | `name_spaces(spaces, anchors)` | The room that names each space, by the anchor it holds; anchors in no space and second anchors in one space as issues |
 
 ## Joins

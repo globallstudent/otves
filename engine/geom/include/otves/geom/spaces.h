@@ -6,7 +6,9 @@
 #include <span>
 #include <vector>
 
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
+#include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
@@ -37,6 +39,36 @@ struct Space {
 
 // Whether the point lies on the space's floor: inside its outline and outside its islands.
 [[nodiscard]] bool holds(const Space& space, Vec2 point);
+
+// One side of a space: a stretch of the face of one of the walls round it, from a corner of the
+// outline along the unit direction `dir`. `along` is where that corner lies along the wall's
+// location line from the wall's start, in metres, and `same` whether the side runs the way the
+// wall does: then the space lies to the wall's left.
+struct Side {
+  Vec2 corner;
+  Vec2 dir;
+  double length = 0.0;
+  ElementId wall;
+  double along = 0.0;
+  bool same = true;
+
+  // Where a point of the side, `at` metres from its corner, lies along the wall.
+  [[nodiscard]] constexpr double on_wall(double at) const { return along + (same ? at : -at); }
+};
+
+// The sides of a space in the order of its outline. The ends of walls that stand in the space
+// are not sides. Precondition: `walls` holds the walls the space was found in, sorted by id.
+[[nodiscard]] std::vector<Side> sides_of(const Space& space, std::span<const WallInput> walls);
+
+// A stretch of a side, in metres from its corner.
+struct Span {
+  double from = 0.0;
+  double to = 0.0;
+};
+
+// The stretch of the side that an opening of the side's wall takes; nothing when the opening
+// lies in another piece of the wall. Precondition: the opening is in the side's wall.
+[[nodiscard]] std::optional<Span> span_on(const Side& side, const Opening& opening);
 
 // The point that names a room (docs/adr/0015).
 struct Anchor {

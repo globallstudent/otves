@@ -225,6 +225,36 @@ TEST(Opening, FieldsRoundTrip) {
   EXPECT_EQ(get_field(opening, OpeningField::kHeight), OpeningValue{30_mm});
   EXPECT_EQ(get_field(opening, OpeningField::kSill), OpeningValue{40_mm});
   EXPECT_EQ(get_field(opening, OpeningField::kKind), OpeningValue{OpeningKind::kEmpty});
+
+  set_field(opening, OpeningField::kHinge, Hinge::kFar);
+  set_field(opening, OpeningField::kSwing, Swing::kRight);
+  EXPECT_EQ(get_field(opening, OpeningField::kHinge), OpeningValue{Hinge::kFar});
+  EXPECT_EQ(get_field(opening, OpeningField::kSwing), OpeningValue{Swing::kRight});
+}
+
+TEST(Opening, ADoorIsHungOnEitherEdgeAndOpensToEitherSide) {
+  const auto h = house();
+  // As drawn before hinges were kept: on the near edge, open to the wall's left.
+  const auto* door = h->document.model().find<Opening>(h->window);
+  EXPECT_EQ(door->hinge, Hinge::kNear);
+  EXPECT_EQ(door->swing, Swing::kLeft);
+
+  ASSERT_TRUE(h->document.execute(SetOpeningHinge{.opening = h->window, .hinge = Hinge::kFar}));
+  EXPECT_EQ(h->document.log().back().kind, CommandKind::kSetOpeningHinge);
+  ASSERT_TRUE(h->document.execute(SetOpeningSwing{.opening = h->window, .swing = Swing::kRight}));
+  EXPECT_EQ(h->document.log().back().kind, CommandKind::kSetOpeningSwing);
+  EXPECT_EQ(door->hinge, Hinge::kFar);
+  EXPECT_EQ(door->swing, Swing::kRight);
+
+  // The same again changes and logs nothing.
+  const auto logged = h->document.log().size();
+  ASSERT_TRUE(h->document.execute(SetOpeningSwing{.opening = h->window, .swing = Swing::kRight}));
+  EXPECT_EQ(h->document.log().size(), logged);
+
+  ASSERT_TRUE(h->document.undo());
+  ASSERT_TRUE(h->document.undo());
+  EXPECT_EQ(door->hinge, Hinge::kNear);
+  EXPECT_EQ(door->swing, Swing::kLeft);
 }
 
 }  // namespace

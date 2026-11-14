@@ -40,6 +40,8 @@ CommandKind kind_of(const Command& command) {
           [](const MoveRoom&) { return CommandKind::kMoveRoom; },
           [](const SetRoomKind&) { return CommandKind::kSetRoomKind; },
           [](const RemoveRoom&) { return CommandKind::kRemoveRoom; },
+          [](const SetOpeningHinge&) { return CommandKind::kSetOpeningHinge; },
+          [](const SetOpeningSwing&) { return CommandKind::kSetOpeningSwing; },
       },
       command);
 }

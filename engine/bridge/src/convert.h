@@ -40,6 +40,10 @@ namespace otves::bridge {
 [[nodiscard]] schema::LayerFunction to_schema(LayerFunction function);
 [[nodiscard]] std::optional<LayerFunction> from_schema(schema::LayerFunction function);
 [[nodiscard]] std::optional<LocationLine> from_schema(schema::LocationLine line);
+[[nodiscard]] schema::Hinge to_schema(Hinge hinge);
+[[nodiscard]] std::optional<Hinge> from_schema(schema::Hinge hinge);
+[[nodiscard]] schema::Swing to_schema(Swing swing);
+[[nodiscard]] std::optional<Swing> from_schema(schema::Swing swing);
 [[nodiscard]] schema::RoomKind to_schema(RoomKind kind);
 [[nodiscard]] std::optional<RoomKind> from_schema(schema::RoomKind kind);
 [[nodiscard]] schema::PointMm to_schema(PointMm point);
@@ -116,6 +120,7 @@ struct View {
   ElementId level;
   drafting::TextSize text;
   std::optional<PointMm> focus;
+  ElementId selected;  // nil for none
 };
 
 // A size on the plan and the value typed for it (schema SetDimension): the handle a drawing's

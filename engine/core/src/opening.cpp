@@ -37,6 +37,10 @@ OpeningValue get_field(const Opening& opening, OpeningField field) {
       return opening.sill;
     case OpeningField::kKind:
       return opening.kind;
+    case OpeningField::kHinge:
+      return opening.hinge;
+    case OpeningField::kSwing:
+      return opening.swing;
   }
   OTVES_ASSERT(false);
   return opening.offset;
@@ -58,6 +62,12 @@ void set_field(Opening& opening, OpeningField field, const OpeningValue& value) 
       return;
     case OpeningField::kKind:
       assign(opening.kind, value);
+      return;
+    case OpeningField::kHinge:
+      assign(opening.hinge, value);
+      return;
+    case OpeningField::kSwing:
+      assign(opening.swing, value);
       return;
   }
   OTVES_ASSERT(false);

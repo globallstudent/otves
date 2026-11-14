@@ -267,6 +267,37 @@ class Request {
     return add(Command::RemoveRoom, schema::CreateRemoveRoom(builder_, &id).Union());
   }
 
+  // The level with the selected element marked for the engine.
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a level, then what is on it
+  Request& draw_selected(ElementId level, ElementId selected) {
+    const schema::Uuid on = key(level);
+    const schema::Uuid chosen = key(selected);
+    return add(Command::Draw,
+               schema::CreateDraw(builder_, &on, 300, 150, nullptr, &chosen).Union());
+  }
+
+  Request& set_hinge(ElementId opening, schema::Hinge hinge) {
+    const schema::Uuid id = key(opening);
+    return add(Command::SetOpeningHinge,
+               schema::CreateSetOpeningHinge(builder_, &id, hinge).Union());
+  }
+
+  Request& set_swing(ElementId opening, schema::Swing swing) {
+    const schema::Uuid id = key(opening);
+    return add(Command::SetOpeningSwing,
+               schema::CreateSetOpeningSwing(builder_, &id, swing).Union());
+  }
+
+  Request& remove_opening(ElementId opening) {
+    const schema::Uuid id = key(opening);
+    return add(Command::RemoveOpening, schema::CreateRemoveOpening(builder_, &id).Union());
+  }
+
+  Request& center(ElementId opening) {
+    const schema::Uuid id = key(opening);
+    return add(Command::CenterOpening, schema::CreateCenterOpening(builder_, &id).Union());
+  }
+
   // What a tap with a 300 mm reach picks.
   Request& pick(ElementId level, schema::PointMm at) {
     const schema::Uuid on = key(level);
@@ -982,15 +1013,18 @@ TEST(Session, ADrawingIsTheLevelAsADisplayListAndChangesNothing) {
   EXPECT_EQ(drawing->polygons()->Get(5)->fill(), schema::Fill::Gap);
   EXPECT_EQ(drawing->lines()->size(), 15U);
   EXPECT_EQ(drawing->arcs()->size(), 0U);
-  // The walls were drawn to their lengths and close a space, so its sizes speak for them.
-  ASSERT_EQ(drawing->texts()->size(), 3U);
+  // The walls were drawn to their lengths and close a space, so its sizes speak for them. The
+  // window has the first mark of its kind.
+  ASSERT_EQ(drawing->texts()->size(), 4U);
   EXPECT_EQ(drawing->texts()->Get(0)->kind(), schema::TextKind::RoomArea);
-  EXPECT_EQ(drawing->texts()->Get(1)->kind(), schema::TextKind::Overall);
-  EXPECT_EQ(drawing->texts()->Get(1)->element(), nullptr);
-  EXPECT_EQ(drawing->texts()->Get(1)->value(), 6380);
-  EXPECT_DOUBLE_EQ(drawing->texts()->Get(1)->at()->x(), 3.0);
-  EXPECT_DOUBLE_EQ(drawing->texts()->Get(1)->along()->x(), 1.0);
-  EXPECT_EQ(drawing->texts()->Get(2)->value(), 4380);
+  EXPECT_EQ(drawing->texts()->Get(1)->kind(), schema::TextKind::WindowMark);
+  EXPECT_EQ(drawing->texts()->Get(1)->value(), 1);
+  EXPECT_EQ(drawing->texts()->Get(2)->kind(), schema::TextKind::Overall);
+  EXPECT_EQ(drawing->texts()->Get(2)->element(), nullptr);
+  EXPECT_EQ(drawing->texts()->Get(2)->value(), 6380);
+  EXPECT_DOUBLE_EQ(drawing->texts()->Get(2)->at()->x(), 3.0);
+  EXPECT_DOUBLE_EQ(drawing->texts()->Get(2)->along()->x(), 1.0);
+  EXPECT_EQ(drawing->texts()->Get(3)->value(), 4380);
 
   EXPECT_EQ(asked.results()->Get(1)->error(), schema::ErrorCode::NotFound);
   EXPECT_EQ(asked.results()->Get(2)->error(), schema::ErrorCode::CorruptData);
@@ -1838,6 +1872,98 @@ TEST(Session, ATypedClearSizeMovesAWallWithWhatIsJoinedToIt) {
   const auto& refused =
       respond(session, Request{}.set_dimension(schema::TextKind::Clear, walls[1], 5000).bytes());
   EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::NotFound);
+}
+
+TEST(Session, ADoorIsHungAndOpensAsTheBuilderSays) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_wall(session, level);
+  const auto& placed =
+      respond(session, Request{}.place(level, {3000, 0}, 900, schema::OpeningKind::Door).bytes());
+  const ElementId door = to_id(placed.results()->Get(0)->created());
+  const schema::Opening* drawn = changed_opening(placed);
+  ASSERT_NE(drawn, nullptr);
+  EXPECT_EQ(drawn->hinge(), schema::Hinge::Near);
+  EXPECT_EQ(drawn->swing(), schema::Swing::Left);
+
+  const auto& turned = respond(session, Request{}
+                                            .set_hinge(door, schema::Hinge::Far)
+                                            .set_swing(door, schema::Swing::Right)
+                                            .draw(level)
+                                            .bytes());
+  ASSERT_EQ(turned.results()->Get(0)->error(), schema::ErrorCode::None);
+  const schema::Opening* hung = changed_opening(turned);
+  ASSERT_NE(hung, nullptr);
+  EXPECT_EQ(hung->hinge(), schema::Hinge::Far);
+  EXPECT_EQ(hung->swing(), schema::Swing::Right);
+  EXPECT_EQ(turned.log()->Get(0)->kind(), schema::CommandKind::SetOpeningHinge);
+  EXPECT_EQ(turned.log()->Get(1)->kind(), schema::CommandKind::SetOpeningSwing);
+  // The leaf now hangs on the far edge, 3 450 mm along, and stands out of the right face.
+  const schema::DrawnArc* swing = turned.results()->Get(2)->drawing()->arcs()->Get(0);
+  EXPECT_DOUBLE_EQ(swing->centre()->x(), 3.45);
+  EXPECT_DOUBLE_EQ(swing->centre()->y(), -0.19);
+
+  // An app built against a newer schema may send a swing this engine does not know.
+  // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
+  const auto no_such_swing = static_cast<schema::Swing>(9);
+  const auto& refused = respond(session, Request{}.set_swing(door, no_such_swing).bytes());
+  EXPECT_EQ(refused.results()->Get(0)->error(), schema::ErrorCode::CorruptData);
+}
+
+TEST(Session, OpeningsOfOneSizeShareAMarkAndASizeKeepsItsNumber) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_room(session, level);
+  // Two windows of 1 500, a door, then a window of 1 200.
+  const auto& placed =
+      respond(session, Request{}
+                           .place(level, {1500, 0})
+                           .place(level, {4500, 0})
+                           .place(level, {6000, 2000}, 900, schema::OpeningKind::Door)
+                           .place(level, {3000, 4000}, 1200)
+                           .draw(level)
+                           .bytes());
+  const schema::Drawing* drawing = placed.results()->Get(4)->drawing();
+  ASSERT_NE(drawing, nullptr);
+  // The two first windows share ОК-1 and the narrower one is ОК-2; the door is the first of
+  // its kind.
+  EXPECT_EQ(sizes(*drawing, schema::TextKind::WindowMark), (std::vector<std::int64_t>{1, 1, 2}));
+  EXPECT_EQ(sizes(*drawing, schema::TextKind::DoorMark), std::vector<std::int64_t>{1});
+
+  // With the first two gone the 1 200 window is the oldest of the windows: it is ОК-1 now.
+  const ElementId first = to_id(placed.results()->Get(0)->created());
+  const ElementId second = to_id(placed.results()->Get(1)->created());
+  const auto& fewer =
+      respond(session, Request{}.remove_opening(first).remove_opening(second).draw(level).bytes());
+  EXPECT_EQ(sizes(*fewer.results()->Get(2)->drawing(), schema::TextKind::WindowMark),
+            std::vector<std::int64_t>{1});
+}
+
+TEST(Session, ASelectedOpeningHasItsChainAndGoesToTheMiddleOfItsSide) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_room(session, level);
+  const auto& placed = respond(session, Request{}.place(level, {1500, 0}).bytes());
+  const ElementId window = to_id(placed.results()->Get(0)->created());
+
+  // Selected, the window shows the side it is in: 560 mm from the room's corner, then 3 560.
+  const auto& asked = respond(session, Request{}.draw_selected(level, window).bytes());
+  const schema::Drawing* drawing = asked.results()->Get(0)->drawing();
+  EXPECT_EQ(sizes(*drawing, schema::TextKind::Pier), (std::vector<std::int64_t>{560, 3560}));
+  EXPECT_EQ(sizes(*drawing, schema::TextKind::OpeningWidth), std::vector<std::int64_t>{1500});
+  EXPECT_TRUE(texts(*drawing, schema::TextKind::Clear).empty());
+
+  // Centred, it stands 2 060 mm from each corner of the room: 2 250 along the wall.
+  const auto& centred =
+      respond(session, Request{}.center(window).draw_selected(level, window).bytes());
+  ASSERT_EQ(centred.results()->Get(0)->error(), schema::ErrorCode::None);
+  EXPECT_EQ(changed_opening(centred)->offset(), 2250);
+  EXPECT_EQ(centred.log()->Get(0)->kind(), schema::CommandKind::MoveOpening);
+  EXPECT_EQ(sizes(*centred.results()->Get(1)->drawing(), schema::TextKind::Pier),
+            (std::vector<std::int64_t>{2060, 2060}));
+
+  const auto& missing = respond(session, Request{}.center(ElementId{Uuid{7, 7}}).bytes());
+  EXPECT_EQ(missing.results()->Get(0)->error(), schema::ErrorCode::NotFound);
 }
 
 }  // namespace

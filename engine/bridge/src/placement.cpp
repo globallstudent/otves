@@ -231,6 +231,33 @@ Result<std::vector<Command>> dimension(const Model& model, const Sized& sized) {
   return std::vector<Command>{MoveOpening{.opening = sized.element, .offset = changed.offset}};
 }
 
+Result<MoveOpening> center(const Model& model, ElementId id) {
+  const auto* opening = model.find<Opening>(id);
+  const Wall* wall = opening != nullptr ? model.find<Wall>(opening->wall) : nullptr;
+  if (wall == nullptr) {
+    return make_error(ErrorCode::kNotFound, "opening not found");
+  }
+  const std::vector<geom::WallInput> walls = sorted_walls_on(model, wall->level);
+  const bool to_left = opening->swing == Swing::kLeft;
+  std::optional<geom::Side> found;
+  for (const geom::Space& space : geom::find_spaces(walls)) {
+    for (const geom::Side& side : geom::sides_of(space, walls)) {
+      const bool holds = side.wall == opening->wall && geom::span_on(side, *opening);
+      if (holds && (!found || side.same == to_left)) {
+        found = side;
+      }
+    }
+  }
+  if (!found) {
+    return MoveOpening{.opening = id,
+                       .offset = Mm{(axis_length(*wall) - opening->width).value() / 2}};
+  }
+  // As far from one corner of the side as from the other.
+  const double gap = (found->length - to_metres(opening->width)) / 2;
+  const double near = found->same ? found->on_wall(gap) : found->on_wall(found->length - gap);
+  return MoveOpening{.opening = id, .offset = std::max(round_to_mm(near), Mm{0})};
+}
+
 Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke) {
   const ElementId level = stroke.wall.level;
   if (model.find<Level>(level) == nullptr) {
@@ -285,12 +312,21 @@ Result<drafting::Drawing> draw(const Model& model, const View& view) {
     below = walls_on(model, *under);
   }
   const std::vector<drafting::NamedRoom> rooms = rooms_on(model, view.level);
+  // Marks run through the whole job: a size has one mark on every storey.
+  std::vector<drafting::Marked> marked;
+  marked.reserve(model.count<Opening>());
+  model.for_each<Opening>([&marked](ElementId id, const Opening& opening) {
+    marked.push_back({.id = id, .opening = opening});
+  });
+  const std::vector<drafting::Mark> marks = drafting::mark_openings(marked);
   return drafting::draft({.walls = walls,
                           .openings = openings,
                           .below = below,
                           .builds = builds,
                           .rooms = rooms,
-                          .focus = view.focus},
+                          .focus = view.focus,
+                          .marks = marks,
+                          .selected = view.selected},
                          view.text);
 }
 

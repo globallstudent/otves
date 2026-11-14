@@ -541,6 +541,12 @@ std::expected<Ops, Error> Document::plan(const Command& command) {
           [&model](const SetOpeningKind& set) {
             return edit<Opening>(model, set.opening, {{OpeningField::kKind, set.kind}});
           },
+          [&model](const SetOpeningHinge& set) {
+            return edit<Opening>(model, set.opening, {{OpeningField::kHinge, set.hinge}});
+          },
+          [&model](const SetOpeningSwing& set) {
+            return edit<Opening>(model, set.opening, {{OpeningField::kSwing, set.swing}});
+          },
           [this](const SetCondition& set) -> std::expected<Ops, Error> {
             std::optional<ElementId> existing;
             model_.for_each<Conditions>(

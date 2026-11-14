@@ -111,6 +111,11 @@ table Room {
   kind:RoomKind = Room;
 }
 
+// How a door hangs (docs/adr/0017): the edge its leaf hangs on, the near one being towards the
+// wall's start, and the side of the wall it opens to, looking from the wall's start.
+enum Hinge:ubyte { Near = 0, Far = 1 }
+enum Swing:ubyte { Left = 0, Right = 1 }
+
 table Opening {
   wall:Uuid;
   offset:long;
@@ -118,6 +123,8 @@ table Opening {
   height:long;
   sill:long;
   kind:OpeningKind = Window;
+  hinge:Hinge = Near;
+  swing:Swing = Left;
 }
 
 // What the job is estimated under (docs/adr/0009); -1 leaves a value to the norm default.
@@ -180,6 +187,11 @@ table ResizeOpening { opening:Uuid; width:long; height:long; }
 table SetOpeningSill { opening:Uuid; sill:long; }
 table SetOpeningKind { opening:Uuid; kind:OpeningKind = Window; }
 table RemoveOpening { opening:Uuid; }
+table SetOpeningHinge { opening:Uuid; hinge:Hinge = Near; }
+table SetOpeningSwing { opening:Uuid; swing:Swing = Left; }
+// Puts the opening in the middle of the side of the room it is in, or of its wall when no room
+// is there (docs/adr/0017). Runs as MoveOpening.
+table CenterOpening { opening:Uuid; }
 
 // A Luau file from content/ (docs/adr/0005); the name is the file's stem.
 table Script {
@@ -284,6 +296,11 @@ enum TextKind:ubyte {
   Clear = 5,         // across the space in focus, between two of its walls
   Pier = 6,          // a piece of wall between a corner or an opening and the next opening
   OpeningWidth = 7,  // an opening's width
+  // An opening's mark (docs/adr/0017): `value` is its number among the marks of its kind,
+  // which the text's kind names so the app can write its letters.
+  WindowMark = 8,
+  DoorMark = 9,
+  EmptyMark = 10,
 }
 
 // The drawing of `level` (docs/adr/0013). Changes nothing; the result's `drawing` holds it.
@@ -296,6 +313,8 @@ table Draw {
   text_height:long;
   digit_width:long;
   focus:PointMm;
+  // The selected element: an opening is drawn with the chain of the side it is in.
+  selected:Uuid;
 }
 
 // Gives a size on the plan a typed value (docs/adr/0016). `kind`, `element`, `from` and
@@ -375,6 +394,9 @@ union Command {
   SetRoomKind,
   RemoveRoom,
   SetDimension,
+  SetOpeningHinge,
+  SetOpeningSwing,
+  CenterOpening,
 }
 
 table CommandEntry {
@@ -576,6 +598,8 @@ enum CommandKind:ubyte {
   MoveRoom = 30,
   SetRoomKind = 31,
   RemoveRoom = 32,
+  SetOpeningHinge = 33,
+  SetOpeningSwing = 34,
 }
 
 enum LevelField:ubyte {
@@ -601,7 +625,7 @@ enum WallField:ubyte {
 }
 enum WallTypeField:ubyte { Role = 0 }
 enum WallLayerField:ubyte { Thickness = 0, UnitLength = 1, UnitWidth = 2, UnitHeight = 3 }
-enum OpeningField:ubyte { Offset = 0, Width = 1, Height = 2, Sill = 3, Kind = 4 }
+enum OpeningField:ubyte { Offset = 0, Width = 1, Height = 2, Sill = 3, Kind = 4, Hinge = 5, Swing = 6 }
 enum RoomField:ubyte { Anchor = 0, Kind = 1 }
 
 // Property-level changes (engine/core/op.h). Create and delete carry the whole element.
@@ -621,7 +645,7 @@ table SetWallFieldOp {
   before_id:Uuid;
   after_id:Uuid;
 }
-// Kind uses its code; the other fields millimetres.
+// Kind, Hinge and Swing use their codes; the other fields millimetres.
 table SetOpeningFieldOp { id:Uuid; field:OpeningField; before:long; after:long; }
 
 table SetConditionsFieldOp { id:Uuid; field:ConditionsField; before:long; after:long; }

@@ -156,6 +156,12 @@ schema::TextKind text_code(drafting::TextKind kind) {
       return schema::TextKind::Pier;
     case drafting::TextKind::kOpeningWidth:
       return schema::TextKind::OpeningWidth;
+    case drafting::TextKind::kWindowMark:
+      return schema::TextKind::WindowMark;
+    case drafting::TextKind::kDoorMark:
+      return schema::TextKind::DoorMark;
+    case drafting::TextKind::kEmptyMark:
+      return schema::TextKind::EmptyMark;
   }
   return schema::TextKind::Length;
 }

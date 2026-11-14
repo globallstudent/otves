@@ -2,6 +2,8 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <iterator>
 #include <span>
 #include <string>
 #include <utility>
@@ -37,10 +39,14 @@ constexpr double kLabelGap = 0.25;
 // «≈» and the space after it are about as wide as two digits.
 constexpr int kAboutDigits = 2;
 
-// A room's name is taken to be at most this many digits wide, and its area this many: the
-// engine does not know the words.
+// A room's name is taken to be at most this many digits wide, its area this many and an
+// opening's mark this many: the engine does not know the words.
 constexpr double kNameDigits = 16.0;
 constexpr double kAreaDigits = 7.0;
+constexpr double kMarkDigits = 5.0;
+
+// An opening's mark stands this many text heights from its wall's face.
+constexpr double kMarkGap = 1.0;
 
 // Where along a wall its length may be written, the middle first.
 constexpr std::array kLabelPlaces{0.5, 0.3, 0.7};
@@ -65,6 +71,30 @@ void outline_below(std::span<const geom::WallInput> below, Drawing& drawing) {
                                 .stroke = Stroke::kBelow,
                                 .points = std::move(footprint.outline)});
   }
+}
+
+// A door's leaf standing open at right angles: the corner of the opening it hangs on, the
+// corner across the opening on the same face, and where its free edge stands.
+struct Leaf {
+  geom::Vec2 hinge;
+  geom::Vec2 jamb;
+  geom::Vec2 tip;
+};
+
+// The corners are those of the opening's outline: near and far end on the wall's right face,
+// then far and near on its left. The leaf is as long as the opening is wide and stands out of
+// the wall on the side it opens to.
+Leaf leaf_of(const Opening& opening, const std::array<geom::Vec2, 4>& corners) {
+  const auto [near_right, far_right, far_left, near_left] = corners;
+  const bool left = opening.swing == Swing::kLeft;
+  const bool near = opening.hinge == Hinge::kNear;
+  const geom::Vec2 near_corner = left ? near_left : near_right;
+  const geom::Vec2 far_corner = left ? far_left : far_right;
+  const geom::Vec2 hinge = near ? near_corner : far_corner;
+  const geom::Vec2 jamb = near ? far_corner : near_corner;
+  // A quarter turn of the opening's width: to the left of the wall's direction, or its right.
+  const geom::Vec2 out = geom::perp(far_corner - near_corner) * (left ? 1.0 : -1.0);
+  return {.hinge = hinge, .jamb = jamb, .tip = hinge + out};
 }
 
 // The gap and the plan symbol of each opening, in the order of their ids. Corners come
@@ -96,17 +126,16 @@ void draw_openings(std::span<const geom::PlacedOpening> openings, Drawing& drawi
                                  .to = middle(far_right, far_left)});
         break;
       case OpeningKind::kDoor: {
-        // The leaf is as long as the opening is wide; from the far jamb round to the leaf's tip
-        // is a quarter turn to the left of the wall's direction.
-        const geom::Vec2 open = geom::perp(far_left - near_left);
-        const geom::Vec2 tip = near_left + open;
+        const Leaf leaf = leaf_of(placed.opening, {near_right, far_right, far_left, near_left});
         drawing.lines.push_back(
-            {.element = id, .stroke = Stroke::kLeaf, .from = near_left, .to = tip});
+            {.element = id, .stroke = Stroke::kLeaf, .from = leaf.hinge, .to = leaf.tip});
+        // An arc runs counter-clockwise: from the jamb round to the tip, or the other way.
+        const bool turns_left = geom::cross(leaf.jamb - leaf.hinge, leaf.tip - leaf.hinge) > 0.0;
         drawing.arcs.push_back({.element = id,
                                 .stroke = Stroke::kLeaf,
-                                .centre = near_left,
-                                .from = far_left,
-                                .to = tip});
+                                .centre = leaf.hinge,
+                                .from = turns_left ? leaf.jamb : leaf.tip,
+                                .to = turns_left ? leaf.tip : leaf.jamb});
         break;
       }
       case OpeningKind::kEmpty:
@@ -159,6 +188,45 @@ void draw_layers(const Wall& wall, const geom::WallFootprint& footprint,
                               .points = footprint.outline});
 }
 
+TextKind mark_kind(OpeningKind kind) {
+  switch (kind) {
+    case OpeningKind::kWindow:
+      return TextKind::kWindowMark;
+    case OpeningKind::kDoor:
+      return TextKind::kDoorMark;
+    case OpeningKind::kEmpty:
+      break;
+  }
+  return TextKind::kEmptyMark;
+}
+
+// Each opening's mark, beside its middle: a text height clear of the wall's face on the side
+// the opening's leaf does not open to.
+void write_marks(std::span<const geom::PlacedOpening> openings, std::span<const Mark> marks,
+                 TextSize text, Drawing& drawing) {
+  std::vector<geom::PlacedOpening> ordered(openings.begin(), openings.end());
+  std::ranges::sort(ordered, {}, &geom::PlacedOpening::id);
+  for (const geom::PlacedOpening& placed : ordered) {
+    const auto mark = std::ranges::lower_bound(marks, placed.id, {}, &Mark::opening);
+    if (mark == marks.end() || mark->opening != placed.id) {
+      continue;
+    }
+    const auto [near_right, far_right, far_left, near_left] =
+        geom::opening_outline(placed.wall, placed.opening);
+    // By the face a leaf does not open to, where a selected opening's chain is not written.
+    const bool left = placed.opening.swing == Swing::kLeft;
+    const geom::Vec2 near = left ? near_right : near_left;
+    const geom::Vec2 across = left ? near_right - near_left : near_left - near_right;
+    const geom::Vec2 at = middle(near, left ? far_right : far_left) +
+                          (across * (kMarkGap * text.height / geom::length(across)));
+    drawing.texts.push_back({.element = placed.id,
+                             .kind = mark_kind(placed.opening.kind),
+                             .value = mark->number,
+                             .at = at,
+                             .along = {.x = 1.0, .y = 0.0}});
+  }
+}
+
 // How wide a wall's length is written.
 double label_width(Mm length, bool exact, TextSize text) {
   const auto digits = static_cast<int>(std::to_string(length.value()).size());
@@ -172,6 +240,10 @@ double width_of(const Text& written, TextSize text) {
       return std::min(written.fit, kNameDigits * text.digit);
     case TextKind::kRoomArea:
       return kAreaDigits * text.digit;
+    case TextKind::kWindowMark:
+    case TextKind::kDoorMark:
+    case TextKind::kEmptyMark:
+      return kMarkDigits * text.digit;
     case TextKind::kAboutLength:
       return label_width(Mm{written.value}, false, text);
     case TextKind::kLength:
@@ -282,6 +354,38 @@ void write_lengths(std::span<const geom::WallInput> walls,
 
 }  // namespace
 
+std::vector<Mark> mark_openings(std::span<const Marked> openings) {
+  std::vector<Marked> oldest_first(openings.begin(), openings.end());
+  std::ranges::sort(oldest_first, {}, &Marked::id);
+  // One of each kind, width and height, in the order of the oldest opening of that size.
+  struct Size {
+    OpeningKind kind = OpeningKind::kWindow;
+    Mm width;
+    Mm height;
+    std::int64_t number = 0;
+  };
+  std::vector<Size> sizes;
+  std::vector<Mark> marks;
+  marks.reserve(oldest_first.size());
+  for (const Marked& marked : oldest_first) {
+    const Opening& opening = marked.opening;
+    auto size = std::ranges::find_if(sizes, [&opening](const Size& known) {
+      return known.kind == opening.kind && known.width == opening.width &&
+             known.height == opening.height;
+    });
+    if (size == sizes.end()) {
+      const auto of_kind = std::ranges::count(sizes, opening.kind, &Size::kind);
+      sizes.push_back({.kind = opening.kind,
+                       .width = opening.width,
+                       .height = opening.height,
+                       .number = of_kind + 1});
+      size = std::prev(sizes.end());
+    }
+    marks.push_back({.opening = marked.id, .number = size->number});
+  }
+  return marks;
+}
+
 Drawing draft(const Plan& plan, TextSize text) {
   Drawing drawing;
   outline_below(plan.below, drawing);
@@ -318,7 +422,10 @@ Drawing draft(const Plan& plan, TextSize text) {
   write_rooms(spaces, focused != spaces.end() ? &*focused : nullptr, size, drawing);
   if (focused != spaces.end()) {
     write_sizes(*focused, walls, plan.openings, size, drawing);
+  } else if (!plan.selected.is_nil()) {
+    write_opening_sizes(spaces, walls, plan.openings, plan.selected, size, drawing);
   }
+  write_marks(plan.openings, plan.marks, size, drawing);
   if (!spaces.empty()) {
     write_overall(joins.footprints, size, drawing);
   }

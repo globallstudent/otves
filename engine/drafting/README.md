@@ -15,6 +15,7 @@ flowchart LR
 | API | Use |
 |---|---|
 | `draft(plan, text)` | The level as a `Drawing`. `text` is how big the painter's label text is on the plan at its zoom |
+| `mark_openings(openings)` | The mark of each opening of a job: one number for each kind, width and height, in the order of the oldest opening of each size |
 
 ## What is drawn
 
@@ -26,7 +27,8 @@ flowchart LR
 | Wall of several layers | Each layer's part of the outline with a fill for what it does: structure, facing, insulation, none for a gap; then the outline with no fill, the polygon a painter marks when the wall is selected ([ADR 0014](../../docs/adr/0014-wall-types-are-job-elements-made-of-layers.md)) |
 | Opening | The gap through its wall and two jambs |
 | Window | The gap, its two faces and the glazing line down the middle of the wall |
-| Door | The gap, the leaf standing open at right angles on the wall's left face, hinged at the near end, and its swing |
+| Door | The gap, the leaf standing open at right angles on the edge it hangs on and the face it opens to, and its swing ([ADR 0017](../../docs/adr/0017-openings-carry-hinge-and-swing-marks-are-derived.md)) |
+| Mark | Beside each opening that has one, a text height clear of the wall's face on the side a leaf does not open to; the number goes out with a kind that names windows, doors or empty openings |
 | Wall length | A number beside the wall and along it, marked when nobody has typed or measured it |
 | Room | Its name, as its kind's code, over its floor area in cm²; the area alone in a space with no name |
 
@@ -69,7 +71,7 @@ Dimension lines, ticks and numbers are lines and texts of the drawing ([ADR 0016
 | Chain along a side with openings | 1,2 text heights inside the wall's face, a tick at every corner and opening edge | A piece of wall leads to the next opening, the last one back to the opening before it; an opening's width is its own |
 | A number wider than nine tenths of its piece | — | Left out |
 
-A wall round a space has no length of its own once it was typed or measured. The space in focus has its sizes in place of its name and area.
+A wall round a space has no length of its own once it was typed or measured. The space in focus has its sizes in place of its name and area. A selected opening has the chain of the side it is in: the side a door opens to, where there is one.
 
 ## Invariants
 

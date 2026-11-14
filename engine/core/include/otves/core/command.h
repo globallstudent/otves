@@ -162,6 +162,18 @@ struct SetOpeningKind {
   OpeningKind kind = OpeningKind::kWindow;
 };
 
+// Which edge a door's leaf hangs on (docs/adr/0017).
+struct SetOpeningHinge {
+  ElementId opening;
+  Hinge hinge = Hinge::kNear;
+};
+
+// Which side of its wall a door's leaf opens to.
+struct SetOpeningSwing {
+  ElementId opening;
+  Swing swing = Swing::kLeft;
+};
+
 struct RemoveOpening {
   ElementId opening;
 };
@@ -200,7 +212,8 @@ using Command =
                  MoveOpening, ResizeOpening, SetOpeningSill, SetOpeningKind, RemoveOpening,
                  SetWallUnit, SetLevelRingBeam, SetLevelJunctionMeshes, SetCondition,
                  SetLevelFooting, SetWallExact, AddWallType, SetWallTypeRole, SetWallLayer,
-                 SetWallType, SetWallMirrored, AddRoom, MoveRoom, SetRoomKind, RemoveRoom>;
+                 SetWallType, SetWallMirrored, AddRoom, MoveRoom, SetRoomKind, RemoveRoom,
+                 SetOpeningHinge, SetOpeningSwing>;
 
 [[nodiscard]] CommandKind kind_of(const Command& command);
 

@@ -189,15 +189,19 @@ std::expected<Opening, Error> to_opening(const schema::Opening* opening) {
     return corrupt("opening is missing");
   }
   const std::optional<OpeningKind> kind = from_schema(opening->kind());
-  if (!kind) {
-    return corrupt("unknown opening kind");
+  const std::optional<Hinge> hinge = from_schema(opening->hinge());
+  const std::optional<Swing> swing = from_schema(opening->swing());
+  if (!kind || !hinge || !swing) {
+    return corrupt("unknown opening kind, hinge or swing");
   }
   return Opening{.wall = to_id(opening->wall()),
                  .offset = Mm{opening->offset()},
                  .width = Mm{opening->width()},
                  .height = Mm{opening->height()},
                  .sill = Mm{opening->sill()},
-                 .kind = *kind};
+                 .kind = *kind,
+                 .hinge = *hinge,
+                 .swing = *swing};
 }
 
 std::expected<Conditions, Error> to_conditions(const schema::Conditions* conditions) {
@@ -371,6 +375,22 @@ std::expected<Command, Error> decode_opening(const schema::CommandEntry& entry) 
     }
     case schema::Command::RemoveOpening:
       return RemoveOpening{.opening = to_id(entry.command_as_RemoveOpening()->opening())};
+    case schema::Command::SetOpeningHinge: {
+      const auto* set = entry.command_as_SetOpeningHinge();
+      const std::optional<Hinge> hinge = from_schema(set->hinge());
+      if (!hinge) {
+        return corrupt("unknown hinge");
+      }
+      return SetOpeningHinge{.opening = to_id(set->opening()), .hinge = *hinge};
+    }
+    case schema::Command::SetOpeningSwing: {
+      const auto* set = entry.command_as_SetOpeningSwing();
+      const std::optional<Swing> swing = from_schema(set->swing());
+      if (!swing) {
+        return corrupt("unknown swing");
+      }
+      return SetOpeningSwing{.opening = to_id(set->opening()), .swing = *swing};
+    }
     default:
       return corrupt("not an opening command");
   }
@@ -408,6 +428,34 @@ std::optional<OpeningKind> from_schema(schema::OpeningKind kind) {
       return OpeningKind::kDoor;
     case schema::OpeningKind::Empty:
       return OpeningKind::kEmpty;
+  }
+  return std::nullopt;
+}
+
+schema::Hinge to_schema(Hinge hinge) {
+  return hinge == Hinge::kNear ? schema::Hinge::Near : schema::Hinge::Far;
+}
+
+std::optional<Hinge> from_schema(schema::Hinge hinge) {
+  switch (hinge) {
+    case schema::Hinge::Near:
+      return Hinge::kNear;
+    case schema::Hinge::Far:
+      return Hinge::kFar;
+  }
+  return std::nullopt;
+}
+
+schema::Swing to_schema(Swing swing) {
+  return swing == Swing::kLeft ? schema::Swing::Left : schema::Swing::Right;
+}
+
+std::optional<Swing> from_schema(schema::Swing swing) {
+  switch (swing) {
+    case schema::Swing::Left:
+      return Swing::kLeft;
+    case schema::Swing::Right:
+      return Swing::kRight;
   }
   return std::nullopt;
 }
@@ -592,6 +640,8 @@ std::expected<Command, Error> decode(const schema::CommandEntry& entry) {
     case schema::Command::SetOpeningSill:
     case schema::Command::SetOpeningKind:
     case schema::Command::RemoveOpening:
+    case schema::Command::SetOpeningHinge:
+    case schema::Command::SetOpeningSwing:
       return decode_opening(entry);
     case schema::Command::AddRoom:
     case schema::Command::MoveRoom:
@@ -728,7 +778,8 @@ std::expected<View, Error> decode(const schema::Draw* draw) {
   return View{
       .level = to_id(draw->level()),
       .text = {.height = size(draw->text_height()), .digit = size(draw->digit_width())},
-      .focus = draw->focus() != nullptr ? std::optional{to_point(*draw->focus())} : std::nullopt};
+      .focus = draw->focus() != nullptr ? std::optional{to_point(*draw->focus())} : std::nullopt,
+      .selected = to_id(draw->selected())};
 }
 
 std::expected<Sized, Error> decode(const schema::SetDimension* set) {
@@ -801,7 +852,8 @@ EncodedElement encode(flatbuffers::FlatBufferBuilder& builder, const Opening& op
   return {.type = schema::Element::Opening,
           .value = schema::CreateOpening(builder, &wall, opening.offset.value(),
                                          opening.width.value(), opening.height.value(),
-                                         opening.sill.value(), to_schema(opening.kind))
+                                         opening.sill.value(), to_schema(opening.kind),
+                                         to_schema(opening.hinge), to_schema(opening.swing))
                        .Union()};
 }
 

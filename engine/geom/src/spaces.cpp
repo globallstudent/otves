@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <map>
 #include <optional>
@@ -8,7 +9,9 @@
 #include <vector>
 
 #include <otves/core/assert.h>
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
+#include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/core/wall.h>
 #include <otves/geom/polygon.h>
@@ -359,6 +362,42 @@ class Graph {
 }  // namespace
 
 std::vector<Space> find_spaces(std::span<const WallInput> walls) { return Graph{walls}.spaces(); }
+
+std::vector<Side> sides_of(const Space& space, std::span<const WallInput> walls) {
+  std::vector<Side> sides;
+  for (std::size_t i = 0; i < space.outline.size(); ++i) {
+    const Vec2 corner = space.outline[i];
+    const Vec2 run = space.outline[(i + 1) % space.outline.size()] - corner;
+    const double run_length = length(run);
+    const auto wall = std::ranges::lower_bound(walls, space.sides[i], {}, &WallInput::id);
+    if (wall == walls.end() || wall->id != space.sides[i] || run_length <= kEpsilon) {
+      continue;
+    }
+    const Axis line = axis(wall->wall);
+    const Vec2 dir = run * (1.0 / run_length);
+    if (std::abs(cross(dir, line.dir)) > kEpsilon) {
+      continue;  // the end of a wall that stands in the space
+    }
+    sides.push_back({.corner = corner,
+                     .dir = dir,
+                     .length = run_length,
+                     .wall = wall->id,
+                     .along = dot(corner - line.start, line.dir),
+                     .same = dot(dir, line.dir) > 0.0});
+  }
+  return sides;
+}
+
+std::optional<Span> span_on(const Side& side, const Opening& opening) {
+  const double near = to_metres(opening.offset);
+  const double far = near + to_metres(opening.width);
+  const double first = side.same ? near - side.along : side.along - far;
+  const double last = side.same ? far - side.along : side.along - near;
+  if (last <= kEpsilon || first >= side.length - kEpsilon) {
+    return std::nullopt;
+  }
+  return Span{.from = std::max(first, 0.0), .to = std::min(last, side.length)};
+}
 
 bool holds(const Space& space, Vec2 point) {
   return contains(space.outline, point) &&

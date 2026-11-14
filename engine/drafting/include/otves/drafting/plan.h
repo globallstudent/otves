@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <otves/core/build.h>
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
 #include <otves/core/room.h>
 #include <otves/core/units.h>
@@ -50,6 +51,11 @@ enum class TextKind : std::uint8_t {
   kClear,         // across the space in focus, between two of its walls
   kPier,          // a piece of wall between a corner or an opening and the next opening
   kOpeningWidth,  // an opening's width
+  // An opening's mark: the value is its number among the marks of its kind, which the text's
+  // kind names so the painter can write its letters.
+  kWindowMark,
+  kDoorMark,
+  kEmptyMark,
 };
 
 // Every primitive names the element it draws, so a painter can mark the selected one; nil for
@@ -121,6 +127,23 @@ struct WallBuild {
   std::vector<BuiltLayer> layers;
 };
 
+// The mark of an opening (docs/adr/0017): its number among the marks of its kind.
+struct Mark {
+  ElementId opening;
+  std::int64_t number = 0;
+};
+
+// An opening as marks see it.
+struct Marked {
+  ElementId id;
+  Opening opening;
+};
+
+// The marks of a job's openings, sorted by opening. Openings of one kind, width and height share
+// a mark, and a kind's marks are numbered from 1 in the order of the oldest opening of each
+// size: ids grow with time, so a new size never renumbers the others.
+[[nodiscard]] std::vector<Mark> mark_openings(std::span<const Marked> openings);
+
 // A room of the level: the name of the space that holds its anchor (docs/adr/0015).
 struct NamedRoom {
   ElementId id;
@@ -139,6 +162,10 @@ struct Plan {
   std::span<const NamedRoom> rooms{};   // NOLINT(readability-redundant-member-init)
   // The space that holds this point is drawn with its sizes instead of its name.
   std::optional<PointMm> focus{};  // NOLINT(readability-redundant-member-init)
+  // The marks of the level's openings, sorted by opening; one with none there has no mark.
+  std::span<const Mark> marks{};  // NOLINT(readability-redundant-member-init)
+  // The selected element; an opening is drawn with the chain of the side it is in.
+  ElementId selected{};  // NOLINT(readability-redundant-member-init)
 };
 
 // The level as a drawing.
@@ -149,8 +176,8 @@ struct Plan {
 //    several layers is its layers' strips of that outline, each filled as what it is, under the
 //    outline itself: insulation, facing, masonry, and nothing for a gap.
 //  - Each opening's gap through its wall with its jambs; a window's faces and glazing line; a
-//    door's leaf standing open at right angles, hinged at its near end on the wall's left face,
-//    with its swing.
+//    door's leaf standing open at right angles on the edge it hangs on and the face it opens to,
+//    with its swing; and the opening's mark beside it, on the side a leaf does not open to.
 //  - Each wall's length beside it and along it, by its left face at the middle; where another
 //    wall or another length lies there, by the other face or nearer an end. A length longer than
 //    four fifths of its wall is left out, and so is the length of a wall round a space once it

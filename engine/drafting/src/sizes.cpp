@@ -10,9 +10,9 @@
 #include <string>
 #include <vector>
 
+#include <otves/core/opening.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
-#include <otves/core/wall.h>
 #include <otves/drafting/plan.h>
 #include <otves/geom/openings.h>
 #include <otves/geom/spaces.h>
@@ -110,11 +110,6 @@ void write(const Chain& chain, TextSize text, Drawing& drawing) {
   }
 }
 
-const Wall* find(std::span<const geom::WallInput> walls, ElementId id) {
-  const auto found = std::ranges::lower_bound(walls, id, {}, &geom::WallInput::id);
-  return found != walls.end() && found->id == id ? &found->wall : nullptr;
-}
-
 // An opening as a stretch of one side of a space, from the side's first corner.
 struct Gap {
   double from = 0.0;
@@ -122,37 +117,16 @@ struct Gap {
   ElementId opening;
 };
 
-// One side of a space: from a corner along the unit direction `dir` for `length`, by the face
-// of `wall`. `along` is where the corner lies along the wall's location line from its start,
-// and `same` whether the side runs the way the wall does.
-struct Side {
-  geom::Vec2 corner;
-  geom::Vec2 dir;
-  double length = 0.0;
-  ElementId wall;
-  double along = 0.0;
-  bool same = true;
-
-  // Where a point of the side lies along the wall, to the millimetre.
-  [[nodiscard]] Mm on_wall(double at) const { return round_to_mm(along + (same ? at : -at)); }
-};
-
 // The openings of the side's wall that lie on the side, in order along it.
-std::vector<Gap> gaps_of(const Side& side, std::span<const geom::PlacedOpening> openings) {
+std::vector<Gap> gaps_of(const geom::Side& side, std::span<const geom::PlacedOpening> openings) {
   std::vector<Gap> gaps;
   for (const geom::PlacedOpening& placed : openings) {
     if (placed.opening.wall != side.wall) {
       continue;
     }
-    const double near = to_metres(placed.opening.offset);
-    const double far = near + to_metres(placed.opening.width);
-    const double first = side.same ? near - side.along : side.along - far;
-    const double last = side.same ? far - side.along : side.along - near;
-    if (last <= kEpsilon || first >= side.length - kEpsilon) {
-      continue;  // in another piece of the wall
+    if (const auto span = geom::span_on(side, placed.opening)) {
+      gaps.push_back({.from = span->from, .to = span->to, .opening = placed.id});
     }
-    gaps.push_back(
-        {.from = std::max(first, 0.0), .to = std::min(last, side.length), .opening = placed.id});
   }
   std::ranges::sort(gaps, {}, &Gap::from);
   return gaps;
@@ -160,7 +134,7 @@ std::vector<Gap> gaps_of(const Side& side, std::span<const geom::PlacedOpening> 
 
 // Wall, opening, wall along a side: each piece of wall leads to the opening after it, and the
 // last one back to the opening before it.
-Chain chain_along(const Side& side, std::span<const Gap> gaps, TextSize text) {
+Chain chain_along(const geom::Side& side, std::span<const Gap> gaps, TextSize text) {
   Chain chain{.start = side.corner + (geom::perp(side.dir) * (kChainInset * text.height)),
               .dir = side.dir,
               .stroke = Stroke::kChain,
@@ -173,7 +147,7 @@ Chain chain_along(const Side& side, std::span<const Gap> gaps, TextSize text) {
                               .kind = TextKind::kPier,
                               .value = round_to_mm(gap.from - reached).value(),
                               .element = gap.opening,
-                              .fixed = side.on_wall(reached),
+                              .fixed = round_to_mm(side.on_wall(reached)),
                               .forward = side.same});
     }
     chain.pieces.push_back({.from = gap.from,
@@ -190,7 +164,7 @@ Chain chain_along(const Side& side, std::span<const Gap> gaps, TextSize text) {
                             .kind = TextKind::kPier,
                             .value = round_to_mm(side.length - reached).value(),
                             .element = gaps.back().opening,
-                            .fixed = side.on_wall(side.length),
+                            .fixed = round_to_mm(side.on_wall(side.length)),
                             .forward = !side.same});
   }
   return chain;
@@ -305,31 +279,35 @@ void write_overall(std::span<const geom::WallFootprint> footprints, TextSize tex
   lead(*low, across * -reach);
 }
 
+void write_opening_sizes(std::span<const RoomSpace> spaces, std::span<const geom::WallInput> walls,
+                         std::span<const geom::PlacedOpening> openings, ElementId selected,
+                         TextSize text, Drawing& drawing) {
+  const auto opening = std::ranges::find(openings, selected, &geom::PlacedOpening::id);
+  if (opening == openings.end()) {
+    return;
+  }
+  // The side the leaf opens to is the one to measure a door from; any side will do otherwise.
+  const bool to_left = opening->opening.swing == Swing::kLeft;
+  std::optional<geom::Side> found;
+  for (const RoomSpace& room : spaces) {
+    for (const geom::Side& side : geom::sides_of(room.space, walls)) {
+      const bool holds =
+          side.wall == opening->opening.wall && geom::span_on(side, opening->opening);
+      if (holds && (!found || side.same == to_left)) {
+        found = side;
+      }
+    }
+  }
+  if (found) {
+    write(chain_along(*found, gaps_of(*found, openings), text), text, drawing);
+  }
+}
+
 void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
                  std::span<const geom::PlacedOpening> openings, TextSize text, Drawing& drawing) {
   const geom::Space& space = room.space;
   const std::size_t first = drawing.texts.size();  // the numbers of this space come after
-  for (std::size_t i = 0; i < space.outline.size(); ++i) {
-    const geom::Vec2 corner = space.outline[i];
-    const geom::Vec2 run = space.outline[(i + 1) % space.outline.size()] - corner;
-    const double length = geom::length(run);
-    const Wall* wall = find(walls, space.sides[i]);
-    if (wall == nullptr || length <= kEpsilon) {
-      continue;
-    }
-    const geom::Vec2 start = geom::to_vec2(wall->start);
-    const geom::Vec2 line = geom::to_vec2(wall->end) - start;
-    const geom::Vec2 along = line * (1.0 / geom::length(line));
-    const geom::Vec2 dir = run * (1.0 / length);
-    if (std::abs(geom::cross(dir, along)) > kEpsilon) {
-      continue;  // the end of a wall that stands in the space
-    }
-    const Side side{.corner = corner,
-                    .dir = dir,
-                    .length = length,
-                    .wall = space.sides[i],
-                    .along = geom::dot(corner - start, along),
-                    .same = geom::dot(dir, along) > 0.0};
+  for (const geom::Side& side : geom::sides_of(space, walls)) {
     const std::vector<Gap> gaps = gaps_of(side, openings);
     if (!gaps.empty()) {
       write(chain_along(side, gaps, text), text, drawing);

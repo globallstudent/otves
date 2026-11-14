@@ -49,6 +49,8 @@ sequenceDiagram
 
 `SetDimension` gives a size on the plan a typed value ([ADR 0016](../../docs/adr/0016-a-dimension-is-a-handle-on-the-model.md)): it carries the handle of the text that showed the size. An opening's width runs as `ResizeOpening`, a piece of wall as `MoveOpening`, a wall's length as `SetWallLength`, and a clear size as the `MoveWallEnd` commands of `geom::set_distance`, in one undo step. Each is checked before anything runs.
 
+`SetOpeningHinge` and `SetOpeningSwing` say how a door hangs. `CenterOpening` runs as `MoveOpening`: to the middle of the side of the room the opening is in, or of its wall when no room is there. `Draw` takes the selected element, and marks every opening of the level by its size among all the job's openings ([ADR 0017](../../docs/adr/0017-openings-carry-hinge-and-swing-marks-are-derived.md)).
+
 `LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.
 
 A request that fails the `Verifier` or names another version gets a single `CorruptData` or `UnsupportedVersion` result and changes nothing.

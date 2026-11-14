@@ -85,6 +85,8 @@ Document edited_document() {
       ResizeOpening{.opening = window, .width = 900_mm, .height = 2100_mm},
       SetOpeningSill{.opening = window, .sill = 0_mm},
       SetOpeningKind{.opening = window, .kind = OpeningKind::kDoor},
+      SetOpeningHinge{.opening = window, .hinge = Hinge::kFar},
+      SetOpeningSwing{.opening = window, .swing = Swing::kRight},
       RemoveWall{.wall = wall},
   };
   for (const Command& edit : edits) {
@@ -136,7 +138,7 @@ void expect_round_trip(const OpGroup& group) {
 
 TEST(OpLog, EveryGroupComesBackFromItsBuffer) {
   const Document document = edited_document();
-  ASSERT_EQ(document.log().size(), 27U);
+  ASSERT_EQ(document.log().size(), 29U);
 
   for (const OpGroup& group : document.log()) {
     expect_round_trip(group);

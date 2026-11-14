@@ -37,6 +37,11 @@ namespace otves::bridge {
 // would leave its wall.
 [[nodiscard]] Result<std::vector<Command>> dimension(const Model& model, const Sized& sized);
 
+// The move that puts an opening in the middle of the side of the room it is in: the room a door
+// opens into where there is one; or in the middle of its wall when no room is there
+// (docs/adr/0017). kNotFound when the opening does not exist.
+[[nodiscard]] Result<MoveOpening> center(const Model& model, ElementId id);
+
 // The walls a stroke means on its level (geom::straighten), each checked to be buildable and
 // not exact. kNotFound when the level does not exist.
 [[nodiscard]] Result<std::vector<Command>> sketch(const Model& model, const Stroke& stroke);

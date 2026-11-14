@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -291,6 +292,135 @@ TEST(Draft, TheDrawingDoesNotDependOnTheOrderOfTheWalls) {
     EXPECT_EQ(again.texts[index].element, drawing.texts[index].element);
     expect_near(again.texts[index].at, drawing.texts[index].at);
   }
+}
+
+// A door 900 mm wide, 1 m along a 6 m wall of 380 mm on its centre line.
+Drawing draft_door(Hinge hinge, Swing swing) {
+  const std::vector walls{wall(1, at(0, 0), at(6000, 0))};
+  const std::vector<geom::PlacedOpening> openings{{.id = id(2),
+                                                   .wall = walls[0].wall,
+                                                   .opening = {.wall = id(1),
+                                                               .offset = 1000_mm,
+                                                               .width = 900_mm,
+                                                               .height = 2100_mm,
+                                                               .sill = 0_mm,
+                                                               .kind = OpeningKind::kDoor,
+                                                               .hinge = hinge,
+                                                               .swing = swing}}};
+  return draft({.walls = walls, .openings = openings, .below = {}}, kText);
+}
+
+// The leaf of the drawing's one door: from its hinge to its tip.
+Line leaf_of(const Drawing& drawing) {
+  const auto leaf = std::ranges::find(drawing.lines, Stroke::kLeaf, &Line::stroke);
+  return leaf != drawing.lines.end() ? *leaf : Line{};
+}
+
+TEST(Draft, ADoorHangsOnEitherEdgeAndOpensToEitherSide) {
+  // On the far edge, open to the left: the leaf stands up from the left face at 1.9 m.
+  const Drawing far_left = draft_door(Hinge::kFar, Swing::kLeft);
+  expect_near(leaf_of(far_left).from, {.x = 1.9, .y = 0.19});
+  expect_near(leaf_of(far_left).to, {.x = 1.9, .y = 1.09});
+  // Its swing runs counter-clockwise from the tip round to the near jamb.
+  ASSERT_EQ(far_left.arcs.size(), 1U);
+  expect_near(far_left.arcs[0].centre, {.x = 1.9, .y = 0.19});
+  expect_near(far_left.arcs[0].from, {.x = 1.9, .y = 1.09});
+  expect_near(far_left.arcs[0].to, {.x = 1.0, .y = 0.19});
+
+  // On the near edge, open to the right: down from the right face at 1 m.
+  const Drawing near_right = draft_door(Hinge::kNear, Swing::kRight);
+  expect_near(leaf_of(near_right).from, {.x = 1.0, .y = -0.19});
+  expect_near(leaf_of(near_right).to, {.x = 1.0, .y = -1.09});
+  expect_near(near_right.arcs[0].from, {.x = 1.0, .y = -1.09});
+  expect_near(near_right.arcs[0].to, {.x = 1.9, .y = -0.19});
+
+  const Drawing far_right = draft_door(Hinge::kFar, Swing::kRight);
+  expect_near(leaf_of(far_right).from, {.x = 1.9, .y = -0.19});
+  expect_near(leaf_of(far_right).to, {.x = 1.9, .y = -1.09});
+  expect_near(far_right.arcs[0].from, {.x = 1.0, .y = -0.19});
+  expect_near(far_right.arcs[0].to, {.x = 1.9, .y = -1.09});
+}
+
+Marked marked(std::int64_t n, OpeningKind kind, Mm width, Mm height) {
+  return {.id = id(n),
+          .opening = {.wall = id(100),
+                      .offset = 0_mm,
+                      .width = width,
+                      .height = height,
+                      .sill = 0_mm,
+                      .kind = kind}};
+}
+
+std::vector<std::int64_t> numbers(const std::vector<Mark>& marks) {
+  std::vector<std::int64_t> all;
+  all.reserve(marks.size());
+  for (const Mark& mark : marks) {
+    all.push_back(mark.number);
+  }
+  return all;
+}
+
+TEST(MarkOpenings, OpeningsOfOneSizeShareAMarkNumberedByTheOldestOfEachSize) {
+  // Given youngest first: the order of the ids decides, not the order given.
+  const std::vector<Marked> openings{
+      marked(6, OpeningKind::kWindow, 1200_mm, 1500_mm),
+      marked(5, OpeningKind::kDoor, 900_mm, 2100_mm),
+      marked(4, OpeningKind::kWindow, 1500_mm, 1500_mm),
+      marked(3, OpeningKind::kWindow, 1200_mm, 1200_mm),
+      marked(2, OpeningKind::kDoor, 800_mm, 2100_mm),
+      marked(1, OpeningKind::kWindow, 1500_mm, 1500_mm),
+  };
+  const std::vector<Mark> marks = mark_openings(openings);
+
+  ASSERT_EQ(marks.size(), 6U);
+  EXPECT_EQ(marks[0].opening, id(1));
+  // Windows: 1 500 × 1 500 first, 1 200 × 1 200 second, 1 200 × 1 500 third. Doors count apart.
+  EXPECT_EQ(numbers(marks), (std::vector<std::int64_t>{1, 1, 2, 1, 2, 3}));
+}
+
+// The marks a drawing has, in order.
+std::vector<Text> marks_in(const Drawing& drawing) {
+  std::vector<Text> written;
+  std::ranges::copy_if(drawing.texts, std::back_inserter(written), [](const Text& text) {
+    return text.kind == TextKind::kDoorMark || text.kind == TextKind::kWindowMark ||
+           text.kind == TextKind::kEmptyMark;
+  });
+  return written;
+}
+
+TEST(Draft, AMarkStandsBesideItsOpeningOnTheSideItDoesNotOpenTo) {
+  const std::vector walls{wall(1, at(0, 0), at(6000, 0))};
+  const std::vector<geom::PlacedOpening> openings{
+      {.id = id(2),
+       .wall = walls[0].wall,
+       .opening = {.wall = id(1),
+                   .offset = 1000_mm,
+                   .width = 900_mm,
+                   .height = 2100_mm,
+                   .sill = 0_mm,
+                   .kind = OpeningKind::kDoor}},
+      {.id = id(3),
+       .wall = walls[0].wall,
+       .opening = {
+           .wall = id(1), .offset = 4000_mm, .width = 1500_mm, .height = 1500_mm, .sill = 900_mm}}};
+  const std::vector<Mark> marks{{.opening = id(2), .number = 2}, {.opening = id(3), .number = 1}};
+
+  const std::vector<Text> written =
+      marks_in(draft({.walls = walls, .openings = openings, .below = {}, .marks = marks}, kText));
+
+  ASSERT_EQ(written.size(), 2U);
+  // The door opens to the wall's left, up the plan: its mark stands a text height off the
+  // right face, by the door's middle.
+  EXPECT_EQ(written[0].element, id(2));
+  EXPECT_EQ(written[0].kind, TextKind::kDoorMark);
+  EXPECT_EQ(written[0].value, 2);
+  expect_near(written[0].at, {.x = 1.45, .y = -0.19 - 0.3});
+  // So does the window's, which has no leaf to turn.
+  EXPECT_EQ(written[1].kind, TextKind::kWindowMark);
+  EXPECT_EQ(written[1].value, 1);
+  expect_near(written[1].at, {.x = 4.75, .y = -0.19 - 0.3});
+  // An opening with no mark given has none.
+  EXPECT_TRUE(marks_in(draft({.walls = walls, .openings = openings, .below = {}}, kText)).empty());
 }
 
 }  // namespace

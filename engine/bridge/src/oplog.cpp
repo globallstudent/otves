@@ -91,6 +91,10 @@ schema::CommandKind to_code(CommandKind kind) {
       return schema::CommandKind::SetRoomKind;
     case CommandKind::kRemoveRoom:
       return schema::CommandKind::RemoveRoom;
+    case CommandKind::kSetOpeningHinge:
+      return schema::CommandKind::SetOpeningHinge;
+    case CommandKind::kSetOpeningSwing:
+      return schema::CommandKind::SetOpeningSwing;
     case CommandKind::kAddOpening:
       return schema::CommandKind::AddOpening;
     case CommandKind::kMoveOpening:
@@ -179,6 +183,10 @@ std::optional<CommandKind> from_code(schema::CommandKind kind) {
       return CommandKind::kSetRoomKind;
     case schema::CommandKind::RemoveRoom:
       return CommandKind::kRemoveRoom;
+    case schema::CommandKind::SetOpeningHinge:
+      return CommandKind::kSetOpeningHinge;
+    case schema::CommandKind::SetOpeningSwing:
+      return CommandKind::kSetOpeningSwing;
   }
   return std::nullopt;
 }
@@ -315,6 +323,10 @@ schema::OpeningField to_code(OpeningField field) {
       return schema::OpeningField::Sill;
     case OpeningField::kKind:
       return schema::OpeningField::Kind;
+    case OpeningField::kHinge:
+      return schema::OpeningField::Hinge;
+    case OpeningField::kSwing:
+      return schema::OpeningField::Swing;
   }
   return schema::OpeningField::Offset;
 }
@@ -331,6 +343,10 @@ std::optional<OpeningField> from_code(schema::OpeningField field) {
       return OpeningField::kSill;
     case schema::OpeningField::Kind:
       return OpeningField::kKind;
+    case schema::OpeningField::Hinge:
+      return OpeningField::kHinge;
+    case schema::OpeningField::Swing:
+      return OpeningField::kSwing;
   }
   return std::nullopt;
 }
@@ -385,6 +401,8 @@ std::int64_t number(const OpeningValue& value) {
   return std::visit(Overloaded{
                         [](Mm length) { return length.value(); },
                         [](OpeningKind kind) { return static_cast<std::int64_t>(to_schema(kind)); },
+                        [](Hinge hinge) { return static_cast<std::int64_t>(to_schema(hinge)); },
+                        [](Swing swing) { return static_cast<std::int64_t>(to_schema(swing)); },
                     },
                     value);
 }
@@ -635,16 +653,32 @@ Result<Op> room_op(const schema::SetRoomFieldOp* set) {
       .after = *after};
 }
 
+// An enum of an opening, stored as its schema code.
+template <typename Code>
+Result<OpeningValue> opening_code(std::int64_t number) {
+  const auto code = code_of<Code>(number);
+  const auto value = code ? from_schema(*code) : std::nullopt;
+  if (!value) {
+    return corrupt("unknown opening kind, hinge or swing");
+  }
+  return OpeningValue{*value};
+}
+
 Result<OpeningValue> opening_value(OpeningField field, std::int64_t number) {
-  if (field != OpeningField::kKind) {
-    return Mm{number};
+  switch (field) {
+    case OpeningField::kKind:
+      return opening_code<schema::OpeningKind>(number);
+    case OpeningField::kHinge:
+      return opening_code<schema::Hinge>(number);
+    case OpeningField::kSwing:
+      return opening_code<schema::Swing>(number);
+    case OpeningField::kOffset:
+    case OpeningField::kWidth:
+    case OpeningField::kHeight:
+    case OpeningField::kSill:
+      break;
   }
-  const auto code = code_of<schema::OpeningKind>(number);
-  const std::optional<OpeningKind> kind = code ? from_schema(*code) : std::nullopt;
-  if (!kind) {
-    return corrupt("unknown opening kind");
-  }
-  return *kind;
+  return Mm{number};
 }
 
 Result<Op> opening_op(const schema::SetOpeningFieldOp* set) {
