@@ -779,7 +779,8 @@ std::expected<View, Error> decode(const schema::Draw* draw) {
       .level = to_id(draw->level()),
       .text = {.height = size(draw->text_height()), .digit = size(draw->digit_width())},
       .focus = draw->focus() != nullptr ? std::optional{to_point(*draw->focus())} : std::nullopt,
-      .selected = to_id(draw->selected())};
+      .selected = to_id(draw->selected()),
+      .sheet = draw->sheet()};
 }
 
 std::expected<Sized, Error> decode(const schema::SetDimension* set) {

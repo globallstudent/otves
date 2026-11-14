@@ -6,6 +6,7 @@
 #include <iterator>
 #include <span>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -39,14 +40,16 @@ constexpr double kLabelGap = 0.25;
 // «≈» and the space after it are about as wide as two digits.
 constexpr int kAboutDigits = 2;
 
-// A room's name is taken to be at most this many digits wide, its area this many and an
-// opening's mark this many: the engine does not know the words.
-constexpr double kNameDigits = 16.0;
-constexpr double kAreaDigits = 7.0;
+// An opening's mark is taken to be at most this many digits wide: the engine does not know the
+// words.
 constexpr double kMarkDigits = 5.0;
 
-// An opening's mark stands this many text heights from its wall's face.
-constexpr double kMarkGap = 1.0;
+// How far from its wall's face an opening's mark may stand, in text heights to its middle: beside
+// the face, past a chain whose numbers are on the wall's side of it, or past its numbers.
+constexpr std::array kMarkGaps{1.0, 1.9, 3.0};
+
+// A direction this close to upright counts as upright.
+constexpr double kUpright = 1e-9;
 
 // Where along a wall its length may be written, the middle first.
 constexpr std::array kLabelPlaces{0.5, 0.3, 0.7};
@@ -188,6 +191,26 @@ void draw_layers(const Wall& wall, const geom::WallFootprint& footprint,
                               .points = footprint.outline});
 }
 
+// What each door's leaf sweeps as it opens: the square on the opening that its swing lies in.
+std::vector<Bounds> swept_by(std::span<const geom::PlacedOpening> openings) {
+  std::vector<Bounds> swept;
+  for (const geom::PlacedOpening& placed : openings) {
+    if (placed.opening.kind != OpeningKind::kDoor) {
+      continue;
+    }
+    const Leaf leaf = leaf_of(placed.opening, geom::opening_outline(placed.wall, placed.opening));
+    const std::array corners{leaf.hinge, leaf.jamb, leaf.tip, leaf.tip + (leaf.jamb - leaf.hinge)};
+    Bounds bounds{.low = leaf.hinge, .high = leaf.hinge};
+    for (const geom::Vec2 corner : corners) {
+      bounds.low = {.x = std::min(bounds.low.x, corner.x), .y = std::min(bounds.low.y, corner.y)};
+      bounds.high = {.x = std::max(bounds.high.x, corner.x),
+                     .y = std::max(bounds.high.y, corner.y)};
+    }
+    swept.push_back(bounds);
+  }
+  return swept;
+}
+
 TextKind mark_kind(OpeningKind kind) {
   switch (kind) {
     case OpeningKind::kWindow:
@@ -198,33 +221,6 @@ TextKind mark_kind(OpeningKind kind) {
       break;
   }
   return TextKind::kEmptyMark;
-}
-
-// Each opening's mark, beside its middle: a text height clear of the wall's face on the side
-// the opening's leaf does not open to.
-void write_marks(std::span<const geom::PlacedOpening> openings, std::span<const Mark> marks,
-                 TextSize text, Drawing& drawing) {
-  std::vector<geom::PlacedOpening> ordered(openings.begin(), openings.end());
-  std::ranges::sort(ordered, {}, &geom::PlacedOpening::id);
-  for (const geom::PlacedOpening& placed : ordered) {
-    const auto mark = std::ranges::lower_bound(marks, placed.id, {}, &Mark::opening);
-    if (mark == marks.end() || mark->opening != placed.id) {
-      continue;
-    }
-    const auto [near_right, far_right, far_left, near_left] =
-        geom::opening_outline(placed.wall, placed.opening);
-    // By the face a leaf does not open to, where a selected opening's chain is not written.
-    const bool left = placed.opening.swing == Swing::kLeft;
-    const geom::Vec2 near = left ? near_right : near_left;
-    const geom::Vec2 across = left ? near_right - near_left : near_left - near_right;
-    const geom::Vec2 at = middle(near, left ? far_right : far_left) +
-                          (across * (kMarkGap * text.height / geom::length(across)));
-    drawing.texts.push_back({.element = placed.id,
-                             .kind = mark_kind(placed.opening.kind),
-                             .value = mark->number,
-                             .at = at,
-                             .along = {.x = 1.0, .y = 0.0}});
-  }
 }
 
 // How wide a wall's length is written.
@@ -279,6 +275,92 @@ bool meet(const Box& a, const Box& b) {
          !apart_along(b.along, a, b) && !apart_along(geom::perp(b.along), a, b);
 }
 
+// The box a written text fills.
+Box box_of(const Text& written, TextSize text) {
+  return {.at = written.at,
+          .along = written.along,
+          .half_along = width_of(written, text) / 2,
+          .half_across = text.height / 2};
+}
+
+// Whether the segment passes through the box.
+bool crosses(const Box& box, geom::Vec2 from, geom::Vec2 to) {
+  double enters = 0.0;
+  double leaves = 1.0;
+  const std::array sides{std::pair{box.along, box.half_along},
+                         std::pair{geom::perp(box.along), box.half_across}};
+  for (const auto& [axis, half] : sides) {
+    const double start = geom::dot(from - box.at, axis);
+    const double run = geom::dot(to - from, axis);
+    if (run == 0.0) {
+      if (std::abs(start) > half) {
+        return false;
+      }
+      continue;
+    }
+    const double one = (-half - start) / run;
+    const double other = (half - start) / run;
+    enters = std::max(enters, std::min(one, other));
+    leaves = std::min(leaves, std::max(one, other));
+  }
+  return enters <= leaves;
+}
+
+// Whether a mark may be written in the box: on no text written before it and across no
+// dimension line.
+bool is_clear(const Box& box, const Drawing& drawing, TextSize text) {
+  const bool on_a_text = std::ranges::any_of(
+      drawing.texts, [&](const Text& written) { return meet(box, box_of(written, text)); });
+  const bool on_a_line = std::ranges::any_of(drawing.lines, [&box](const Line& line) {
+    return (line.stroke == Stroke::kDimension || line.stroke == Stroke::kChain) &&
+           crosses(box, line.from, line.to);
+  });
+  return !on_a_text && !on_a_line;
+}
+
+// Each opening's mark, beside its middle and along its wall: by the face its leaf does not open
+// to, or else by the other one, the nearest place that is clear of the sizes written there.
+void write_marks(std::span<const geom::PlacedOpening> openings, std::span<const Mark> marks,
+                 TextSize text, Drawing& drawing) {
+  std::vector<geom::PlacedOpening> ordered(openings.begin(), openings.end());
+  std::ranges::sort(ordered, {}, &geom::PlacedOpening::id);
+  for (const geom::PlacedOpening& placed : ordered) {
+    const auto mark = std::ranges::lower_bound(marks, placed.id, {}, &Mark::opening);
+    if (mark == marks.end() || mark->opening != placed.id) {
+      continue;
+    }
+    const auto [near_right, far_right, far_left, near_left] =
+        geom::opening_outline(placed.wall, placed.opening);
+    const bool left = placed.opening.swing == Swing::kLeft;
+    const geom::Vec2 closed = middle(left ? near_right : near_left, left ? far_right : far_left);
+    const geom::Vec2 open = middle(left ? near_left : near_right, left ? far_left : far_right);
+    const geom::Vec2 through = left ? near_right - near_left : near_left - near_right;
+    const geom::Vec2 out = through * (text.height / geom::length(through));
+    const geom::Vec2 run = far_right - near_right;
+    const geom::Vec2 dir = run * (1.0 / geom::length(run));
+    // Upright, as a length is: never towards the left, and on an upright wall from the bottom up.
+    const bool turned = dir.x < -kUpright || (std::abs(dir.x) <= kUpright && dir.y < 0.0);
+    const geom::Vec2 along = turned ? -dir : dir;
+    std::vector<geom::Vec2> places;
+    for (const double gap : kMarkGaps) {
+      places.push_back(closed + (out * gap));
+      places.push_back(open - (out * gap));
+    }
+    const auto place = std::ranges::find_if(places, [&](geom::Vec2 at) {
+      return is_clear({.at = at,
+                       .along = along,
+                       .half_along = kMarkDigits * text.digit / 2,
+                       .half_across = text.height / 2},
+                      drawing, text);
+    });
+    drawing.texts.push_back({.element = placed.id,
+                             .kind = mark_kind(placed.opening.kind),
+                             .value = mark->number,
+                             .at = place != places.end() ? *place : places.front(),
+                             .along = along});
+  }
+}
+
 // The walls that some space's outline runs along, sorted.
 std::vector<ElementId> walls_round(std::span<const RoomSpace> spaces) {
   std::vector<ElementId> round;
@@ -291,16 +373,33 @@ std::vector<ElementId> walls_round(std::span<const RoomSpace> spaces) {
   return round;
 }
 
-// Writes each wall's length where it is clear of the other walls and of the lengths already
-// written. `round_spaces` are the walls round spaces, sorted.
+// Whose lengths are written.
+enum class Lengths : std::uint8_t {
+  // Of every wall but one round a space whose length somebody has given: its space sizes it.
+  kUntilGiven,
+  // Of no wall round a space: every space is drawn with its sizes.
+  kOffSpaces,
+};
+
+// The walls that get a length, by the list of those round spaces, sorted.
+struct Lengthed {
+  std::span<const ElementId> round_spaces;
+  Lengths which = Lengths::kUntilGiven;
+
+  [[nodiscard]] bool has(ElementId id, const Wall& wall) const {
+    const bool sized = which == Lengths::kOffSpaces || wall.exact;
+    return !(sized && std::ranges::binary_search(round_spaces, id));
+  }
+};
+
+// Writes each wall's length where it is clear of the other walls and of the texts already
+// written.
 void write_lengths(std::span<const geom::WallInput> walls,
-                   std::span<const geom::WallFootprint> footprints,
-                   std::span<const ElementId> round_spaces, TextSize text, Drawing& drawing) {
+                   std::span<const geom::WallFootprint> footprints, Lengthed lengthed,
+                   TextSize text, Drawing& drawing) {
   for (const geom::WallFootprint& footprint : footprints) {
     const Wall* wall = find(walls, footprint.id);
-    // A wall round a space is sized by the space, once somebody has given its length.
-    if (wall == nullptr ||
-        (wall->exact && std::ranges::binary_search(round_spaces, footprint.id))) {
+    if (wall == nullptr || !lengthed.has(footprint.id, *wall)) {
       continue;
     }
     const geom::Vec2 start = geom::to_vec2(wall->start);
@@ -327,12 +426,8 @@ void write_lengths(std::span<const geom::WallInput> walls,
                     .along = dir,
                     .half_along = width / 2,
                     .half_across = (text.height / 2) + (kLabelGap * text.height)};
-      const bool on_a_text = std::ranges::any_of(drawing.texts, [&](const Text& written) {
-        return meet(box, {.at = written.at,
-                          .along = written.along,
-                          .half_along = width_of(written, text) / 2,
-                          .half_across = text.height / 2});
-      });
+      const bool on_a_text = std::ranges::any_of(
+          drawing.texts, [&](const Text& written) { return meet(box, box_of(written, text)); });
       return !on_a_wall && !on_a_text;
     };
     std::vector<geom::Vec2> places;
@@ -386,6 +481,31 @@ std::vector<Mark> mark_openings(std::span<const Marked> openings) {
   return marks;
 }
 
+std::vector<ListedOpening> list_openings(std::span<const Marked> openings) {
+  const std::vector<Mark> marks = mark_openings(openings);
+  std::vector<ListedOpening> listed;
+  for (const Marked& marked : openings) {
+    const auto mark = std::ranges::lower_bound(marks, marked.id, {}, &Mark::opening);
+    const TextKind kind = mark_kind(marked.opening.kind);
+    const auto line = std::ranges::find_if(listed, [&](const ListedOpening& known) {
+      return known.kind == kind && known.number == mark->number;
+    });
+    if (line != listed.end()) {
+      ++line->count;
+    } else {
+      listed.push_back({.kind = kind,
+                        .number = mark->number,
+                        .width = marked.opening.width,
+                        .height = marked.opening.height,
+                        .count = 1});
+    }
+  }
+  std::ranges::sort(listed, [](const ListedOpening& lhs, const ListedOpening& rhs) {
+    return std::tie(lhs.kind, lhs.number) < std::tie(rhs.kind, rhs.number);
+  });
+  return listed;
+}
+
 Drawing draft(const Plan& plan, TextSize text) {
   Drawing drawing;
   outline_below(plan.below, drawing);
@@ -418,18 +538,30 @@ Drawing draft(const Plan& plan, TextSize text) {
                                           return geom::holds(room.space, at);
                                         })
                  : spaces.end();
-  // Rooms and sizes are written first, so a wall's length keeps clear of them.
-  write_rooms(spaces, focused != spaces.end() ? &*focused : nullptr, size, drawing);
-  if (focused != spaces.end()) {
-    write_sizes(*focused, walls, plan.openings, size, drawing);
+  // Rooms and sizes are written first, so a wall's length keeps clear of them. A sheet has the
+  // sizes of every space beside its name; a screen those of the space in focus in its place.
+  write_rooms(spaces, plan.sheet || focused == spaces.end() ? nullptr : &*focused,
+              swept_by(plan.openings), size, drawing);
+  if (plan.sheet) {
+    for (const RoomSpace& room : spaces) {
+      write_sizes(room, walls, plan.openings, Stroke::kDimension, size, drawing);
+    }
+  } else if (focused != spaces.end()) {
+    write_sizes(*focused, walls, plan.openings, Stroke::kChain, size, drawing);
   } else if (!plan.selected.is_nil()) {
     write_opening_sizes(spaces, walls, plan.openings, plan.selected, size, drawing);
   }
-  write_marks(plan.openings, plan.marks, size, drawing);
+  write_marks(plan.openings, mark_openings(plan.marked), size, drawing);
   if (!spaces.empty()) {
     write_overall(joins.footprints, size, drawing);
   }
-  write_lengths(walls, joins.footprints, walls_round(spaces), size, drawing);
+  drawing.rooms = list_rooms(spaces, size);
+  drawing.openings = list_openings(plan.marked);
+  const std::vector<ElementId> round = walls_round(spaces);
+  write_lengths(
+      walls, joins.footprints,
+      {.round_spaces = round, .which = plan.sheet ? Lengths::kOffSpaces : Lengths::kUntilGiven},
+      size, drawing);
   return drawing;
 }
 

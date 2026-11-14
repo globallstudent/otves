@@ -318,15 +318,15 @@ Result<drafting::Drawing> draw(const Model& model, const View& view) {
   model.for_each<Opening>([&marked](ElementId id, const Opening& opening) {
     marked.push_back({.id = id, .opening = opening});
   });
-  const std::vector<drafting::Mark> marks = drafting::mark_openings(marked);
   return drafting::draft({.walls = walls,
                           .openings = openings,
                           .below = below,
                           .builds = builds,
                           .rooms = rooms,
                           .focus = view.focus,
-                          .marks = marks,
-                          .selected = view.selected},
+                          .marked = marked,
+                          .selected = view.selected,
+                          .sheet = view.sheet},
                          view.text);
 }
 

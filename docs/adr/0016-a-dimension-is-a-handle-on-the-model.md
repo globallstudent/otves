@@ -14,6 +14,7 @@ The editor writes one length per wall, along its location line. No room has a si
 - **Outside the plan, its overall size**, once the walls close a space: across the top and up the left side, from outer face to outer face.
 - **In the space in focus, its sizes instead of its name.** `Draw` names a point; the space that holds it gets its clear size across and up the plan and, along each side with openings, a chain: wall, opening, wall.
 - **A wall round a space has no length of its own on the plan**, unless nobody has typed or measured it yet. Its room's sizes say more.
+- **A sheet has the sizes of every space**, beside its name and in ink. `Draw.sheet` asks for it; no wall round a space keeps a length there.
 - **A number is a handle.** A text of a size says what a typed value changes: an opening's width, the opening a piece of wall leads to, or the two walls a clear size lies between. The app sends the handle back with the value as `SetDimension`, and the engine turns it into commands in one undo step.
 - **Sizes scale with the text.** Offsets and ticks are ratios of the label text's height, so a drawing reads the same at every zoom. Paper sizes of СПДС join them with the sheets.
 
@@ -49,4 +50,4 @@ flowchart LR
 - The label of a selected space gives way to its sizes, so the panel names it.
 - The app remembers where it painted each number to find the one a finger taps. It still places nothing.
 - A space that is not a rectangle gets the sizes of its stretches through its label point, not every side.
-- Sheets with every room's chains wait for slice 7.
+- A dimension line may cross a door's swing; a number never lies under another text or a line.

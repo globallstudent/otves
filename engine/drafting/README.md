@@ -7,7 +7,7 @@ flowchart LR
   W["walls · their layers · openings · rooms<br/>walls of the level below"] --> J["geom::join_walls · geom::clip<br/>geom::opening_outline · geom::find_spaces"]
   J --> D["drafting::draft"]
   T["text size on the plan<br/>line height · digit width"] --> D
-  D --> L["Drawing<br/>polygons · lines · arcs · texts"]
+  D --> L["Drawing<br/>polygons · lines · arcs · texts<br/>room schedule · opening schedule"]
 ```
 
 ## Entry point
@@ -16,6 +16,18 @@ flowchart LR
 |---|---|
 | `draft(plan, text)` | The level as a `Drawing`. `text` is how big the painter's label text is on the plan at its zoom |
 | `mark_openings(openings)` | The mark of each opening of a job: one number for each kind, width and height, in the order of the oldest opening of each size |
+| `list_openings(openings)` | The job's opening schedule: each mark once, with its size and how many openings have it; windows, doors, then empty openings, by number |
+
+## Screen and sheet
+
+`Plan.sheet` says what the drawing is for. The schedules go out either way: `Drawing.rooms` lists the level's spaces in reading order, from the top of the plan down and from the left, and `Drawing.openings` the job's marks.
+
+| | Screen | Sheet |
+|---|---|---|
+| Room sizes | Of the space in focus, in place of its name | Of every space, beside its name |
+| Their stroke | `kChain`, the colour of what is selected | `kDimension`, ink |
+| Chain of an opening | Of the selected opening, when no space is in focus | Every side with openings has one |
+| Length of a wall round a space | Until somebody has typed or measured it | Never: the space's sizes say it |
 
 ## What is drawn
 
@@ -28,7 +40,7 @@ flowchart LR
 | Opening | The gap through its wall and two jambs |
 | Window | The gap, its two faces and the glazing line down the middle of the wall |
 | Door | The gap, the leaf standing open at right angles on the edge it hangs on and the face it opens to, and its swing ([ADR 0017](../../docs/adr/0017-openings-carry-hinge-and-swing-marks-are-derived.md)) |
-| Mark | Beside each opening that has one, a text height clear of the wall's face on the side a leaf does not open to; the number goes out with a kind that names windows, doors or empty openings |
+| Mark | Beside each opening that has one and along its wall; the number goes out with a kind that names windows, doors or empty openings |
 | Wall length | A number beside the wall and along it, marked when nobody has typed or measured it |
 | Room | Its name, as its kind's code, over its floor area in cm²; the area alone in a space with no name |
 
@@ -47,6 +59,19 @@ Painting order is the order of the lists: polygons, lines, arcs, texts. Floors c
 
 Text width is the count of digits times the width of one. «≈» and its space count as two digits.
 
+## Where a mark is written
+
+| Rule | Value |
+|---|---|
+| Along the wall | By the middle of the opening |
+| First place | A text height from the face a leaf does not open to, to the mark's middle |
+| Next places | The same by the other face; then 1,9 and 3 text heights from each face: past a chain whose numbers stand on the wall's side of it, and past the numbers of one whose numbers stand beyond it |
+| A place is taken | When the mark's box meets a text written before it, or a dimension line or a tick runs through it |
+| No free place | The first one is used |
+| Reading | As a length: from the left; on an upright wall from the bottom up |
+
+A mark is taken to be five digits wide.
+
 ## Where a room is written
 
 | Rule | Value |
@@ -57,6 +82,7 @@ Text width is the count of digits times the width of one. «≈» and its space 
 | Lines | The name half a text height to one side of the point, the area half to the other |
 | A space lower than two lines | The area alone; lower than one line, nothing |
 | Room for the text | Four fifths of the stretch it lies along goes out as `fit`: the painter knows how wide a name is in the builder's language, and leaves out a text that is wider |
+| A door opens over it | The label moves along its line to the middle of the longest part of the stretch that no leaf sweeps, when that part has room for it: 16 digits for a name, 7 for an area alone. Otherwise it stays |
 
 Rooms are written before wall lengths, so a length keeps clear of them.
 

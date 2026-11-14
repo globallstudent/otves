@@ -315,6 +315,9 @@ table Draw {
   focus:PointMm;
   // The selected element: an opening is drawn with the chain of the side it is in.
   selected:Uuid;
+  // For a sheet: every space is drawn with its sizes beside its name, as the space in focus is
+  // on a screen.
+  sheet:bool;
 }
 
 // Gives a size on the plan a typed value (docs/adr/0016). `kind`, `element`, `from` and
@@ -527,13 +530,34 @@ table DrawnText {
   other:Uuid;
 }
 
+// A line of the level's room schedule: a space with the room that names it, absent for a space
+// with no name, and its floor area in m².
+table ListedRoom {
+  room:Uuid;
+  kind:RoomKind = Room;
+  area:double;
+}
+
+// A line of the job's opening schedule: a mark, as the kind of its text and its number, the
+// size it stands for in millimetres, and how many openings of the job have it.
+table ListedOpening {
+  kind:TextKind = Length;
+  number:long;
+  width:long;
+  height:long;
+  count:long;
+}
+
 // One level as a display list (docs/adr/0013), in plan metres: painted in this order, each list
-// in the order given.
+// in the order given. With it come the schedules a sheet prints beside the plan: the level's
+// rooms, in reading order, and the job's openings by mark.
 table Drawing {
   polygons:[DrawnPolygon];
   lines:[DrawnLine];
   arcs:[DrawnArc];
   texts:[DrawnText];
+  rooms:[ListedRoom];
+  openings:[ListedOpening];
 }
 
 // A closed outline in plan metres.

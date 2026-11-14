@@ -17,9 +17,10 @@ void write_overall(std::span<const geom::WallFootprint> footprints, TextSize tex
 
 // The sizes of the space in focus: its clear size across, near its top, and up the plan, near
 // its left side; and along each side with openings a chain of wall, opening, wall. Each number
-// says what a typed value changes.
+// says what a typed value changes. The lines are drawn in `stroke`.
 void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
-                 std::span<const geom::PlacedOpening> openings, TextSize text, Drawing& drawing);
+                 std::span<const geom::PlacedOpening> openings, Stroke stroke, TextSize text,
+                 Drawing& drawing);
 
 // The chain of the side the selected opening is in: wall, opening, wall along that side of a
 // space, the one a door opens into where there is one (docs/adr/0017). Nothing when `selected`

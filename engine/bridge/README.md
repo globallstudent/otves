@@ -51,6 +51,8 @@ sequenceDiagram
 
 `SetOpeningHinge` and `SetOpeningSwing` say how a door hangs. `CenterOpening` runs as `MoveOpening`: to the middle of the side of the room the opening is in, or of its wall when no room is there. `Draw` takes the selected element, and marks every opening of the level by its size among all the job's openings ([ADR 0017](../../docs/adr/0017-openings-carry-hinge-and-swing-marks-are-derived.md)).
 
+`Draw.sheet` asks for the level as a sheet prints it: every space with its sizes beside its name. Every `Drawing` carries the schedules a sheet prints beside the plan: `rooms`, the level's spaces in reading order with the room that names each and its floor area, and `openings`, the job's marks with their sizes and counts.
+
 `LoadContent` carries the Luau norms and rules from the app's assets. A bundle that does not compile fails that command and keeps the content that ran before.
 
 A request that fails the `Verifier` or names another version gets a single `CorruptData` or `UnsupportedVersion` result and changes nothing.

@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
 #include <otves/core/room.h>
 #include <otves/core/units.h>
@@ -44,6 +45,18 @@ geom::PlacedOpening window(std::int64_t n, const geom::WallInput& in, Mm offset)
       .wall = in.wall,
       .opening = {
           .wall = in.id, .offset = offset, .width = 1500_mm, .height = 1500_mm, .sill = 900_mm}};
+}
+
+// A door 900 mm wide that opens to its wall's left.
+geom::PlacedOpening door(std::int64_t n, const geom::WallInput& in, Mm offset) {
+  return {.id = id(n),
+          .wall = in.wall,
+          .opening = {.wall = in.id,
+                      .offset = offset,
+                      .width = 900_mm,
+                      .height = 2100_mm,
+                      .sill = 0_mm,
+                      .kind = OpeningKind::kDoor}};
 }
 
 // Label text 200 mm high on the plan, its digits 100 mm wide.
@@ -244,6 +257,80 @@ TEST(DraftSizes, AClearSizeGoesFurtherInRatherThanThroughANumber) {
   const std::vector<Text> clear = texts(drawing, TextKind::kClear);
   ASSERT_EQ(clear.size(), 2U);
   expect_near(clear[1].at, {.x = 0.2 + 0.78 - 0.13, .y = 2.0});
+}
+
+TEST(DraftSizes, ASheetHasEverySpacesSizesBesideItsNameAndListsTheRooms) {
+  // Two rooms side by side: the left one 2 m between centre lines, the right one 4 m.
+  std::vector<geom::WallInput> walls = box();
+  walls.push_back(wall(5, at(2000, 0), at(2000, 4000)));
+  const std::vector<NamedRoom> rooms{
+      {.id = id(10),
+       .room = {.level = id(100), .anchor = at(4000, 2000), .kind = RoomKind::kStudy}}};
+  const Plan plan{
+      .walls = walls, .openings = {}, .below = {}, .builds = {}, .rooms = rooms, .sheet = true};
+  const Drawing drawing = draft(plan, kText);
+
+  // Both rooms have their clear sizes, in the line of a sheet, and the named one its name too.
+  EXPECT_EQ(texts(drawing, TextKind::kClear).size(), 4U);
+  EXPECT_EQ(lines(drawing, Stroke::kChain), 0);
+  EXPECT_EQ(texts(drawing, TextKind::kRoomName).size(), 1U);
+  EXPECT_EQ(texts(drawing, TextKind::kRoomArea).size(), 2U);
+
+  // The schedule reads from the left: the room with no name, then the study.
+  ASSERT_EQ(drawing.rooms.size(), 2U);
+  EXPECT_TRUE(drawing.rooms[0].room.is_nil());
+  EXPECT_NEAR(drawing.rooms[0].area, 1.6 * 3.6, 1e-9);
+  EXPECT_EQ(drawing.rooms[1].room, id(10));
+  EXPECT_EQ(drawing.rooms[1].kind, RoomKind::kStudy);
+  EXPECT_NEAR(drawing.rooms[1].area, 3.6 * 3.6, 1e-9);
+
+  // On a screen with nothing in focus there are no room sizes, and the schedule is the same.
+  Plan screen = plan;
+  screen.sheet = false;
+  const Drawing shown = draft(screen, kText);
+  EXPECT_TRUE(texts(shown, TextKind::kClear).empty());
+  EXPECT_EQ(shown.rooms.size(), 2U);
+}
+
+TEST(DraftSizes, AMarkStandsClearOfTheSizesOfTheRoomsItsOpeningIsBetween) {
+  // Two rooms, one over the other, with a door between them that opens up the plan.
+  std::vector<geom::WallInput> walls = box();
+  walls.push_back(wall(5, at(0, 2000), at(6000, 2000)));
+  const std::vector<geom::PlacedOpening> openings{door(20, walls[4], 2500_mm)};
+  const std::vector<Marked> job{{.id = id(20), .opening = openings[0].opening}};
+  Plan plan{.walls = walls, .openings = openings, .below = {}, .marked = job};
+
+  // On a screen with nothing in focus no size is in its way: a text height off the face the
+  // door does not open to.
+  const std::vector<Text> shown = texts(draft(plan, kText), TextKind::kDoorMark);
+  ASSERT_EQ(shown.size(), 1U);
+  expect_near(shown[0].at, {.x = 2.95, .y = 1.8 - 0.2});
+
+  // On a sheet both rooms have a chain along the wall, and the lower one its clear size under
+  // that: the mark goes over the number of the upper room's chain.
+  plan.sheet = true;
+  const std::vector<Text> printed = texts(draft(plan, kText), TextKind::kDoorMark);
+  ASSERT_EQ(printed.size(), 1U);
+  expect_near(printed[0].at, {.x = 2.95, .y = 2.2 + (3.0 * 0.2)});
+}
+
+TEST(DraftSizes, ASheetLeavesOutTheLengthsOfTheWallsRoundItsSpaces) {
+  // Nobody has given the length of any of these walls; the last one closes nothing.
+  std::vector<geom::WallInput> walls;
+  for (const geom::WallInput& sketched : box()) {
+    walls.push_back(wall(0, sketched.wall.start, sketched.wall.end, false));
+    walls.back().id = sketched.id;
+  }
+  walls.push_back(wall(9, at(9000, 0), at(9000, 3000), false));
+  Plan plan{.walls = walls, .openings = {}, .below = {}};
+
+  EXPECT_EQ(texts(draft(plan, kText), TextKind::kAboutLength).size(), 5U);
+
+  // A sheet has the sizes of every space, so only the wall that closes nothing keeps its own.
+  plan.sheet = true;
+  const std::vector<Text> lengths = texts(draft(plan, kText), TextKind::kAboutLength);
+  ASSERT_EQ(lengths.size(), 1U);
+  EXPECT_EQ(lengths[0].element, id(9));
 }
 
 }  // namespace

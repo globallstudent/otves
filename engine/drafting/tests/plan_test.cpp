@@ -378,6 +378,37 @@ TEST(MarkOpenings, OpeningsOfOneSizeShareAMarkNumberedByTheOldestOfEachSize) {
   EXPECT_EQ(numbers(marks), (std::vector<std::int64_t>{1, 1, 2, 1, 2, 3}));
 }
 
+TEST(Draft, AMarkReadsAlongItsWallFromTheBottomUp) {
+  // One wall drawn up the plan and one drawn down it, each with a door.
+  const std::vector walls{wall(1, at(0, 0), at(0, 6000)), wall(2, at(5000, 6000), at(5000, 0))};
+  const auto door = [&walls](std::int64_t n, std::size_t in) {
+    return geom::PlacedOpening{.id = id(n),
+                               .wall = walls[in].wall,
+                               .opening = {.wall = walls[in].id,
+                                           .offset = 1000_mm,
+                                           .width = 900_mm,
+                                           .height = 2100_mm,
+                                           .sill = 0_mm,
+                                           .kind = OpeningKind::kDoor}};
+  };
+  const std::vector<geom::PlacedOpening> openings{door(3, 0), door(4, 1)};
+  const std::vector<Marked> job{{.id = id(3), .opening = openings[0].opening},
+                                {.id = id(4), .opening = openings[1].opening}};
+
+  const Drawing drawing =
+      draft({.walls = walls, .openings = openings, .below = {}, .marked = job}, kText);
+
+  std::vector<Text> written;
+  std::ranges::copy_if(drawing.texts, std::back_inserter(written),
+                       [](const Text& text) { return text.kind == TextKind::kDoorMark; });
+  ASSERT_EQ(written.size(), 2U);
+  // Each stands off its wall's right face: to the right of the first, the left of the second.
+  expect_near(written[0].at, {.x = 0.19 + 0.3, .y = 1.45});
+  expect_near(written[0].along, {.x = 0.0, .y = 1.0});
+  expect_near(written[1].at, {.x = 5.0 - 0.19 - 0.3, .y = 6.0 - 1.45});
+  expect_near(written[1].along, {.x = 0.0, .y = 1.0});
+}
+
 // The marks a drawing has, in order.
 std::vector<Text> marks_in(const Drawing& drawing) {
   std::vector<Text> written;
@@ -403,10 +434,14 @@ TEST(Draft, AMarkStandsBesideItsOpeningOnTheSideItDoesNotOpenTo) {
        .wall = walls[0].wall,
        .opening = {
            .wall = id(1), .offset = 4000_mm, .width = 1500_mm, .height = 1500_mm, .sill = 900_mm}}};
-  const std::vector<Mark> marks{{.opening = id(2), .number = 2}, {.opening = id(3), .number = 1}};
+  // An older door of another size stands on another storey: this one is the second of its kind.
+  const std::vector<Marked> job{marked(1, OpeningKind::kDoor, 800_mm, 2100_mm),
+                                {.id = id(2), .opening = openings[0].opening},
+                                {.id = id(3), .opening = openings[1].opening}};
 
-  const std::vector<Text> written =
-      marks_in(draft({.walls = walls, .openings = openings, .below = {}, .marks = marks}, kText));
+  const Drawing drawing =
+      draft({.walls = walls, .openings = openings, .below = {}, .marked = job}, kText);
+  const std::vector<Text> written = marks_in(drawing);
 
   ASSERT_EQ(written.size(), 2U);
   // The door opens to the wall's left, up the plan: its mark stands a text height off the
@@ -419,7 +454,15 @@ TEST(Draft, AMarkStandsBesideItsOpeningOnTheSideItDoesNotOpenTo) {
   EXPECT_EQ(written[1].kind, TextKind::kWindowMark);
   EXPECT_EQ(written[1].value, 1);
   expect_near(written[1].at, {.x = 4.75, .y = -0.19 - 0.3});
-  // An opening with no mark given has none.
+  // The schedule lists every mark of the job once: windows, then doors by their numbers.
+  ASSERT_EQ(drawing.openings.size(), 3U);
+  EXPECT_EQ(drawing.openings[0].kind, TextKind::kWindowMark);
+  EXPECT_EQ(drawing.openings[1].kind, TextKind::kDoorMark);
+  EXPECT_EQ(drawing.openings[1].number, 1);
+  EXPECT_EQ(drawing.openings[1].width, 800_mm);
+  EXPECT_EQ(drawing.openings[2].number, 2);
+  EXPECT_EQ(drawing.openings[2].count, 1);
+  // An opening the job does not list has no mark.
   EXPECT_TRUE(marks_in(draft({.walls = walls, .openings = openings, .below = {}}, kText)).empty());
 }
 

@@ -106,12 +106,34 @@ struct Text {
   ElementId other{};  // NOLINT(readability-redundant-member-init)
 };
 
-// Painted in this order, each list in the order given.
+// A line of a level's room schedule: a space, the room that names it (nil for none) and its
+// floor area in m².
+struct ListedRoom {
+  ElementId room;
+  RoomKind kind = RoomKind::kRoom;
+  double area = 0.0;
+};
+
+// A line of a job's opening schedule: a mark, as the kind of its text and its number, the size
+// it stands for and how many openings have it.
+struct ListedOpening {
+  TextKind kind = TextKind::kWindowMark;
+  std::int64_t number = 0;
+  Mm width;
+  Mm height;
+  std::int64_t count = 0;
+};
+
+// Painted in this order, each list in the order given. The schedules are what a sheet prints
+// beside the plan: the level's rooms in reading order, from the top of the plan down and from
+// the left, and the job's openings by mark.
 struct Drawing {
   std::vector<Polygon> polygons;
   std::vector<Line> lines;
   std::vector<Arc> arcs;
   std::vector<Text> texts;
+  std::vector<ListedRoom> rooms{};        // NOLINT(readability-redundant-member-init)
+  std::vector<ListedOpening> openings{};  // NOLINT(readability-redundant-member-init)
 };
 
 // How big the painter's label text is on the plan at its zoom, in metres: the height of a line
@@ -144,6 +166,10 @@ struct Marked {
 // size: ids grow with time, so a new size never renumbers the others.
 [[nodiscard]] std::vector<Mark> mark_openings(std::span<const Marked> openings);
 
+// The job's opening schedule: one line for each mark, windows first, then doors, then empty
+// openings, each by its number.
+[[nodiscard]] std::vector<ListedOpening> list_openings(std::span<const Marked> openings);
+
 // A room of the level: the name of the space that holds its anchor (docs/adr/0015).
 struct NamedRoom {
   ElementId id;
@@ -162,10 +188,13 @@ struct Plan {
   std::span<const NamedRoom> rooms{};   // NOLINT(readability-redundant-member-init)
   // The space that holds this point is drawn with its sizes instead of its name.
   std::optional<PointMm> focus{};  // NOLINT(readability-redundant-member-init)
-  // The marks of the level's openings, sorted by opening; one with none there has no mark.
-  std::span<const Mark> marks{};  // NOLINT(readability-redundant-member-init)
+  // Every opening of the job: marks run through all its levels. An opening of the level that
+  // is not among them has no mark.
+  std::span<const Marked> marked{};  // NOLINT(readability-redundant-member-init)
   // The selected element; an opening is drawn with the chain of the side it is in.
   ElementId selected{};  // NOLINT(readability-redundant-member-init)
+  // For a sheet: every space is drawn with its sizes beside its name.
+  bool sheet = false;
 };
 
 // The level as a drawing.

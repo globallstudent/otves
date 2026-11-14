@@ -451,8 +451,22 @@ flatbuffers::Offset<schema::Drawing> encode_drawing(flatbuffers::FlatBufferBuild
                                             text.value, &at, &along, text.fit, text.from.value(),
                                             text.forward, far));
   }
+  std::vector<flatbuffers::Offset<schema::ListedRoom>> rooms;
+  rooms.reserve(drawing.rooms.size());
+  for (const drafting::ListedRoom& room : drawing.rooms) {
+    rooms.push_back(
+        schema::CreateListedRoom(builder, key(room.room, id), to_schema(room.kind), room.area));
+  }
+  std::vector<flatbuffers::Offset<schema::ListedOpening>> openings;
+  openings.reserve(drawing.openings.size());
+  for (const drafting::ListedOpening& opening : drawing.openings) {
+    openings.push_back(schema::CreateListedOpening(builder, text_code(opening.kind), opening.number,
+                                                   opening.width.value(), opening.height.value(),
+                                                   opening.count));
+  }
   return schema::CreateDrawing(builder, builder.CreateVector(polygons), builder.CreateVector(lines),
-                               builder.CreateVector(arcs), builder.CreateVector(texts));
+                               builder.CreateVector(arcs), builder.CreateVector(texts),
+                               builder.CreateVector(rooms), builder.CreateVector(openings));
 }
 
 TakeoffOffsets encode_takeoff(flatbuffers::FlatBufferBuilder& builder, const Model& model,

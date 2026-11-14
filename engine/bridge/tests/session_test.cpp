@@ -267,6 +267,13 @@ class Request {
     return add(Command::RemoveRoom, schema::CreateRemoveRoom(builder_, &id).Union());
   }
 
+  // The level as a sheet has it: every room with its sizes.
+  Request& draw_sheet(ElementId level) {
+    const schema::Uuid on = key(level);
+    return add(Command::Draw,
+               schema::CreateDraw(builder_, &on, 300, 150, nullptr, nullptr, true).Union());
+  }
+
   // The level with the selected element marked for the engine.
   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): a level, then what is on it
   Request& draw_selected(ElementId level, ElementId selected) {
@@ -1964,6 +1971,43 @@ TEST(Session, ASelectedOpeningHasItsChainAndGoesToTheMiddleOfItsSide) {
 
   const auto& missing = respond(session, Request{}.center(ElementId{Uuid{7, 7}}).bytes());
   EXPECT_EQ(missing.results()->Get(0)->error(), schema::ErrorCode::NotFound);
+}
+
+TEST(Session, ASheetHasEveryRoomsSizesAndTheSchedules) {
+  Session session{kDevice};
+  const ElementId level = add_level(session);
+  add_room(session, level);
+  const auto& built =
+      respond(session, Request{}
+                           .name_room(level, {3000, 2000}, schema::RoomKind::Kitchen)
+                           .place(level, {1500, 0})
+                           .place(level, {4500, 0})
+                           .place(level, {6000, 2000}, 900, schema::OpeningKind::Door)
+                           .draw_sheet(level)
+                           .bytes());
+  const ElementId kitchen = to_id(built.results()->Get(0)->created());
+  const schema::Drawing* sheet = built.results()->Get(4)->drawing();
+  ASSERT_NE(sheet, nullptr);
+
+  // Nothing is selected, yet the room has its sizes; its name stays.
+  EXPECT_EQ(sizes(*sheet, schema::TextKind::Clear), (std::vector<std::int64_t>{5620, 3620}));
+  EXPECT_EQ(texts(*sheet, schema::TextKind::RoomName).size(), 1U);
+  EXPECT_FALSE(sizes(*sheet, schema::TextKind::Pier).empty());
+
+  // The room schedule and the opening schedule come with the drawing.
+  ASSERT_EQ(sheet->rooms()->size(), 1U);
+  EXPECT_EQ(to_id(sheet->rooms()->Get(0)->room()), kitchen);
+  EXPECT_EQ(sheet->rooms()->Get(0)->kind(), schema::RoomKind::Kitchen);
+  EXPECT_NEAR(sheet->rooms()->Get(0)->area(), 5.62 * 3.62, 1e-9);
+  ASSERT_EQ(sheet->openings()->size(), 2U);
+  const schema::ListedOpening* windows = sheet->openings()->Get(0);
+  EXPECT_EQ(windows->kind(), schema::TextKind::WindowMark);
+  EXPECT_EQ(windows->number(), 1);
+  EXPECT_EQ(windows->width(), 1500);
+  EXPECT_EQ(windows->height(), 1500);
+  EXPECT_EQ(windows->count(), 2);
+  EXPECT_EQ(sheet->openings()->Get(1)->kind(), schema::TextKind::DoorMark);
+  EXPECT_EQ(sheet->openings()->Get(1)->count(), 1);
 }
 
 }  // namespace

@@ -236,6 +236,9 @@ class ResponseDecoderTest {
                 DrawingTable.createLinesVector(builder, intArrayOf(glazing)),
                 DrawingTable.createArcsVector(builder, intArrayOf(swing)),
                 DrawingTable.createTextsVector(builder, intArrayOf(length)),
+                // No rooms and no openings to list.
+                0,
+                0,
             )
         ResultTable.startCommandResult(builder)
         ResultTable.addDrawing(builder, drawing)

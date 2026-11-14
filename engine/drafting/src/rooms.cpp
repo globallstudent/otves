@@ -22,7 +22,7 @@ namespace {
 
 // A name needs about this many digit widths; a space narrower than that and taller than it is
 // wide is written up the plan.
-constexpr double kNameDigits = 8.0;
+constexpr double kShortName = 8.0;
 
 // A text takes at most this share of the stretch it lies in.
 constexpr double kLabelFill = 0.8;
@@ -100,6 +100,47 @@ geom::Vec2 centre(std::span<const geom::Vec2> outline) {
   return sum * (1.0 / (kCentreShare * twice));
 }
 
+// The label moved along its line off what the doors sweep. `named` says whether it is two
+// lines, a name over an area, or the area alone.
+RoomLabel off_swept(RoomLabel label, std::span<const Bounds> swept, bool named, TextSize text) {
+  const Axis axis = label.along.y != 0.0 ? Axis::kY : Axis::kX;
+  const Stretch whole = axis == Axis::kY ? label.tall : label.wide;
+  const double line = across(label.at, axis);
+  const double rise = (named ? 1.0 : 1.0 / 2) * text.height;
+  std::vector<Stretch> taken;
+  for (const Bounds& bounds : swept) {
+    if (across(bounds.low, axis) < line + rise && across(bounds.high, axis) > line - rise) {
+      taken.push_back({.from = along(bounds.low, axis), .to = along(bounds.high, axis)});
+    }
+  }
+  const double width = (named ? kNameDigits : kAreaDigits) * text.digit;
+  const double at = along(label.at, axis);
+  const bool lies_on = std::ranges::any_of(taken, [&](const Stretch& part) {
+    return part.from < at + (width / 2) && part.to > at - (width / 2);
+  });
+  if (!lies_on) {
+    return label;
+  }
+  // The longest part of the stretch between what is taken; the first of equals.
+  std::ranges::sort(taken, {}, &Stretch::from);
+  taken.push_back({.from = whole.to, .to = whole.to});
+  Stretch clear{.from = whole.from, .to = whole.from};
+  double reached = whole.from;
+  for (const Stretch& part : taken) {
+    const double until = std::min(part.from, whole.to);
+    if (until - reached > clear.length()) {
+      clear = {.from = reached, .to = until};
+    }
+    reached = std::max(reached, part.to);
+  }
+  if (clear.length() * kLabelFill < width) {
+    return label;
+  }
+  (axis == Axis::kY ? label.at.y : label.at.x) = clear.middle();
+  label.fit = std::min(label.fit, clear.length());
+  return label;
+}
+
 }  // namespace
 
 std::optional<Stretch> stretch_across(const geom::Space& space, double y, double x) {
@@ -154,7 +195,7 @@ std::optional<RoomLabel> label_of(const geom::Space& space, TextSize text) {
   const geom::Vec2 at{.x = wide->middle(), .y = tall->middle()};
   // The stretch across the plan may be another one at the height the point moved to.
   const Stretch level = pick(stretches(space, Axis::kX, at.y), at.x).value_or(*wide);
-  const bool upright = level.length() < kNameDigits * text.digit && tall->length() > level.length();
+  const bool upright = level.length() < kShortName * text.digit && tall->length() > level.length();
   if (upright) {
     return RoomLabel{.at = at,
                      .along = {.x = 0.0, .y = 1.0},
@@ -171,6 +212,29 @@ std::optional<RoomLabel> label_of(const geom::Space& space, TextSize text) {
                    .tall = *tall};
 }
 
+std::vector<ListedRoom> list_rooms(std::span<const RoomSpace> spaces, TextSize text) {
+  struct Placed {
+    geom::Vec2 at;
+    ListedRoom room;
+  };
+  std::vector<Placed> placed;
+  for (const RoomSpace& room : spaces) {
+    if (const std::optional<RoomLabel> label = label_of(room.space, text)) {
+      placed.push_back({.at = label->at,
+                        .room = {.room = room.room, .kind = room.kind, .area = room.space.area}});
+    }
+  }
+  std::ranges::stable_sort(placed, [](const Placed& lhs, const Placed& rhs) {
+    return lhs.at.y != rhs.at.y ? lhs.at.y > rhs.at.y : lhs.at.x < rhs.at.x;
+  });
+  std::vector<ListedRoom> listed;
+  listed.reserve(placed.size());
+  for (const Placed& entry : placed) {
+    listed.push_back(entry.room);
+  }
+  return listed;
+}
+
 void draw_floors(std::span<const RoomSpace> spaces, Drawing& drawing) {
   for (const RoomSpace& room : spaces) {
     drawing.polygons.push_back({.element = room.room,
@@ -180,14 +244,15 @@ void draw_floors(std::span<const RoomSpace> spaces, Drawing& drawing) {
   }
 }
 
-void write_rooms(std::span<const RoomSpace> spaces, const RoomSpace* focused, TextSize text,
-                 Drawing& drawing) {
+void write_rooms(std::span<const RoomSpace> spaces, const RoomSpace* focused,
+                 std::span<const Bounds> swept, TextSize text, Drawing& drawing) {
   for (const RoomSpace& room : spaces) {
-    const std::optional<RoomLabel> label = label_of(room.space, text);
-    if (&room == focused || !label || label->across < text.height) {
+    const std::optional<RoomLabel> found = label_of(room.space, text);
+    if (&room == focused || !found || found->across < text.height) {
       continue;
     }
-    const bool named = !room.room.is_nil() && label->across >= 2 * text.height;
+    const bool named = !room.room.is_nil() && found->across >= 2 * text.height;
+    const std::optional<RoomLabel> label = off_swept(*found, swept, named, text);
     const geom::Vec2 up = geom::perp(label->along) * (text.height / 2);
     if (named) {
       drawing.texts.push_back({.element = room.room,

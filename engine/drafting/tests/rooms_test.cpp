@@ -5,11 +5,13 @@
 
 #include <gtest/gtest.h>
 
+#include <otves/core/opening.h>
 #include <otves/core/point.h>
 #include <otves/core/room.h>
 #include <otves/core/units.h>
 #include <otves/core/uuid.h>
 #include <otves/drafting/plan.h>
+#include <otves/geom/openings.h>
 #include <otves/geom/vec2.h>
 #include <otves/geom/wall_joins.h>
 
@@ -190,6 +192,37 @@ TEST(DraftRooms, WallLengthsKeepClearOfARoomsLabel) {
     return geom::length(length.at - names[0].at) >= 0.4;
   }));
   EXPECT_EQ(std::ranges::count_if(lengths, upright_outside), 2);
+}
+
+TEST(DraftRooms, ALabelMovesOffWhatADoorSweepsWhereThereIsRoomForIt) {
+  // Two rooms, one over the other; a door in the wall between them opens down the plan into the
+  // lower one, 1.6 m deep, over the middle of its floor.
+  std::vector<geom::WallInput> walls = box(6000, 4000);
+  walls.push_back(wall(5, at(0, 2000), at(6000, 2000)));
+  const std::vector<geom::PlacedOpening> openings{{.id = id(20),
+                                                   .wall = walls[4].wall,
+                                                   .opening = {.wall = id(5),
+                                                               .offset = 2800_mm,
+                                                               .width = 900_mm,
+                                                               .height = 2100_mm,
+                                                               .sill = 0_mm,
+                                                               .kind = OpeningKind::kDoor,
+                                                               .swing = Swing::kRight}}};
+  Plan plan{.walls = walls, .openings = openings, .below = {}};
+
+  // The leaf sweeps from 2.8 to 3.7 m: the area goes to the middle of the longer part beside
+  // it, from the wall at 0.2 m. The upper room's stays in its middle.
+  const std::vector<Text> areas = texts(draft(plan, kText), TextKind::kRoomArea);
+  ASSERT_EQ(areas.size(), 2U);
+  expect_near(areas[0].at, {.x = 1.5, .y = 1.0});
+  expect_near(areas[1].at, {.x = 3.0, .y = 3.0});
+
+  // A name is taken to need more room than that part has: it stays where it was.
+  const std::vector<NamedRoom> rooms{room(10, at(3000, 1000), RoomKind::kHall)};
+  plan.rooms = rooms;
+  const std::vector<Text> names = texts(draft(plan, kText), TextKind::kRoomName);
+  ASSERT_EQ(names.size(), 1U);
+  expect_near(names[0].at, {.x = 3.0, .y = 1.0 + 0.15});
 }
 
 }  // namespace

@@ -121,6 +121,7 @@ struct View {
   drafting::TextSize text;
   std::optional<PointMm> focus;
   ElementId selected;  // nil for none
+  bool sheet = false;  // every space with its sizes, for a sheet
 };
 
 // A size on the plan and the value typed for it (schema SetDimension): the handle a drawing's

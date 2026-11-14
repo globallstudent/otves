@@ -13,6 +13,8 @@ The plans mark each opening, ОК-1 or ДВ-1, and list the marks in a schedule.
 - **An opening stores its hinge and its swing.** `hinge` is the edge the leaf hangs on: the near one, towards the wall's start, or the far one. `swing` is the side the leaf opens to: the wall's left or right, looking from its start. Both are the wall's own terms, so they hold when the wall moves. A window keeps them unused.
 - **Marks are derived, never stored.** Openings of one kind, width and height share a mark. A kind's marks are numbered in the order of the oldest opening of each size, so adding a size never renumbers the others. The number goes out with the drawing; the app writes the letters of the kind.
 - **A mark is drawn for the selected opening on the screen and for every opening on a sheet.** The painter decides; the drawing always has them.
+- **A mark stands by the face its leaf does not open to, or the nearest place clear of the sizes.** On a sheet both rooms have a chain along the wall, so the mark goes past one.
+- **The schedule is derived with the marks.** Every drawing lists the job's marks with their sizes and counts; a sheet prints the list beside the plan, so it cannot fall behind.
 - **The selected opening gets the chain of the side it is in.** `Draw` names the selected element; the engine writes wall, opening, wall along that side of the room the opening is in, each number a handle (ADR 0016).
 - **Centring is the engine's.** `CenterOpening` puts an opening in the middle of the side of the room it is in, or of its wall when no room is there.
 
@@ -24,9 +26,9 @@ The plans mark each opening, ОК-1 or ДВ-1, and list the marks in a schedule.
 ```mermaid
 flowchart LR
   O["openings of the job<br/>kind · width · height"] --> M["mark_openings<br/>one number per size, oldest first"]
-  M --> T["drawing<br/>a mark beside each opening,<br/>on the side it does not open to"]
+  M --> T["drawing<br/>a mark beside each opening,<br/>clear of the sizes written there"]
   T --> P["painter<br/>the selected one, or all on a sheet"]
-  M --> S["schedule (slice 7)"]
+  M --> S["Drawing.openings<br/>the schedule a sheet prints"]
 ```
 
 ## Alternatives
@@ -41,5 +43,6 @@ flowchart LR
 
 - Bridge schema: `Hinge`, `Swing`, the two fields of `Opening`, the commands `SetOpeningHinge`, `SetOpeningSwing` and `CenterOpening`, their kinds and field codes, `Draw.selected` and a text kind for marks are appended.
 - Job file version 8: `opening` gains `hinge` and `swing`; old doors keep the way they were drawn.
+- Bridge schema: `ListedOpening` and `Drawing.openings` are appended for the schedule.
 - A door of two leaves and a sliding door are not modelled yet.
 - The sill and the height of a window are not typed in the app yet; sizes come from the list.

@@ -55,13 +55,29 @@ struct RoomLabel {
 // centre, then of the one up the plan through that point. Nothing for a space with no floor.
 [[nodiscard]] std::optional<RoomLabel> label_of(const geom::Space& space, TextSize text);
 
+// The level's room schedule: every space with a floor, in reading order: from the top of the
+// plan down and, at one height, from the left, by where each would be labelled.
+[[nodiscard]] std::vector<ListedRoom> list_rooms(std::span<const RoomSpace> spaces, TextSize text);
+
 // The floors, in the order given.
 void draw_floors(std::span<const RoomSpace> spaces, Drawing& drawing);
 
+// A room's name is taken to be at most this many digits wide and its area this many: the engine
+// does not know the words.
+inline constexpr double kNameDigits = 16.0;
+inline constexpr double kAreaDigits = 7.0;
+
+// A part of the plan between two corners, along its axes.
+struct Bounds {
+  geom::Vec2 low;
+  geom::Vec2 high;
+};
+
 // Each room's name over its area, or the area alone in a space with no name or too low for two
 // lines. A space lower than a line gets nothing, and so does `focused`, which is drawn with its
-// sizes.
-void write_rooms(std::span<const RoomSpace> spaces, const RoomSpace* focused, TextSize text,
-                 Drawing& drawing);
+// sizes. A label that would lie on one of `swept`, what the doors' leaves sweep, moves along
+// its line to the longest part that is clear, if that part has room for it.
+void write_rooms(std::span<const RoomSpace> spaces, const RoomSpace* focused,
+                 std::span<const Bounds> swept, TextSize text, Drawing& drawing);
 
 }  // namespace otves::drafting

@@ -304,13 +304,16 @@ void write_opening_sizes(std::span<const RoomSpace> spaces, std::span<const geom
 }
 
 void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
-                 std::span<const geom::PlacedOpening> openings, TextSize text, Drawing& drawing) {
+                 std::span<const geom::PlacedOpening> openings, Stroke stroke, TextSize text,
+                 Drawing& drawing) {
   const geom::Space& space = room.space;
   const std::size_t first = drawing.texts.size();  // the numbers of this space come after
   for (const geom::Side& side : geom::sides_of(space, walls)) {
     const std::vector<Gap> gaps = gaps_of(side, openings);
     if (!gaps.empty()) {
-      write(chain_along(side, gaps, text), text, drawing);
+      Chain chain = chain_along(side, gaps, text);
+      chain.stroke = stroke;
+      write(chain, text, drawing);
     }
   }
   const std::optional<RoomLabel> label = label_of(space, text);
@@ -338,7 +341,9 @@ void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
       break;
     }
   }
-  write(clear_size(space, true, height, wide), text, drawing);
+  Chain level = clear_size(space, true, height, wide);
+  level.stroke = stroke;
+  write(level, text, drawing);
   double across = label->wide.from + inset;
   Stretch tall = label->tall;
   for (;; across += step) {
@@ -352,7 +357,9 @@ void write_sizes(const RoomSpace& room, std::span<const geom::WallInput> walls,
       break;
     }
   }
-  write(clear_size(space, false, across, tall), text, drawing);
+  Chain upright = clear_size(space, false, across, tall);
+  upright.stroke = stroke;
+  write(upright, text, drawing);
 }
 
 }  // namespace otves::drafting
