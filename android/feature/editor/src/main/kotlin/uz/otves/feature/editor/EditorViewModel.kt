@@ -8,15 +8,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import uz.otves.core.model.Currency
 import uz.otves.core.model.ElementId
 import uz.otves.core.model.Mm
 import uz.otves.core.model.Money
 import uz.otves.core.model.mm
 import uz.otves.data.catalog.Prices
+import uz.otves.data.project.JobSession
 import uz.otves.data.project.JobStore
+import uz.otves.data.project.Outcome
 import uz.otves.engine.Aimed
 import uz.otves.engine.Catalog
 import uz.otves.engine.CommandResult
@@ -26,7 +26,6 @@ import uz.otves.engine.Drawing
 import uz.otves.engine.Engine
 import uz.otves.engine.EngineCommand
 import uz.otves.engine.EngineError
-import uz.otves.engine.EngineResponse
 import uz.otves.engine.Footing
 import uz.otves.engine.Issue
 import uz.otves.engine.IssueKind
@@ -46,7 +45,6 @@ import uz.otves.engine.Wall
 import uz.otves.engine.WallLayer
 import uz.otves.engine.WallOutline
 import uz.otves.engine.WallRole
-import uz.otves.engine.WallType
 import uz.otves.engine.WallTypeTemplate
 import kotlin.math.abs
 
@@ -286,29 +284,22 @@ internal data class EditorUiState(
  * The plan of one job, one storey at a time. The engine owns the model and answers every question
  * of geometry (docs/adr/0011); this keeps what the screen draws, the values of what can be
  * selected and the conversation with the builder: the tool, the run of walls being drawn, the
- * digits typed so far. Everything shown comes from engine responses, and every response is
- * written to the job file. The view model owns [job] and closes it when cleared.
+ * digits typed so far. Everything shown comes from engine responses. It speaks to the engine
+ * through a [JobSession], which writes every response to the job file and mirrors the model, one
+ * step at a time. The view model owns [job] and closes it when cleared.
  */
 internal class EditorViewModel(
-    private val engine: Engine,
+    engine: Engine,
     loadContent: suspend () -> EngineCommand.LoadContent,
     loadCatalog: suspend () -> Catalog,
-    private val job: JobStore,
+    job: JobStore,
     private val prices: Prices,
 ) : ViewModel() {
     private val state = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = state.asStateFlow()
 
-    // Undo stops at the user's first step, so it never removes the ground floor of a new job.
-    private var userSteps = 0
-    private val levels = mutableMapOf<ElementId, Level>()
-    private val walls = mutableMapOf<ElementId, Wall>()
-    private val openings = mutableMapOf<ElementId, Opening>()
-    private val wallTypes = mutableMapOf<ElementId, WallType>()
-    private val wallLayers = mutableMapOf<ElementId, WallLayer>()
-    private var conditions: Pair<ElementId, Conditions>? = null
-    private var wallOutlines: List<WallOutline> = emptyList()
-    private var allIssues: List<Issue> = emptyList()
+    private val session = JobSession(engine, job)
+    private val model get() = session.model
 
     // How big the plan's label text is at the zoom the canvas told last; the engine places the
     // labels by it.
@@ -333,50 +324,37 @@ internal class EditorViewModel(
     // The sketched walls already asked for a length in this pass; one the engine refused is not asked twice.
     private val refined = mutableSetOf<ElementId>()
 
-    // One step at a time, in the order the builder made them: each sees what the ones before it
-    // left, and the log keeps the engine's order.
-    private val turn = Mutex()
-
     init {
         viewModelScope.launch { prices.all.collect { all -> state.update { it.copy(prices = all) } } }
-        viewModelScope.launch {
-            turn.withLock {
-                val saved = job.load()
-                val commands =
-                    buildList {
-                        add(loadContent())
-                        add(EngineCommand.OpenModel(saved.elements, saved.clock))
-                        // A new job comes with its ground floor.
-                        if (saved.elements.values.none { it is Level }) add(EngineCommand.AddLevel(Ground))
-                    }
-                val response = engine.send(commands)
-                job.record(response)
-                apply(response)
-                show(orderedLevels().firstOrNull())
-                val catalog = loadCatalog()
-                state.update { current ->
-                    // New walls go on as the job's walls are: the material and thickness of one of them.
-                    val like = walls.values.lastOrNull { it.unit != null } ?: walls.values.lastOrNull()
-                    val thickness =
-                        like?.thickness ?: catalog.units
-                            .firstOrNull()
-                            ?.thicknesses
-                            ?.let(::usual) ?: current.thickness
-                    current.copy(
-                        ready = levels.isNotEmpty(),
-                        name = saved.name,
-                        catalog = catalog,
-                        material = like?.unit,
-                        thickness = thickness,
-                        // A job built from wall types goes on with the one used last.
-                        kind = walls.values.lastOrNull()?.type,
-                    )
-                }
+        act {
+            apply(session.open(loadContent(), Ground))
+            show(model.levelsFromBottom().firstOrNull())
+            val catalog = loadCatalog()
+            state.update { current ->
+                // New walls go on as the job's walls are: the material and thickness of one of them.
+                val like = model.walls.values.lastOrNull { it.unit != null } ?: model.walls.values.lastOrNull()
+                val thickness =
+                    like?.thickness ?: catalog.units
+                        .firstOrNull()
+                        ?.thicknesses
+                        ?.let(::usual) ?: current.thickness
+                current.copy(
+                    ready = model.levels.isNotEmpty(),
+                    name = session.name,
+                    catalog = catalog,
+                    material = like?.unit,
+                    thickness = thickness,
+                    // A job built from wall types goes on with the one used last.
+                    kind =
+                        model.walls.values
+                            .lastOrNull()
+                            ?.type,
+                )
             }
         }
     }
 
-    override fun onCleared() = job.close()
+    override fun onCleared() = session.close()
 
     /**
      * A tap on the plan. The select tool picks what is under it; with the wall tool it is a point
@@ -580,10 +558,10 @@ internal class EditorViewModel(
     }
 
     // Where the run's next wall starts.
-    private fun Run.tip(): PointMm = built.lastOrNull()?.let { walls[it]?.end } ?: first
+    private fun Run.tip(): PointMm = built.lastOrNull()?.let { model.walls[it]?.end } ?: first
 
     // Where the run's last wall started: a measured wall turns from that wall's direction.
-    private fun Run.before(): PointMm? = built.lastOrNull()?.let { walls[it]?.start }
+    private fun Run.before(): PointMm? = built.lastOrNull()?.let { model.walls[it]?.start }
 
     // The run as the screen shows it: where its next wall starts, with nothing aimed or typed yet.
     private fun EditorUiState.withRun(): EditorUiState {
@@ -610,17 +588,12 @@ internal class EditorViewModel(
      * say for each; null for a storey that has no size.
      */
     suspend fun sheets(sizes: List<LabelSize?>): List<Drawing?> =
-        turn.withLock {
+        session.inTurn {
             val asked =
-                orderedLevels().zip(sizes).mapNotNull { (level, size) ->
+                model.levelsFromBottom().zip(sizes).mapNotNull { (level, size) ->
                     size?.let { EngineCommand.Draw(level, it.height, it.digit) }
                 }
-            val drawings =
-                engine
-                    .send(asked)
-                    .results
-                    .map { (it as? CommandResult.Done)?.drawing }
-                    .iterator()
+            val drawings = session.ask(asked).map { (it as? CommandResult.Done)?.drawing }.iterator()
             sizes.map { size -> if (size == null || !drawings.hasNext()) null else drawings.next() }
         }
 
@@ -630,7 +603,7 @@ internal class EditorViewModel(
     private suspend fun redraw() {
         val drawing =
             state.value.level?.let { level ->
-                (engine.send(listOf(draw(level))).results.singleOrNull() as? CommandResult.Done)?.drawing
+                (session.ask(listOf(draw(level))).singleOrNull() as? CommandResult.Done)?.drawing
             }
         state.update { it.copy(drawing = drawing ?: Drawing()) }
     }
@@ -877,7 +850,7 @@ internal class EditorViewModel(
 
     fun selectLevel(level: ElementId) =
         act {
-            if (level in levels) {
+            if (level in model.levels) {
                 run = null
                 state.update { it.copy(refused = null, selected = null, drawn = null) }
                 show(level)
@@ -886,7 +859,7 @@ internal class EditorViewModel(
 
     /** A storey on top of the highest one, which the user then works on. */
     fun addLevel() {
-        val top = levels.values.maxOfOrNull { it.elevation + it.height } ?: 0.mm
+        val top = model.levels.values.maxOfOrNull { it.elevation + it.height } ?: 0.mm
         send(listOf(EngineCommand.AddLevel(Level(elevation = top, height = StoreyHeight))), showCreated = true)
     }
 
@@ -951,14 +924,14 @@ internal class EditorViewModel(
         reach: Mm,
     ) {
         act {
-            val result = engine.send(listOf(EngineCommand.Pick(onLevel, at, reach))).results.singleOrNull()
+            val result = session.ask(listOf(EngineCommand.Pick(onLevel, at, reach))).singleOrNull()
             val picked = (result as? CommandResult.Done)?.picked
             state.update { it.copy(selected = picked?.let(::selection), refused = null) }
         }
     }
 
     // Asks the engine where a wall would end. The model does not change, so nothing is recorded.
-    private suspend fun ask(aim: EngineCommand): Aimed? = (engine.send(listOf(aim)).results.singleOrNull() as? CommandResult.Done)?.aimed
+    private suspend fun ask(aim: EngineCommand): Aimed? = (session.ask(listOf(aim)).singleOrNull() as? CommandResult.Done)?.aimed
 
     // The near edge moves by half the change in width, so the centre stays; it never passes the
     // wall's start. The engine reports an opening that ends past the wall's end.
@@ -988,9 +961,9 @@ internal class EditorViewModel(
         showCreated: Boolean = false,
     ) = act { execute(commands, showCreated) }
 
-    // Runs [step] in its turn.
+    // Runs [step] in its turn: after the steps the builder made before it.
     private fun act(step: suspend () -> Unit) {
-        viewModelScope.launch { turn.withLock { step() } }
+        viewModelScope.launch { session.inTurn(step) }
     }
 
     // Returns what the first command created. The shown storey's drawing is asked in the same
@@ -1000,99 +973,55 @@ internal class EditorViewModel(
         showCreated: Boolean = false,
     ): ElementId? {
         val level = state.value.level
-        val response = engine.send(commands + listOfNotNull(level?.let(::draw)))
-        job.record(response)
-        // Each group in the log is one step: undo takes one back, anything else adds one.
-        userSteps += response.log.sumOf { if (it.isUndo) -1 else 1 }
-        val created = (response.results.firstOrNull() as? CommandResult.Done)?.created
-        val drawing = (response.results.getOrNull(commands.size) as? CommandResult.Done)?.drawing
+        val outcome = session.execute(commands, questions = listOfNotNull(level?.let(::draw)))
+        val drawing = (outcome.answers.singleOrNull() as? CommandResult.Done)?.drawing
         apply(
-            response.copy(results = response.results.take(commands.size)),
-            show = created.takeIf { showCreated },
+            outcome,
+            show = outcome.created.takeIf { showCreated },
             drawn = if (level != null && drawing != null) level to drawing else null,
         )
-        return created
+        return outcome.created
     }
 
-    // Mirrors the engine's changes, then shows [show], or else stays on the current storey while
-    // it exists; when undo removed it, the top storey left. [drawn] is a storey's drawing that
-    // came with the response.
+    // Shows what a step left: [show], or else the current storey while it exists; when undo
+    // removed it, the top storey left. [drawn] is a storey's drawing that came with the answer.
     private suspend fun apply(
-        response: EngineResponse,
+        outcome: Outcome,
         show: ElementId? = null,
         drawn: Pair<ElementId, Drawing>? = null,
     ) {
-        for (change in response.changes) {
-            when (val element = change.element) {
-                is Level -> {
-                    levels[change.id] = element
-                }
-
-                is Wall -> {
-                    walls[change.id] = element
-                }
-
-                is Opening -> {
-                    openings[change.id] = element
-                }
-
-                is Conditions -> {
-                    conditions = change.id to element
-                }
-
-                is WallType -> {
-                    wallTypes[change.id] = element
-                }
-
-                is WallLayer -> {
-                    wallLayers[change.id] = element
-                }
-
-                null -> {
-                    if (conditions?.first == change.id) conditions = null
-                    levels.remove(change.id) ?: walls.remove(change.id) ?: openings.remove(change.id)
-                        ?: wallTypes.remove(change.id) ?: wallLayers.remove(change.id)
-                }
-            }
-        }
         // Undo and removal take walls off the run: it goes on from the last one still standing.
-        run = run?.let { it.copy(built = it.built.takeWhile { wall -> wall in walls }) }
-        wallOutlines = response.outlines ?: wallOutlines
-        allIssues = response.issues ?: allIssues
+        run = run?.let { it.copy(built = it.built.takeWhile { wall -> wall in model.walls }) }
         state.update { current ->
             current.copy(
                 takeoff =
-                    when (val takeoff = response.takeoff) {
+                    when (val takeoff = outcome.takeoff) {
                         is Takeoff.Lines -> merged(takeoff.lines)
                         is Takeoff.Failed -> emptyList()
                         null -> current.takeoff
                     },
-                takeoffFailed = response.takeoff?.let { it is Takeoff.Failed } ?: current.takeoffFailed,
-                canUndo = response.canUndo && userSteps > 0,
-                canRedo = response.canRedo,
-                refused =
-                    response.results
-                        .filterIsInstance<CommandResult.Failed>()
-                        .firstOrNull()
-                        ?.error,
+                takeoffFailed = outcome.takeoff?.let { it is Takeoff.Failed } ?: current.takeoffFailed,
+                canUndo = model.canUndo,
+                canRedo = model.canRedo,
+                refused = outcome.refused,
                 // The selection follows its element's new value and goes when the element does.
                 selected = current.selected?.let { selection(it.id) },
-                drawn = current.drawn?.takeIf { it in walls },
-                conditions = conditions?.second ?: Conditions(),
+                drawn = current.drawn?.takeIf { it in model.walls },
+                conditions = model.conditions ?: Conditions(),
                 kinds = kinds(),
                 // Undo may take a type away; walls are then drawn with no type again.
-                kind = current.kind?.takeIf { it in wallTypes },
+                kind = current.kind?.takeIf { it in model.wallTypes },
             )
         }
-        show(show?.takeIf { it in levels } ?: state.value.level?.takeIf { it in levels }, drawn)
+        show(show?.takeIf { it in model.levels } ?: state.value.level?.takeIf { it in model.levels }, drawn)
     }
 
     // The job's wall types with their layers from the outer face in. Ids grow with time, so the
     // oldest type comes first.
     private fun kinds(): List<WallKind> =
-        wallTypes.entries.sortedBy { it.key.uuid.toString() }.map { (id, type) ->
+        model.wallTypes.entries.sortedBy { it.key.uuid.toString() }.map { (id, type) ->
             val layers =
-                wallLayers.entries
+                model.wallLayers.entries
                     .filter { it.value.type == id }
                     .sortedWith(compareBy({ it.value.position }, { it.key.uuid.toString() }))
                     .map { it.key to it.value }
@@ -1108,7 +1037,7 @@ internal class EditorViewModel(
             .map { same -> same.first().copy(amount = same.sumOf { it.amount }) }
 
     private fun selection(id: ElementId): Selected? =
-        walls[id]?.let { Selected.WallPart(id, it) } ?: openings[id]?.let { Selected.OpeningPart(id, it) }
+        model.walls[id]?.let { Selected.WallPart(id, it) } ?: model.openings[id]?.let { Selected.OpeningPart(id, it) }
 
     // Shows a storey: [drawn] is its drawing if one came with the response, else the engine is
     // asked for it.
@@ -1116,10 +1045,10 @@ internal class EditorViewModel(
         level: ElementId?,
         drawn: Pair<ElementId, Drawing>? = null,
     ) {
-        val ordered = orderedLevels()
+        val ordered = model.levelsFromBottom()
         val shown = level ?: ordered.lastOrNull()
         if (shown != state.value.level) run = null
-        val storeys = ordered.map { storey -> Storey(storey, wallOutlines.filter { it.level == storey }) }
+        val storeys = ordered.map { storey -> Storey(storey, model.outlines.filter { it.level == storey }) }
         val outlines = storeys.find { it.level == shown }?.outlines.orEmpty()
         state.update { current ->
             val sameLevel = shown == current.level
@@ -1131,24 +1060,18 @@ internal class EditorViewModel(
                     outlines = outlines,
                     dimensions =
                         outlines.mapNotNull { outline ->
-                            walls[outline.wall]?.let { Dimension(outline.wall, it, outline.length) }
+                            model.walls[outline.wall]?.let { Dimension(outline.wall, it, outline.length) }
                         },
                     drawing = drawn?.second?.takeIf { drawn.first == shown } ?: current.drawing,
-                    issues = allIssues.filter { it.level == shown },
-                    ringBeam = levels[shown]?.ringBeam ?: 0.mm,
-                    footing = levels[shown]?.footing,
-                    junctionMeshes = levels[shown]?.junctionMeshes ?: false,
+                    issues = model.issues.filter { it.level == shown },
+                    ringBeam = model.levels[shown]?.ringBeam ?: 0.mm,
+                    footing = model.levels[shown]?.footing,
+                    junctionMeshes = model.levels[shown]?.junctionMeshes ?: false,
                     selected = if (sameLevel) current.selected else null,
                 ).withRun()
         }
         if (drawn?.first != shown) redraw()
     }
-
-    // By elevation; storeys at one elevation keep the order of their ids, which grow with time.
-    private fun orderedLevels(): List<ElementId> =
-        levels.entries
-            .sortedWith(compareBy<Map.Entry<ElementId, Level>> { it.value.elevation }.thenBy { it.key.uuid.toString() })
-            .map { it.key }
 
     // The thickness walls start in: the one nearest the middle of what the unit builds.
     private fun usual(thicknesses: List<Mm>): Mm? = thicknesses.getOrNull(thicknesses.size / 2)

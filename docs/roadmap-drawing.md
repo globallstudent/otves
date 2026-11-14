@@ -13,7 +13,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Rooms | None | No names, areas or room schedule |
 | Dimensions | One length per wall, along its location line | Plans give clear room sizes and chains along walls |
 | Openings | Offset, size, sill, kind | No hinge side, swing, marks or schedule |
-| Editor | `EditorViewModel` about 1 200 lines: it mirrors the model and talks to the engine and the job file. The screen is split into tool bar, panels and number pads | Every feature still lands in the view model |
+| Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
 | Tests | GoogleTest units, Kotlin unit tests, three instrumented suites | No golden jobs, no property tests, no screenshot tests, no benchmark |
 
 ## Target shape
@@ -137,9 +137,9 @@ Slice 1 comes first because it is the smallest end-to-end change: it proves the 
 
 | Step | Result | Status |
 |---|---|---|
-| `data/project/JobSession` | One place sends commands and records the response, in order. It holds the mirrored model. The view model maps it to `UiState` | open, before slice 4 |
+| `data/project/JobSession` | One place sends commands and records the response, in order. It holds the mirrored model. The view model maps it to `UiState` | done |
 | Split `EditorScreen.kt` | Tool bar, tool options, panels and number pads in files of their own, each under about 400 lines | done |
-| Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState` | open, before slice 4 |
+| Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState` | open |
 | `core/designsystem` | Round button, panel, inspector row, number pad, switch row | when a second feature needs them |
 | Tool bar | Five icons, the chosen one filled; names in the tools sheet | done |
 | Tool options | One movable button per screen; its rows come from the tool. It hides for a tool with nothing to choose. Position and options persist per device | done, but the position lasts only while the app lives |

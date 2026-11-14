@@ -37,7 +37,7 @@ flowchart TB
 | `android/core/model` | Value types shared by features: `Mm`, `Money`, `ElementId` | exists |
 | `android/core/designsystem` | Colour roles, dimensions, theme, segmented control | exists |
 | `android/app` | Activity, splash, Navigation 3 back stack from the job list to the editor | exists |
-| `android/data/project` | One Room file per job (`<job id>.job`): element rows and the op log, written after every engine response (ADR 0007) | exists |
+| `android/data/project` | One Room file per job (`<job id>.job`): element rows and the op log, written after every engine response (ADR 0007); `JobSession`, the one place that sends commands to the engine, writes each response and mirrors the model | exists |
 | `android/data/catalog` | The app-wide catalog database: the builder's own price for one unit of each take-off item, the same for every job | exists |
 | `android/engine-bridge` | Builds `libdesign.so` from `engine/` with vcpkg and NDK r30; `EngineSession.send` with typed commands and responses | exists |
 | `android/feature/projects` | The jobs on this phone, newest first; create, rename, delete | exists |
@@ -60,15 +60,19 @@ flowchart TB
 ```mermaid
 sequenceDiagram
   participant E as editor ViewModel
+  participant S as JobSession
   participant G as engine (libdesign.so)
-  participant J as data/project (Room)
-  E->>J: load()
-  J-->>E: element rows, newest stamp
-  E->>G: LoadContent, OpenModel
-  loop every edit
-    E->>G: command
-    G-->>E: changes, outlines, take-off, log groups
-    E->>J: record(response), one transaction
+  participant J as job file (Room)
+  E->>S: open(content)
+  S->>J: load()
+  J-->>S: element rows, newest stamp
+  S->>G: LoadContent, OpenModel
+  loop every step, one at a time
+    E->>S: execute(commands, questions)
+    S->>G: commands, then questions such as Draw
+    G-->>S: changes, outlines, take-off, log groups, answers
+    S->>J: record(response), one transaction
+    S-->>E: results, answers; the mirrored model
   end
 ```
 
