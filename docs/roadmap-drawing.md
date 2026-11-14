@@ -14,7 +14,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value; a partition goes across a room at a typed distance from one of its walls; a room is built from its clear size at a touched corner (ADR 0016) | A room built against an outer corner is not flush with it; a room cannot be turned off the plan's axes |
 | Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred; a sheet lists the marks with their sizes and counts (ADR 0017) | Sill and height are not typed in the app; no two-leaf doors |
 | Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
-| Tests | GoogleTest units with seeded random plans and strokes, Kotlin unit tests, three instrumented suites, one of the reference plans as a golden test of the drawing | No golden take-off, no screenshot tests, no benchmark |
+| Tests | GoogleTest units with seeded random plans and strokes, Kotlin unit tests, three instrumented suites, one of the reference plans as a golden test of the drawing | No golden take-off, no screenshot tests; the benchmark is not run in CI |
 
 ## Target shape
 
@@ -175,7 +175,7 @@ A new element type touches the model tuple, the op variant, `Document::plan` and
 | Bridge | Every new command and result in `session_test.cpp`, valid and corrupt |
 | Job file | A migration test per version; an instrumented test that saves and reopens a golden job |
 | Screens | Roborazzi images of `PlanPainter` on a fixed drawing and of each new panel. Not set up yet: the painter was checked by eye on the emulator and on a PDF |
-| Speed | A benchmark derives joins, layers, rooms and the drawing for 500 walls; the budget is one frame |
+| Speed | A benchmark derives joins, layers, rooms and the drawing for 500 walls; the budget is one frame. Built as `engine/tools/bench`: 511 walls with as many openings and 240 rooms take 2,0 ms for the screen and 150 ms for a sheet on a desktop core; a house of 60 walls 0,2 ms. `otves_bench 8.3` fails over a frame; CI does not run it yet |
 | Device | The emulator checklist from the last change: draw, type a length, undo, refuse |
 
 Rules that already hold stay: clang-tidy over every file, ASan and TSan presets, Spotless, lint, a green run after every push. Roborazzi, Robolectric and a benchmark library are new dependencies; each is pinned at its latest stable version when its slice starts.
@@ -185,7 +185,7 @@ Rules that already hold stay: clang-tidy over every file, ASan and TSan presets,
 | Risk | Answer |
 |---|---|
 | Text width is unknown to the engine | Per-character width factors in `drafting`; the painter never moves a label, it may only hide one |
-| `Draw` on every drag frame | Derive one level, not the job; the benchmark guards it |
+| `Draw` on every drag frame | Derive one level, not the job; a screen's drawing writes the selected opening's mark only; the benchmark guards it |
 | Walls that cross without being split read as one room on both sides | The join reports the crossing as an overlap; a property test checks that walls and floors tile random plans |
 | Layer order on a wall drawn the other way | `mirrored`, set by the room and pencil tools from the loop's direction |
 | Marks renumber when a size is added | Marks follow the oldest opening of each size |

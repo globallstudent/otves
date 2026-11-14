@@ -37,6 +37,7 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 |---|---|
 | Engine tests, AddressSanitizer + UBSan | `ctest --preset desktop-asan` (in `engine/`) |
 | Engine tests, ThreadSanitizer | `cmake --preset desktop-tsan`, then build and `ctest` with the same preset |
+| Engine speed | `cmake --preset desktop-release`, build, then `build/desktop-release/tools/bench/otves_bench` (in `engine/`) |
 | C++ format check | `clang-format --dry-run --Werror` on `engine/**/*.{h,cpp}` |
 | C++ static analysis | `run-clang-tidy -p build/desktop-asan` (in `engine/`) |
 | App build, unit tests, Android Lint | `./gradlew build` (in `android/`) |

@@ -34,3 +34,7 @@ add_subdirectory(geom)
 add_subdirectory(drafting)
 add_subdirectory(takeoff)
 add_subdirectory(bridge)
+
+if(OTVES_BUILD_TESTS)
+  add_subdirectory(tools/bench)
+endif()
