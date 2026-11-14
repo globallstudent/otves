@@ -8,11 +8,11 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 
 | Area | Today | What blocks the goal |
 |---|---|---|
-| Drawing | `drafting::draft` places lengths and opening symbols; one `PlanPainter` paints the screen and the PDF (ADR 0013) | Only wall lengths and opening symbols are drawn yet |
+| Drawing | `drafting::draft` places everything on the plan; one `PlanPainter` paints the screen and the PDF (ADR 0013). The plans go out as PDF sheets: a frame, every room's sizes, the room and opening schedules, a legend and a title block | A sheet is fitted to A4, not drawn at a named scale; sizes on paper are ratios of the text height, not the СПДС offsets |
 | Wall | A wall names a type made of layers; the plan hatches them and the take-off counts each (ADR 0014). The wall panel shows the location line | A type starts from a catalog template; its layers cannot be edited yet |
-| Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015) | No room schedule; a room's clear sizes cannot be typed yet |
+| Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015). A sheet lists them with their areas | A label may still lie under a door's swing in a room too small to move it |
 | Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value (ADR 0016) | A wall cannot be placed at a typed distance yet, and there is no room tool |
-| Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred (ADR 0017) | No schedule yet; sill and height are not typed in the app; no two-leaf doors |
+| Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred; a sheet lists the marks with their sizes and counts (ADR 0017) | Sill and height are not typed in the app; no two-leaf doors |
 | Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
 | Tests | GoogleTest units, Kotlin unit tests, three instrumented suites | No golden jobs, no property tests, no screenshot tests, no benchmark |
 
@@ -66,8 +66,8 @@ The engine answers a `Draw` query with a `Drawing` for one level.
 | Text | kind (length, area, room name code, mark), value, anchor, angle |
 | Handle | the element and, for a dimension, what editing it means |
 
-- `Draw` names the level and how big the label text is on the plan: a line's height and a digit's width in plan millimetres. The engine uses them to place labels and drop the ones that do not fit. The purpose (screen or sheet) joins it in slice 7.
-- Tick sizes, text heights and offsets of SPDS go to `content/norms/drafting.luau` (rule 5) with the sheets of slice 7: on a screen sizes scale with the label text, so until then the only numbers are layout ratios in `drafting`.
+- `Draw` names the level and how big the label text is on the plan: a line's height and a digit's width in plan millimetres. The engine uses them to place labels and drop the ones that do not fit. `Draw.sheet` says the drawing is for a sheet: every space gets its sizes.
+- The sheet's size, its frame and the height of its text are in `content/catalog/sheet.json` (rule 5), read by the app that lays the page out. Ticks and offsets stay ratios of the text height in `drafting`, on a sheet as on a screen. The СПДС offsets on paper, 10 mm to the first dimension line and 7 mm between lines, are open.
 - One `PlanPainter` over `android.graphics.Canvas` serves Compose and the PDF. It maps `Fill` and `Stroke` to paints and formats numbers; it positions nothing.
 - `Response.outlines` stays, for the plan's extent and the walls' lengths. `Response.openings` has no reader in the app any more.
 
@@ -130,8 +130,8 @@ flowchart LR
 | 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; layers of a type are not edited yet |
 | 4 | Rooms | `geom/spaces`, `Room`, floors and room texts in `drafting` | Room labels, room panel | v7 | G31, G34 | built; a room's sizes come with slice 5 |
 | 5 | Dimensions | Sizes in `drafting`, `SetDimension`, `translate_wall`, `set_distance`; `across`, `room_walls` | Tap a size, wall by distance, room tool | — | G35, G36 | sizes and typed sizes built; wall by distance and the room tool open |
-| 6 | Openings | hinge, swing, marks, `CenterOpening`, the selected opening's chain | Door panel | v8 | G37 | built; schedules come with the sheets |
-| 7 | Sheets | sheet purpose in `Draw`, schedules | Frame, tables, legend, PDF | — | G38 | |
+| 6 | Openings | hinge, swing, marks, `CenterOpening`, the selected opening's chain | Door panel | v8 | G37 | built |
+| 7 | Sheets | `Draw.sheet`, room and opening schedules, marks clear of sizes | Frame, tables, legend, title block, PDF of plans | — | G38 | built; one storey to an A4 page, fitted, not at a named scale |
 
 Slice 1 comes first because it is the smallest end-to-end change: it proves the recipe below before the larger slices use it. Columns, porch, stairs, tracing over a PDF, roof, facades and 3D follow slice 7.
 

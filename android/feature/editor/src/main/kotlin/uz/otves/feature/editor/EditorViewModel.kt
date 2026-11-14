@@ -620,13 +620,18 @@ internal class EditorViewModel(
 
     /**
      * Every storey's drawing for a sheet, from the bottom up, with label text as big as [sizes]
-     * say for each; null for a storey that has no size.
+     * say for each; null for a storey that has no size. For a sheet of [plans] every room is drawn
+     * with its sizes.
      */
-    suspend fun sheets(sizes: List<LabelSize?>): List<Drawing?> =
+    suspend fun sheets(
+        sizes: List<LabelSize?>,
+        plans: Boolean = false,
+    ): List<Drawing?> =
         session.inTurn {
+            // A sheet of plans has every room's sizes; the estimate's small plans do not.
             val asked =
                 model.levelsFromBottom().zip(sizes).mapNotNull { (level, size) ->
-                    size?.let { EngineCommand.Draw(level, it.height, it.digit) }
+                    size?.let { EngineCommand.Draw(level, it.height, it.digit, sheet = plans) }
                 }
             val drawings = session.ask(asked).map { (it as? CommandResult.Done)?.drawing }.iterator()
             sizes.map { size -> if (size == null || !drawings.hasNext()) null else drawings.next() }

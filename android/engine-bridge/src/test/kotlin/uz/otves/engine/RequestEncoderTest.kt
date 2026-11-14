@@ -276,8 +276,16 @@ class RequestEncoderTest {
         assertThat(Uuid.fromLongs(draw.level().high(), draw.level().low())).isEqualTo(level.uuid)
         assertThat(draw.textHeight()).isEqualTo(400L)
         assertThat(draw.digitWidth()).isEqualTo(210L)
-        // No space is in focus unless the app names a point.
+        // No space is in focus unless the app names a point, and the screen's drawing is no sheet.
         assertThat(draw.focus()).isNull()
+        assertThat(draw.sheet()).isFalse()
+    }
+
+    @Test
+    fun aSheetIsAskedWithEveryRoomsSizes() {
+        val request = Request.getRootAsRequest(RequestEncoder.encode(listOf(EngineCommand.Draw(level, 60.mm, 30.mm, sheet = true))))
+
+        assertThat((request.commands(0).command(DrawTable()) as DrawTable).sheet()).isTrue()
     }
 
     @Test

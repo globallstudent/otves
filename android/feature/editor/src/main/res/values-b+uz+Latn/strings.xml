@@ -191,4 +191,17 @@
     <string name="opening_center">O‘rtaga</string>
     <string name="opening_mark">Marka</string>
     <string name="opening_mark_count">%1$s, shunday %2$d ta</string>
+    <string name="share_plans">PDF chizma qilib</string>
+    <string name="share_plans_file">%1$s — rejalar</string>
+    <string name="sheet_plan">%1$d-qavat rejasi</string>
+    <string name="sheet_rooms">Xonalar ro‘yxati</string>
+    <string name="sheet_room_name">Nomi</string>
+    <string name="sheet_room_area">Maydoni, m²</string>
+    <string name="sheet_openings">Teshiklar ro‘yxati</string>
+    <string name="sheet_size">O‘lchami, mm</string>
+    <string name="sheet_count">Soni</string>
+    <string name="sheet_legend">Shartli belgilar</string>
+    <string name="legend_masonry">Terim</string>
+    <string name="legend_facing">Qoplama g‘isht</string>
+    <string name="legend_insulation">Issiqlik qatlami</string>
 </resources>

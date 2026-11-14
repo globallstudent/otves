@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "source": "A4 (ГОСТ 2.301-68, table 1) across, with the frame of ГОСТ 2.104-2006, 5.1, form 1: 20 mm from the edge that is bound and 5 mm from the others; text 2.5 mm high (ГОСТ 2.304-81). Millimetres",
+  "width": 297,
+  "height": 210,
+  "frame": { "binding": 20, "edge": 5 },
+  "text_height": 2.5
+}

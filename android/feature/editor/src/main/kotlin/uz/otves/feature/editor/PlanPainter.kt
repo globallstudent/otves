@@ -92,8 +92,11 @@ internal class PlanPainter(
     private val rooms: RoomLabels,
     /** What an opening's mark says by its kind and number: «ОК-1», «ДВ-2». */
     private val marks: (TextKind, Long) -> String,
-    /** Whether every opening's mark is written, as on a sheet, or only the selected one's. */
-    private val allMarks: Boolean = false,
+    /**
+     * Whether this paints a sheet: every opening's mark is written, not only the selected one's,
+     * and sizes are in ink, not in the colour of what is selected.
+     */
+    private val sheet: Boolean = false,
 ) {
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val line =
@@ -172,7 +175,7 @@ internal class PlanPainter(
         }
         drawing.arcs.forEach { arc(canvas, it, frame) }
         // On a screen a mark belongs to what is selected; a sheet has them all.
-        drawing.texts.filter { !it.isMark || allMarks || it.element == selected }.forEach { text(canvas, it, frame) }
+        drawing.texts.filter { !it.isMark || sheet || it.element == selected }.forEach { text(canvas, it, frame) }
         for (gap in gaps) {
             val warns = gap.element in faulty
             val chosen = gap.element != null && gap.element == selected
@@ -356,9 +359,9 @@ internal class PlanPainter(
 
                 // The sizes of the selected space are in its colour, and so is the mark of the
                 // selected opening.
-                TextKind.CLEAR, TextKind.PIER, TextKind.OPENING_WIDTH -> chain
+                TextKind.CLEAR, TextKind.PIER, TextKind.OPENING_WIDTH -> if (sheet) text else chain
 
-                TextKind.WINDOW_MARK, TextKind.DOOR_MARK, TextKind.EMPTY_MARK -> if (allMarks) name else chain
+                TextKind.WINDOW_MARK, TextKind.DOOR_MARK, TextKind.EMPTY_MARK -> if (sheet) name else chain
 
                 else -> text
             }

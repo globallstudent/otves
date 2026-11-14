@@ -235,15 +235,38 @@ public data class Space(
     public val islands: List<List<PointM>> = emptyList(),
 )
 
+/** A line of a level's room schedule: a space, the room that names it, if one does, and its floor in m². */
+public data class ListedRoom(
+    public val room: ElementId?,
+    public val kind: RoomKind,
+    public val area: Double,
+)
+
+/**
+ * A line of the job's opening schedule: a mark, as the [kind] of its text and its [number], the
+ * size it stands for and how many openings of the job have it.
+ */
+public data class ListedOpening(
+    public val kind: TextKind,
+    public val number: Long,
+    public val width: Mm,
+    public val height: Mm,
+    public val count: Int,
+)
+
 /**
  * One level as a display list (docs/adr/0013), in plan metres: what to draw and where. It is
- * painted in the order of its lists, each in the order given; nothing in it is to be moved.
+ * painted in the order of its lists, each in the order given; nothing in it is to be moved. With
+ * it come the schedules a sheet prints beside the plan: the level's [rooms] in reading order and
+ * the job's [openings] by mark.
  */
 public data class Drawing(
     public val polygons: List<DrawnPolygon> = emptyList(),
     public val lines: List<DrawnLine> = emptyList(),
     public val arcs: List<DrawnArc> = emptyList(),
     public val texts: List<DrawnText> = emptyList(),
+    public val rooms: List<ListedRoom> = emptyList(),
+    public val openings: List<ListedOpening> = emptyList(),
 )
 
 /** What is wrong with an opening or where walls meet; the app shows translated text for each. */

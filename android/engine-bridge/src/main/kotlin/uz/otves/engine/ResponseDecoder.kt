@@ -230,6 +230,22 @@ internal object ResponseDecoder {
                         other = text.other()?.let(::id),
                     )
                 },
+            rooms =
+                List(drawing.roomsLength()) {
+                    val room = drawing.rooms(it)
+                    ListedRoom(room.room()?.let(::id), roomKind(room.kind()), room.area())
+                },
+            openings =
+                List(drawing.openingsLength()) {
+                    val opening = drawing.openings(it)
+                    ListedOpening(
+                        textKind(opening.kind()),
+                        opening.number(),
+                        Mm(opening.width()),
+                        Mm(opening.height()),
+                        opening.count().toInt(),
+                    )
+                },
         )
 
     private fun metres(point: PointMStruct?): PointM {

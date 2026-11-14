@@ -298,6 +298,8 @@ public sealed interface EngineCommand {
         public val focus: PointMm? = null,
         /** The selected element: an opening is drawn with the chain of the side it is in. */
         public val selected: ElementId? = null,
+        /** For a sheet: every space is drawn with its sizes beside its name. */
+        public val sheet: Boolean = false,
     ) : EngineCommand
 
     /**

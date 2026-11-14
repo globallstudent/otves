@@ -191,4 +191,17 @@
     <string name="opening_center">Ўртага</string>
     <string name="opening_mark">Марка</string>
     <string name="opening_mark_count">%1$s, шундай %2$d та</string>
+    <string name="share_plans">PDF чизма қилиб</string>
+    <string name="share_plans_file">%1$s — режалар</string>
+    <string name="sheet_plan">%1$d-қават режаси</string>
+    <string name="sheet_rooms">Хоналар рўйхати</string>
+    <string name="sheet_room_name">Номи</string>
+    <string name="sheet_room_area">Майдони, м²</string>
+    <string name="sheet_openings">Тешиклар рўйхати</string>
+    <string name="sheet_size">Ўлчами, мм</string>
+    <string name="sheet_count">Сони</string>
+    <string name="sheet_legend">Шартли белгилар</string>
+    <string name="legend_masonry">Терим</string>
+    <string name="legend_facing">Қоплама ғишт</string>
+    <string name="legend_insulation">Иссиқлик қатлами</string>
 </resources>

@@ -41,6 +41,11 @@ Terms used in code (English), in the UI (Russian first) and by builders in Uzbek
 | hinge | петли | oshiq-moshiq | The edge of a doorway the leaf hangs on: near, towards the wall's start, or far (ADR 0017) |
 | swing | открывание | ochilish tomoni | The side of its wall a door's leaf opens to |
 | mark | марка | marka | The label openings of one kind and size share on the plan and in the schedule: ОК-1, ДВ-1 |
+| sheet | лист | varaq | A storey's plan laid out to print: in a frame, with every room's sizes, the schedules, the legend and a title block |
+| room schedule | экспликация помещений | xonalar ro‘yxati | The rooms of a storey with their floor areas and the total, beside the plan on a sheet |
+| opening schedule | ведомость проёмов | teshiklar ro‘yxati | The marks of a job with the size each stands for and how many openings have it |
+| legend | условные обозначения | shartli belgilar | What the fills of the walls on a sheet stand for |
+| title block | основная надпись | asosiy yozuv | The corner of a sheet that names the job, the plan and the day |
 | lintel | перемычка | peremichka | Beam over an opening (ГОСТ 948) |
 | bearing | опирание | tayanish | Length of a lintel or slab resting on the masonry on each side |
 | ring beam | армопояс | armopoyas, seysmopoyas | Seismic reinforced-concrete belt (КМК 2.01.03-19) |

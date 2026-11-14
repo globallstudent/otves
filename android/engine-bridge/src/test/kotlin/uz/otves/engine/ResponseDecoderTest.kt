@@ -25,6 +25,8 @@ import uz.otves.schema.Guide as GuideStruct
 import uz.otves.schema.Issue as IssueTable
 import uz.otves.schema.IssueKind as IssueKindCode
 import uz.otves.schema.LayerFunction as LayerFunctionCode
+import uz.otves.schema.ListedOpening as ListedOpeningTable
+import uz.otves.schema.ListedRoom as ListedRoomTable
 import uz.otves.schema.LocationLine as LocationLineCode
 import uz.otves.schema.LogEntry as LogEntryTable
 import uz.otves.schema.OpeningKind as OpeningKindCode
@@ -443,6 +445,48 @@ class ResponseDecoderTest {
         assertThat(painted?.texts?.map { it.isHandle }).containsExactly(false, true).inOrder()
         assertThat(decoded.changes).containsExactly(ElementChange(room, Room(level, PointMm(1_000.mm, 2_000.mm), RoomKind.STUDY)))
         assertThat(decoded.issues).containsExactly(Issue(IssueKind.ROOM_SHARES_SPACE, room, level, PointMm(1_000.mm, 2_000.mm)))
+    }
+
+    @Test
+    fun theSchedulesOfASheetComeBackWithItsDrawing() {
+        val room = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000009"))
+        val builder = FlatBufferBuilder(512)
+        ListedRoomTable.startListedRoom(builder)
+        ListedRoomTable.addRoom(builder, builder.uuid(room))
+        ListedRoomTable.addKind(builder, RoomKindCode.Kitchen)
+        ListedRoomTable.addArea(builder, 12.4)
+        val named = ListedRoomTable.endListedRoom(builder)
+        // A space nobody has named.
+        ListedRoomTable.startListedRoom(builder)
+        ListedRoomTable.addArea(builder, 6.05)
+        val unnamed = ListedRoomTable.endListedRoom(builder)
+        ListedOpeningTable.startListedOpening(builder)
+        ListedOpeningTable.addKind(builder, TextKindCode.DoorMark)
+        ListedOpeningTable.addNumber(builder, 2)
+        ListedOpeningTable.addWidth(builder, 900)
+        ListedOpeningTable.addHeight(builder, 2_100)
+        ListedOpeningTable.addCount(builder, 3)
+        val doors = ListedOpeningTable.endListedOpening(builder)
+        val rooms = DrawingTable.createRoomsVector(builder, intArrayOf(named, unnamed))
+        val openings = DrawingTable.createOpeningsVector(builder, intArrayOf(doors))
+        DrawingTable.startDrawing(builder)
+        DrawingTable.addRooms(builder, rooms)
+        DrawingTable.addOpenings(builder, openings)
+        val drawing = DrawingTable.endDrawing(builder)
+        ResultTable.startCommandResult(builder)
+        ResultTable.addDrawing(builder, drawing)
+        val results = Response.createResultsVector(builder, intArrayOf(ResultTable.endCommandResult(builder)))
+        Response.startResponse(builder)
+        Response.addVersion(builder, 1L)
+        Response.addResults(builder, results)
+        builder.finish(Response.endResponse(builder), "OTVS")
+
+        val sheet = (ResponseDecoder.decode(builder.dataBuffer()).results.single() as CommandResult.Done).drawing
+
+        assertThat(sheet?.rooms)
+            .containsExactly(ListedRoom(room, RoomKind.KITCHEN, 12.4), ListedRoom(null, RoomKind.ROOM, 6.05))
+            .inOrder()
+        assertThat(sheet?.openings).containsExactly(ListedOpening(TextKind.DOOR_MARK, 2, 900.mm, 2_100.mm, 3))
     }
 
     // A response like the engine's: one created wall, one failure, the wall's value and a deletion.

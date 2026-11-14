@@ -432,6 +432,7 @@ internal object RequestEncoder {
                 DrawTable.addDigitWidth(this, command.digitWidth.value)
                 command.focus?.let { DrawTable.addFocus(this, point(it)) }
                 command.selected?.let { DrawTable.addSelected(this, uuid(it)) }
+                DrawTable.addSheet(this, command.sheet)
                 Command.Draw to DrawTable.endDraw(this)
             }
 

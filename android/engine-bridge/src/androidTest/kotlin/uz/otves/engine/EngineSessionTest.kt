@@ -225,7 +225,10 @@ class EngineSessionTest {
         assertThat(lines.single { it.item == "masonry_unit.250x120x65" }.amount).isGreaterThan(2686.0)
         assertThat(lines.map { it.item }).contains("concrete.b15")
         assertThat(lines.map { it.item }).doesNotContain("mesh.junction")
-        assertThat(ContentAssets.catalog(assets).units.map { it.size }).contains(brick)
+        val catalog = ContentAssets.catalog(assets)
+        assertThat(catalog.units.map { it.size }).contains(brick)
+        // The sheet for plans: A4 across, its frame 20 mm from the bound edge and 5 mm from the rest.
+        assertThat(catalog.sheet).isEqualTo(SheetFormat(width = 297.0, height = 210.0, binding = 20.0, edge = 5.0, textHeight = 2.5))
     }
 
     @Test

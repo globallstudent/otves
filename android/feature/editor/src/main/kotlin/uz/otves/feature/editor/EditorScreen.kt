@@ -171,8 +171,11 @@ internal data class EditorActions(
     val onSketch: (points: List<PointMm>, reach: Mm) -> Unit = { _, _ -> },
     val onRefine: () -> Unit = {},
     val onLabelSize: (LabelSize) -> Unit = {},
-    /** Every storey's drawing with label text of the given sizes, for a sheet. */
-    val onSheets: suspend (List<LabelSize?>) -> List<Drawing?> = { emptyList() },
+    /**
+     * Every storey's drawing with label text of the given sizes, for a sheet; for a sheet of
+     * plans, with every room's sizes.
+     */
+    val onSheets: suspend (sizes: List<LabelSize?>, plans: Boolean) -> List<Drawing?> = { _, _ -> emptyList() },
     val onFinishWall: () -> Unit = {},
     val onOrtho: () -> Unit = {},
     val onTool: (Tool) -> Unit = {},

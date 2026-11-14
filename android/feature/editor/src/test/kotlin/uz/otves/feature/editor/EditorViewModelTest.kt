@@ -896,6 +896,18 @@ class EditorViewModelTest {
             assertThat(upper).isNotEqualTo(level)
         }
 
+    @Test
+    fun aSheetOfPlansAsksEveryRoomsSizes() =
+        runTest {
+            val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+            viewModel.buildWall()
+            val requests = engine.drawn.size
+
+            viewModel.sheets(listOf(LabelSize(60.mm, 30.mm)), plans = true)
+
+            assertThat(engine.drawn.drop(requests)).containsExactly(EngineCommand.Draw(level, 60.mm, 30.mm, sheet = true))
+        }
+
     // The outside wall of the catalog: facing brick, insulation and block, 410 mm.
     private val outside =
         WallTypeTemplate(

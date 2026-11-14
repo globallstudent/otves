@@ -29,6 +29,18 @@ public data class WallTypeTemplate(
     public val layers: List<LayerSpec>,
 )
 
+/**
+ * The sheet plans are printed on (content/catalog/sheet.json), in millimetres: its size, how far
+ * its frame lies from the edge that is bound and from the other edges, and how high its text is.
+ */
+public data class SheetFormat(
+    public val width: Double,
+    public val height: Double,
+    public val binding: Double,
+    public val edge: Double,
+    public val textHeight: Double,
+)
+
 /** What the app offers the builder to choose from (content/catalog); sizes come from standards. */
 public data class Catalog(
     public val units: List<MasonryUnitOption> = emptyList(),
@@ -38,6 +50,8 @@ public data class Catalog(
     public val conditions: Map<Condition, ConditionChoices> = emptyMap(),
     /** Wall make-ups to start a wall type from. */
     public val wallTypes: List<WallTypeTemplate> = emptyList(),
+    /** The sheet plans are printed on; none until the catalog is read. */
+    public val sheet: SheetFormat? = null,
 )
 
 /** What a condition may be set to; [default] is what the norms use while it is unset. */
@@ -53,6 +67,7 @@ public object ContentAssets {
     private const val RING_BEAM = "catalog/ring_beam.json"
     private const val CONDITIONS = "catalog/conditions.json"
     private const val WALL_TYPES = "catalog/wall_types.json"
+    private const val SHEET = "catalog/sheet.json"
 
     public fun load(assets: AssetManager): EngineCommand.LoadContent =
         EngineCommand.LoadContent(norms = read(assets, "norms"), rules = read(assets, "rules"))
@@ -64,6 +79,19 @@ public object ContentAssets {
             ringBeamHeights = lengths(JSONObject(text(assets, RING_BEAM)).getJSONArray("heights")),
             conditions = conditions(text(assets, CONDITIONS)),
             wallTypes = wallTypes(text(assets, WALL_TYPES), units),
+            sheet = sheetFormat(text(assets, SHEET)),
+        )
+    }
+
+    internal fun sheetFormat(json: String): SheetFormat {
+        val sheet = JSONObject(json)
+        val frame = sheet.getJSONObject("frame")
+        return SheetFormat(
+            width = sheet.getDouble("width"),
+            height = sheet.getDouble("height"),
+            binding = frame.getDouble("binding"),
+            edge = frame.getDouble("edge"),
+            textHeight = sheet.getDouble("text_height"),
         )
     }
 

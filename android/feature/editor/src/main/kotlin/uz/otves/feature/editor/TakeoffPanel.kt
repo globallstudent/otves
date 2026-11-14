@@ -2,6 +2,7 @@ package uz.otves.feature.editor
 
 import android.content.Context
 import android.content.Intent
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,9 +51,11 @@ internal fun TakeoffPanel(
         val shared = takeoffText(state.name, lines, state.catalog.units, state.prices)
         PanelHeader(stringResource(R.string.takeoff_title)) {
             ShareMenu(
-                enabled = lines.isNotEmpty() && !state.takeoffFailed,
+                materials = lines.isNotEmpty() && !state.takeoffFailed,
+                plans = state.catalog.sheet != null && state.storeys.any { it.outlines.isNotEmpty() },
                 onText = { context.share(shared) },
-                onPdf = { scope.launch { context.shareEstimate(state, actions.onSheets) } },
+                onPdf = { scope.launch { context.shareEstimate(state) { actions.onSheets(it, false) } } },
+                onPlans = { scope.launch { context.sharePlans(state) { actions.onSheets(it, true) } } },
             )
             PanelAction(stringResource(R.string.takeoff_close), onClose)
         }
@@ -101,33 +104,43 @@ private fun takeoffText(
     return (listOf(title, "") + rows + sum).joinToString("\n")
 }
 
-// The materials go out as plain text for a chat, or as a sheet with the plan and the costs.
+// The materials go out as plain text for a chat or as a sheet with the plan and the costs, once
+// there are [materials]; the [plans] go out as drawings as soon as there are walls.
 @Composable
 private fun ShareMenu(
-    enabled: Boolean,
+    materials: Boolean,
+    plans: Boolean,
     onText: () -> Unit,
     onPdf: () -> Unit,
+    onPlans: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        PanelAction(stringResource(R.string.takeoff_share), { open = true }, enabled = enabled)
+        PanelAction(stringResource(R.string.takeoff_share), { open = true }, enabled = materials || plans)
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = OtvesTheme.colors.surface) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.share_text)) },
-                onClick = {
-                    open = false
-                    onText()
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.share_pdf)) },
-                onClick = {
-                    open = false
-                    onPdf()
-                },
-            )
+            ShareItem(R.string.share_text, materials) {
+                open = false
+                onText()
+            }
+            ShareItem(R.string.share_pdf, materials) {
+                open = false
+                onPdf()
+            }
+            ShareItem(R.string.share_plans, plans) {
+                open = false
+                onPlans()
+            }
         }
     }
+}
+
+@Composable
+private fun ShareItem(
+    @StringRes name: Int,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    DropdownMenuItem(text = { Text(stringResource(name)) }, onClick = onClick, enabled = enabled)
 }
 
 // One material: how much of it, and under that what one unit costs him and what the line comes to.

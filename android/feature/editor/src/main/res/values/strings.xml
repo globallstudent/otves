@@ -206,4 +206,17 @@
     <string name="mark_window" translatable="false">ОК-%1$d</string>
     <string name="mark_door" translatable="false">ДВ-%1$d</string>
     <string name="mark_empty" translatable="false">ПР-%1$d</string>
+    <string name="share_plans">Чертежами в PDF</string>
+    <string name="share_plans_file">%1$s — планы</string>
+    <string name="sheet_plan">План %1$d этажа</string>
+    <string name="sheet_rooms">Экспликация помещений</string>
+    <string name="sheet_room_name">Наименование</string>
+    <string name="sheet_room_area">Площадь, м²</string>
+    <string name="sheet_openings">Ведомость проёмов</string>
+    <string name="sheet_size">Размер, мм</string>
+    <string name="sheet_count">Кол-во</string>
+    <string name="sheet_legend">Условные обозначения</string>
+    <string name="legend_masonry">Кладка</string>
+    <string name="legend_facing">Облицовочный кирпич</string>
+    <string name="legend_insulation">Утеплитель</string>
 </resources>
