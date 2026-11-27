@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_title">%1$s версия чиқди</string>
+    <string name="update_body">Ишни давом эттириш учун Отвесни янгиланг. Бу бир дақиқача вақт олади.</string>
+    <string name="update_whats_new">Нима янги</string>
+    <string name="update_keeps">Объектлар ва сметалар сақланиб қолади. Ҳажми %1$s.</string>
+    <string name="update_megabytes">%1$s\u00A0МБ</string>
+    <string name="update_start">Янгилаш</string>
+    <string name="update_retry">Қайта уриниш</string>
+    <string name="update_downloading">Юкланмоқда %1$d %%</string>
+    <string name="update_downloaded">%2$s дан %1$s юкланди. Алоқа узилса, шу жойдан давом этамиз.</string>
+    <string name="update_installing">Ўрнатилмоқда…</string>
+    <string name="update_installing_note">Ўрнатилгач, Отвес ёпилади. Уни қайта очинг. Android сўраса, «Янгилаш»ни босинг.</string>
+    <string name="update_failed_network">Интернет йўқ</string>
+    <string name="update_failed_network_note">%2$s дан %1$s юкланди. Шу жойдан давом этамиз.</string>
+    <string name="update_failed_storage">Хотира етарли эмас</string>
+    <string name="update_failed_storage_note">Телефонда %1$s жой бўшатинг ва қайта урининг.</string>
+    <string name="update_failed_corrupt">Файл юкланишда бузилди</string>
+    <string name="update_failed_corrupt_note">Уни қайтадан юклаймиз.</string>
+    <string name="update_failed_install">Ўрнатиб бўлмади</string>
+    <string name="update_failed_install_note">Android ўрнатувчиси орқали қайта уринамиз.</string>
+    <string name="update_permission_title">Янгиланишларни ўрнатишга рухсат беринг</string>
+    <string name="update_permission_body">Отвес Play Маркетсиз янгиланади, шунинг учун Android бир марта рухсат сўрайди.</string>
+    <string name="update_permission_app">Отвес</string>
+    <string name="update_permission_screen">Номаълум иловаларни ўрнатиш</string>
+    <string name="update_permission_switch">Бу манбадан ўрнатишга рухсат бериш</string>
+    <string name="update_permission_step_1">Тугмани ёқинг</string>
+    <string name="update_permission_step_2">Орқага қайтинг, юклаш ўзи бошланади</string>
+    <string name="update_permission_open">Созламаларни очиш</string>
+    <string name="update_permission_picture">Android созламаларида: Отвес, «Бу манбадан ўрнатишга рухсат бериш» тугмаси ёқилган</string>
+    <!-- The locale these strings are in, so the release notes match the text. -->
+    <string name="update_notes_locale">uz-Cyrl</string>
+</resources>

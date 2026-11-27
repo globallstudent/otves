@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_title">Вышла версия %1$s</string>
+    <string name="update_body">Обновите Отвес, чтобы продолжить работу. Это займёт около минуты.</string>
+    <string name="update_whats_new">Что нового</string>
+    <string name="update_keeps">Объекты и сметы сохранятся. Размер %1$s.</string>
+    <string name="update_megabytes">%1$s\u00A0МБ</string>
+    <string name="update_start">Обновить</string>
+    <string name="update_retry">Повторить</string>
+    <string name="update_downloading">Загрузка %1$d %%</string>
+    <string name="update_downloaded">Скачано %1$s из %2$s. Если связь пропадёт, продолжим с этого места.</string>
+    <string name="update_installing">Устанавливаем…</string>
+    <string name="update_installing_note">После установки Отвес закроется. Откройте его снова. Если Android спросит, нажмите «Обновить».</string>
+    <string name="update_failed_network">Нет интернета</string>
+    <string name="update_failed_network_note">Скачано %1$s из %2$s. Продолжим с этого места.</string>
+    <string name="update_failed_storage">Не хватает памяти</string>
+    <string name="update_failed_storage_note">Освободите %1$s на телефоне и повторите.</string>
+    <string name="update_failed_corrupt">Файл повреждён при загрузке</string>
+    <string name="update_failed_corrupt_note">Скачаем его заново.</string>
+    <string name="update_failed_install">Не удалось установить</string>
+    <string name="update_failed_install_note">Повторим через установщик Android.</string>
+    <string name="update_permission_title">Разрешите установку обновлений</string>
+    <string name="update_permission_body">Отвес обновляется без Play Маркета, поэтому Android один раз попросит разрешение.</string>
+    <string name="update_permission_app">Отвес</string>
+    <string name="update_permission_screen">Установка неизвестных приложений</string>
+    <string name="update_permission_switch">Разрешить установку из этого источника</string>
+    <string name="update_permission_step_1">Включите переключатель</string>
+    <string name="update_permission_step_2">Вернитесь назад, загрузка начнётся сама</string>
+    <string name="update_permission_open">Открыть настройки</string>
+    <string name="update_permission_picture">В настройках Android: Отвес, переключатель «Разрешить установку из этого источника» включён</string>
+    <!-- The locale these strings are in, so the release notes match the text. -->
+    <string name="update_notes_locale">ru</string>
+</resources>

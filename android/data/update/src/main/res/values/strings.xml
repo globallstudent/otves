@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_done">Отвес обновлён до версии %1$s. Откройте его снова.</string>
+</resources>

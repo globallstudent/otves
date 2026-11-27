@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.core.content.edit
 import uz.otves.data.catalog.CatalogPrices
 import uz.otves.data.project.JobFiles
+import uz.otves.data.update.AppUpdates
+import uz.otves.data.update.Updates
 import uz.otves.engine.EngineGateway
 import kotlin.uuid.Uuid
 
@@ -15,6 +17,9 @@ class OtvesApplication : Application() {
 
     /** The builder's price list, the same for every job. */
     val prices: CatalogPrices by lazy { CatalogPrices(this) }
+
+    /** The app's own releases; every newer one has to be installed. */
+    val updates: Updates by lazy { AppUpdates(this, BuildConfig.UPDATE_FEED) }
 
     // Stamps every operation this phone makes, so edits from two devices can be told apart.
     private fun deviceId(): Uuid {

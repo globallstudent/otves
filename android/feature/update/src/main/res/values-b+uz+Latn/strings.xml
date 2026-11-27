@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_title">%1$s versiya chiqdi</string>
+    <string name="update_body">Ishni davom ettirish uchun Otvesni yangilang. Bu bir daqiqacha vaqt oladi.</string>
+    <string name="update_whats_new">Nima yangi</string>
+    <string name="update_keeps">Obyektlar va smetalar saqlanib qoladi. Hajmi %1$s.</string>
+    <string name="update_megabytes">%1$s\u00A0MB</string>
+    <string name="update_start">Yangilash</string>
+    <string name="update_retry">Qayta urinish</string>
+    <string name="update_downloading">Yuklanmoqda %1$d %%</string>
+    <string name="update_downloaded">%2$s dan %1$s yuklandi. Aloqa uzilsa, shu joydan davom etamiz.</string>
+    <string name="update_installing">O‘rnatilmoqda…</string>
+    <string name="update_installing_note">O‘rnatilgach, Otves yopiladi. Uni qayta oching. Android so‘rasa, «Yangilash»ni bosing.</string>
+    <string name="update_failed_network">Internet yo‘q</string>
+    <string name="update_failed_network_note">%2$s dan %1$s yuklandi. Shu joydan davom etamiz.</string>
+    <string name="update_failed_storage">Xotira yetarli emas</string>
+    <string name="update_failed_storage_note">Telefonda %1$s joy bo‘shating va qayta urining.</string>
+    <string name="update_failed_corrupt">Fayl yuklanishda buzildi</string>
+    <string name="update_failed_corrupt_note">Uni qaytadan yuklaymiz.</string>
+    <string name="update_failed_install">O‘rnatib bo‘lmadi</string>
+    <string name="update_failed_install_note">Android o‘rnatuvchisi orqali qayta urinamiz.</string>
+    <string name="update_permission_title">Yangilanishlarni o‘rnatishga ruxsat bering</string>
+    <string name="update_permission_body">Otves Play Marketsiz yangilanadi, shuning uchun Android bir marta ruxsat so‘raydi.</string>
+    <string name="update_permission_app">Otves</string>
+    <string name="update_permission_screen">Noma’lum ilovalarni o‘rnatish</string>
+    <string name="update_permission_switch">Bu manbadan o‘rnatishga ruxsat berish</string>
+    <string name="update_permission_step_1">Tugmani yoqing</string>
+    <string name="update_permission_step_2">Orqaga qayting, yuklash o‘zi boshlanadi</string>
+    <string name="update_permission_open">Sozlamalarni ochish</string>
+    <string name="update_permission_picture">Android sozlamalarida: Otves, «Bu manbadan o‘rnatishga ruxsat berish» tugmasi yoqilgan</string>
+    <!-- The locale these strings are in, so the release notes match the text. -->
+    <string name="update_notes_locale">uz-Latn</string>
+</resources>
