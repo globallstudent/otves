@@ -1,0 +1,16 @@
+{
+  "notes": {
+    "ru": [
+      { "icon": "", "title": "Приложение стало в семь раз легче", "text": "Обновление весит 7 МБ вместо 49" },
+      { "icon": "", "title": "Обновления приходят сразу", "text": "Отвес проверяет их каждый раз, когда вы возвращаетесь в него" }
+    ],
+    "uz-Latn": [
+      { "icon": "", "title": "Ilova yetti baravar yengillashdi", "text": "Yangilanish 49 MB o‘rniga 7 MB" },
+      { "icon": "", "title": "Yangilanishlar darhol keladi", "text": "Otves ularni har safar ilovaga qaytganingizda tekshiradi" }
+    ],
+    "uz-Cyrl": [
+      { "icon": "", "title": "Илова етти баравар енгиллашди", "text": "Янгиланиш 49 МБ ўрнига 7 МБ" },
+      { "icon": "", "title": "Янгиланишлар дарҳол келади", "text": "Отвес уларни ҳар сафар иловага қайтганингизда текширади" }
+    ]
+  }
+}
