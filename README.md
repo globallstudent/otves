@@ -24,7 +24,7 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 
 | Path | Contents |
 |---|---|
-| `android/` | Kotlin app: `app`, `feature/editor`, `data/catalog` (the price list), `core/model`, `core/designsystem`, `engine-bridge` (JNI, `libdesign.so`, content), convention plugins in `build-logic` |
+| `android/` | Kotlin app: `app`, `feature/projects`, `feature/editor`, `feature/update`, `data/project` (job files), `data/catalog` (the price list), `data/update` (releases), `core/model`, `core/designsystem`, `engine-bridge` (JNI, `libdesign.so`, content), convention plugins in `build-logic`, notes of each release in `release-notes` |
 | `engine/` | C++23 design engine: `core` (levels, walls and openings, commands, operation log, undo), `geom` (wall joins, plan outlines, editing, sketches), `drafting` (a level as a display list), `takeoff` (wall quantities, masonry units and mortar, Luau rules sandbox), `bridge` (FlatBuffers session, JNI) |
 | `schema/` | `engine.fbs`, the FlatBuffers contract between the app and the engine |
 | `content/` | Norm tables and take-off rules in Luau and the catalog of materials to choose from, shipped as a content bundle |
@@ -55,4 +55,5 @@ Choose the compiler (`CC`, `CXX`) before the first configure of a build folder. 
 - [Architecture](docs/architecture.md)
 - [Decisions](docs/adr/)
 - [Glossary](docs/glossary.md)
+- [Releasing](docs/releasing.md)
 - [Research: standards](docs/research/Qurilish%20standartlari%20va%20materiallar.md), [materials and prices](docs/research/Qurilish%20materiallari%20turlari%20va%20narxlari.md)

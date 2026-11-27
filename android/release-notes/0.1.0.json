@@ -1,0 +1,19 @@
+{
+  "notes": {
+    "ru": [
+      { "icon": "sketch", "title": "План от руки или по замерам", "text": "Стены, комнаты, окна и двери с точными размерами" },
+      { "icon": "estimate", "title": "Расход материалов и смета", "text": "Кирпич, блоки и раствор считаются по плану" },
+      { "icon": "sheet", "title": "Листы в PDF", "text": "План этажа с размерами и ведомостью проёмов" }
+    ],
+    "uz-Latn": [
+      { "icon": "sketch", "title": "Reja qo‘lda yoki o‘lchab chiziladi", "text": "Devorlar, xonalar, deraza va eshiklar aniq o‘lchamlar bilan" },
+      { "icon": "estimate", "title": "Material sarfi va smeta", "text": "G‘isht, blok va qorishma reja bo‘yicha hisoblanadi" },
+      { "icon": "sheet", "title": "PDF varaqlar", "text": "Qavat rejasi o‘lchamlar va teshiklar ro‘yxati bilan" }
+    ],
+    "uz-Cyrl": [
+      { "icon": "sketch", "title": "Режа қўлда ёки ўлчаб чизилади", "text": "Деворлар, хоналар, дераза ва эшиклар аниқ ўлчамлар билан" },
+      { "icon": "estimate", "title": "Материал сарфи ва смета", "text": "Ғишт, блок ва қоришма режа бўйича ҳисобланади" },
+      { "icon": "sheet", "title": "PDF варақлар", "text": "Қават режаси ўлчамлар ва тешиклар рўйхати билан" }
+    ]
+  }
+}
