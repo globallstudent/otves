@@ -11,6 +11,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
 
             extensions.configure<LibraryExtension> {
                 compileSdk = OtvesBuild.COMPILE_SDK
+                compileSdkMinor = OtvesBuild.COMPILE_SDK_MINOR
                 defaultConfig {
                     minSdk = OtvesBuild.MIN_SDK
                 }

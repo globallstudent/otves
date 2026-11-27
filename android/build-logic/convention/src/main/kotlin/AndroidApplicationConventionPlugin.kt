@@ -11,6 +11,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
 
             extensions.configure<ApplicationExtension> {
                 compileSdk = OtvesBuild.COMPILE_SDK
+                compileSdkMinor = OtvesBuild.COMPILE_SDK_MINOR
                 defaultConfig {
                     minSdk = OtvesBuild.MIN_SDK
                     targetSdk = OtvesBuild.TARGET_SDK

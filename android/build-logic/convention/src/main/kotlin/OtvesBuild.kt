@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompilerOptions
 /** Shared build constants. Raise the SDK levels only to the latest stable API the pinned AGP supports. */
 internal object OtvesBuild {
     const val COMPILE_SDK = 37
+    const val COMPILE_SDK_MINOR = 2
     const val TARGET_SDK = 37
     const val MIN_SDK = 29
 

@@ -44,7 +44,7 @@ cd ../android && ./gradlew build              # downloads JDK 25 on first run
 | Bridge end to end on an arm64 device or emulator | `./gradlew :engine-bridge:connectedDebugAndroidTest` (in `android/`) |
 | Kotlin format | `./gradlew spotlessApply` |
 
-Toolchain: CMake ≥ 4.0, Ninja, Clang (AppleClang or LLVM 23), LLVM 23 clang-format and clang-tidy, Android SDK platform 37. Exact versions are in `android/gradle/libs.versions.toml` and `engine/vcpkg.json`.
+Toolchain: CMake ≥ 4.0, Ninja, Clang (AppleClang or LLVM 23), LLVM 23 clang-format and clang-tidy, Android SDK platform 37.2. Exact versions are in `android/gradle/libs.versions.toml` and `engine/vcpkg.json`.
 
 The app builds `libdesign.so` from `engine/` through Gradle, so it also needs `VCPKG_ROOT` (or `otves.vcpkg.dir` in `~/.gradle/gradle.properties`), NDK r30 and SDK CMake 4.1.2: `sdkmanager "ndk;30.0.16248370" "cmake;4.1.2"`.
 
