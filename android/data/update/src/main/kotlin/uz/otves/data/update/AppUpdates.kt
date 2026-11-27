@@ -118,8 +118,9 @@ public class AppUpdates(
         const val TIMEOUT_MS = 10_000
         const val MANIFEST_LIMIT_BYTES = 256 * 1024
 
-        // A phone left on the jobs list for days still learns of a release.
-        const val RECHECK_AFTER_MS = 6 * 60 * 60 * 1000L
+        // A builder who leaves the app and comes back should meet a release that came out
+        // meanwhile; the pause only keeps quick returns from asking again and again.
+        const val RECHECK_AFTER_MS = 15 * 60 * 1000L
 
         /** Where the downloaded APK lives; Android may empty it when the phone runs out of space. */
         fun updateFiles(context: Context): File = File(context.cacheDir, "update")
