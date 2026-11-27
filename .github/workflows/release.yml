@@ -85,7 +85,8 @@ jobs:
         run: |
           tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           apk=app/build/outputs/apk/release/app-release.apk
-          cert="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          # The words before the digest differ between apksigner versions ("Signer #1", "V2 Signer:").
+          cert="$("$tools/apksigner" verify --print-certs "$apk" | awk '/certificate SHA-256 digest:/ { print $NF; exit }')"
           if [ -z "$EXPECTED_CERT" ] || [ "$cert" != "$EXPECTED_CERT" ]; then
             echo "::error::signed with '$cert', the repository variable OTVES_CERT_SHA256 says '$EXPECTED_CERT'"
             exit 1
