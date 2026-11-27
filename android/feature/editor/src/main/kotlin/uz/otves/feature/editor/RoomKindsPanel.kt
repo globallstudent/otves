@@ -39,7 +39,7 @@ internal fun RoomKindsPanel(
     actions: EditorActions,
 ) {
     val colors = OtvesTheme.colors
-    val space = (state.selected as? Selected.SpacePart)?.space
+    val space = (state.plan.selected as? Selected.SpacePart)?.space
     val current = space?.kind?.takeIf { space.room != null }
     Panel {
         PanelHeader(stringResource(R.string.room_kinds_title)) {
@@ -75,7 +75,7 @@ private fun RoomKindsPanelPreview() {
     val bedroom = Space(room = null, kind = RoomKind.BEDROOM, area = 11.2, perimeter = 13.6, outline = floor)
     OtvesTheme {
         RoomKindsPanel(
-            EditorUiState(ready = true, selected = Selected.SpacePart(PointMm(2_000.mm, 1_500.mm), bedroom)),
+            EditorUiState(ready = true, plan = PlanState(selected = Selected.SpacePart(PointMm(2_000.mm, 1_500.mm), bedroom))),
             EditorActions(),
         )
     }

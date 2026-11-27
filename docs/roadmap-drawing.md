@@ -13,7 +13,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Rooms | The spaces the walls close are found, named and drawn with their areas; a tap selects one (ADR 0015). A sheet lists them with their areas | A label may still lie under a door's swing in a room too small to move it |
 | Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value; a partition goes across a room at a typed distance from one of its walls; a room is built from its clear size at a touched corner (ADR 0016) | A room built against an outer corner is not flush with it; a room cannot be turned off the plan's axes |
 | Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred; an opening takes a width, a height and a height over the floor of the builder's own; a sheet lists the marks with their sizes and counts (ADR 0017) | No two-leaf doors |
-| Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel`, about 1 100 lines, keeps the conversation with the builder and maps the model to one `EditorUiState`. The screen is split into tool bar, panels and number pads | The view model and its state are still one piece each |
+| Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel` keeps the conversation with the builder and maps the model to an `EditorUiState` of four parts: the plan, the tools, the open panel and the estimate. The screen is split into tool bar, panels and number pads | The view model is still one class of about 1 700 lines |
 | Tests | GoogleTest units with seeded random plans and strokes, Kotlin unit tests, three instrumented suites, one of the reference plans as a golden test of the drawing | No golden take-off, no screenshot tests; the benchmark is not run in CI |
 
 ## Target shape
@@ -125,7 +125,7 @@ flowchart LR
 
 | # | Slice | Engine | Kotlin | Job file | Designs | Status |
 |---|---|---|---|---|---|---|
-| 0 | Groundwork | — | Split the editor files, `JobSession`, shared components, icon-only tool bar, tool options button | — | G31 bar, G43–G46 | in part |
+| 0 | Groundwork | — | Split the editor files, `JobSession`, shared components, icon-only tool bar, tool options button | — | G31 bar, G43–G46 | built; shared components wait for a second feature |
 | 1 | Pencil | `geom/sketch`, `AddSketch`, `Wall.exact` | Pencil tool, refine lengths | v5 | G39–G42 | built |
 | 2 | Display list | `engine/drafting`, `Draw` | `PlanPainter`; delete placement code | — | — | built |
 | 3 | Wall types | `WallType`, `WallLayer`, layer strips, take-off per layer | Type list, wall panel, location line | v6 | G32, G33 | built; a layer's thickness is edited, its material and the number of layers are not |
@@ -142,7 +142,7 @@ Slice 1 comes first because it is the smallest end-to-end change: it proves the 
 |---|---|---|
 | `data/project/JobSession` | One place sends commands and records the response, in order. It holds the mirrored model. The view model maps it to `UiState` | done |
 | Split `EditorScreen.kt` | Tool bar, tool options, panels and number pads in files of their own, each under about 400 lines | done |
-| Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState` | open |
+| Split `EditorUiState` | `PlanState`, `ToolState`, `PanelState`, `EstimateState`; a change to one part goes through `updatePlan`, `updateTools`, `updatePanel` or `updateEstimate` | done |
 | `core/designsystem` | Round button, panel, inspector row, number pad, switch row | when a second feature needs them |
 | Tool bar | Five icons, the chosen one filled; names in the tools sheet | done |
 | Tool options | One movable button per screen; its rows come from the tool. It hides for a tool with nothing to choose. Its place is kept on the phone between runs | done |

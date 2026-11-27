@@ -132,7 +132,7 @@ internal fun ToolOptionsButton(
             animationSpec = if (dragged == null) spring() else snap(),
             label = "options button",
         )
-        val aiming = state.tool == Tool.WALL && state.draft?.to != null
+        val aiming = state.tools.tool == Tool.WALL && state.tools.draft?.to != null
         val description = stringResource(R.string.tool_options)
         val opened = stringResource(R.string.tool_options_open)
         Box(
@@ -179,8 +179,8 @@ internal fun ToolOptionsButton(
                 }
             }
             // A wall drawn without a material is left out of the take-off; the dot says where to choose one.
-            val builds = state.tool == Tool.WALL || state.tool == Tool.PENCIL
-            if (builds && state.material == null && state.kind == null && !open) {
+            val builds = state.tools.tool == Tool.WALL || state.tools.tool == Tool.PENCIL
+            if (builds && state.tools.material == null && state.tools.kind == null && !open) {
                 Box(Modifier.align(Alignment.TopEnd).size(12.dp).background(colors.warning, CircleShape))
             }
             if (open) {
@@ -251,13 +251,13 @@ private fun OptionsPanel(
     ) {
         Column {
             Text(
-                toolName(state.tool),
+                toolName(state.tools.tool),
                 style = MaterialTheme.typography.labelLarge,
                 color = colors.inkSecondary,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             )
             HorizontalDivider(color = colors.divider)
-            when (state.tool) {
+            when (state.tools.tool) {
                 Tool.SELECT -> {
                     // Nothing to choose before something is picked.
                 }
@@ -267,11 +267,11 @@ private fun OptionsPanel(
                 }
 
                 Tool.WINDOW -> {
-                    SizeChoices(WindowSizes, state.windowSize, actions.onWindowSize)
+                    SizeChoices(WindowSizes, state.tools.windowSize, actions.onWindowSize)
                 }
 
                 Tool.DOOR -> {
-                    SizeChoices(DoorSizes, state.doorSize, actions.onDoorSize)
+                    SizeChoices(DoorSizes, state.tools.doorSize, actions.onDoorSize)
                 }
             }
         }
@@ -286,7 +286,7 @@ private fun WallOptions(
     onClose: () -> Unit,
 ) {
     val colors = OtvesTheme.colors
-    val kind = state.kinds.find { it.id == state.kind }
+    val kind = state.plan.kinds.find { it.id == state.tools.kind }
     OptionRow(
         label = stringResource(R.string.wall_kind_title),
         onClick = {
@@ -304,7 +304,7 @@ private fun WallOptions(
     HorizontalDivider(color = colors.divider)
     // A wall with no type is laid from one material at one thickness; a type decides both.
     if (kind == null) {
-        val material = state.material
+        val material = state.tools.material
         OptionRow(
             label = stringResource(R.string.inspector_material),
             onClick = {
@@ -330,7 +330,7 @@ private fun WallOptions(
             )
             SegmentedControl(
                 options = thicknesses.map { grouped(it) },
-                selected = thicknesses.indexOf(state.thickness),
+                selected = thicknesses.indexOf(state.tools.thickness),
                 onSelect = { actions.onThickness(thicknesses[it]) },
                 modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
             )
@@ -344,12 +344,12 @@ private fun WallOptions(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = RowHeight)
-                .toggleable(value = state.ortho, role = Role.Switch, onValueChange = { actions.onOrtho() })
+                .toggleable(value = state.tools.ortho, role = Role.Switch, onValueChange = { actions.onOrtho() })
                 .padding(horizontal = 16.dp),
     ) {
         Text(ortho, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Switch(
-            checked = state.ortho,
+            checked = state.tools.ortho,
             onCheckedChange = null,
             colors =
                 SwitchDefaults.colors(

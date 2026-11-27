@@ -239,11 +239,11 @@ internal fun MeasurePad(
 ) {
     Panel {
         PanelHeader(stringResource(R.string.measure_title)) {
-            PanelAction(stringResource(R.string.editor_undo), actions.onUndo, enabled = state.canUndo)
+            PanelAction(stringResource(R.string.editor_undo), actions.onUndo, enabled = state.plan.canUndo)
             PanelAction(stringResource(R.string.takeoff_close), actions.onStopMeasure)
         }
         TypedLength(measure.digits) {
-            if (state.canCloseRun) Pill(stringResource(R.string.measure_close), false, actions.onCloseMeasured)
+            if (state.tools.canCloseRun) Pill(stringResource(R.string.measure_close), false, actions.onCloseMeasured)
         }
         SegmentedControl(
             options = Turn.entries.map { turnName(it) },
@@ -251,7 +251,7 @@ internal fun MeasurePad(
             onSelect = { actions.onTurn(Turn.entries[it]) },
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
         )
-        NumberKeys(actions, stringResource(R.string.measure_next), actions.onNextMeasured, enabled = state.draft?.to != null)
+        NumberKeys(actions, stringResource(R.string.measure_next), actions.onNextMeasured, enabled = state.tools.draft?.to != null)
     }
 }
 
@@ -357,7 +357,7 @@ private fun LengthPadPreview() {
     val wall = ElementId(Uuid.parse("019a5f00-0000-7000-8000-000000000002"))
     OtvesTheme {
         EditorScreen(
-            state = EditorUiState(ready = true, entry = LengthEntry(wall, was = 6_437.mm, digits = "6400")),
+            state = EditorUiState(ready = true, panel = PanelState(entry = LengthEntry(wall, was = 6_437.mm, digits = "6400"))),
             actions = EditorActions(),
         )
     }

@@ -33,7 +33,7 @@ internal fun Inspector(
     state: EditorUiState,
     actions: EditorActions,
 ) {
-    val issues = state.issues
+    val issues = state.plan.issues
     Panel {
         val title =
             when (selected) {
@@ -132,7 +132,9 @@ private fun OpeningRows(
         Pill(stringResource(R.string.opening_center), false, actions.onCenterOpening)
     }
     // The engine numbers the marks; the one of this opening came with the drawing.
-    val mark = state.drawing.texts.find { it.isMark && it.element == selected.id } ?: return
+    val mark =
+        state.plan.drawing.texts
+            .find { it.isMark && it.element == selected.id } ?: return
     InspectorRow(stringResource(R.string.opening_mark)) {
         Text(
             stringResource(R.string.opening_mark_count, markText(LocalResources.current, mark.kind, mark.value), selected.alike),
@@ -150,7 +152,7 @@ private fun SpaceRows(
     actions: EditorActions,
 ) {
     val space = selected.space
-    state.issues
+    state.plan.issues
         .filter { it.element != null && it.element == space.room }
         .map { it.kind }
         .distinct()
@@ -185,7 +187,7 @@ private fun WallRows(
     actions: EditorActions,
 ) {
     val wall = selected.wall
-    val kind = state.kinds.find { it.id == wall.type }
+    val kind = state.plan.kinds.find { it.id == wall.type }
     InspectorRow(stringResource(R.string.wall_kind_title)) {
         Pill(
             label = if (kind == null) stringResource(R.string.wall_kind_none) else wallKindName(kind.role, kind.thickness),
@@ -210,7 +212,7 @@ private fun WallRows(
             )
         }
     }
-    state.dimensions.find { it.id == selected.id }?.let { dimension ->
+    state.plan.dimensions.find { it.id == selected.id }?.let { dimension ->
         InspectorRow(stringResource(R.string.length_title)) {
             Pill(stringResource(R.string.length_value, grouped(dimension.length)), false, { actions.onEditLength(selected.id) })
         }

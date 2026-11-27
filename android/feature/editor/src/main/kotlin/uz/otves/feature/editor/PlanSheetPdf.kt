@@ -130,7 +130,7 @@ internal class PlanSheetPdf(
      * storey with no walls. The engine draws each storey for its size.
      */
     fun labels(state: EditorUiState): List<LabelSize?> =
-        state.storeys.map { storey -> place(storey)?.let { painter.labelSize(it.frame.scale) } }
+        state.plan.storeys.map { storey -> place(storey)?.let { painter.labelSize(it.frame.scale) } }
 
     /** [drawings] are the storeys' drawings, asked as sheets with [labels]. */
     fun write(
@@ -141,7 +141,7 @@ internal class PlanSheetPdf(
     ) {
         val document = PdfDocument()
         var number = 0
-        state.storeys.forEachIndexed { index, storey ->
+        state.plan.storeys.forEachIndexed { index, storey ->
             val placed = place(storey)
             val drawing = drawings.getOrNull(index)
             if (placed == null || drawing == null) return@forEachIndexed

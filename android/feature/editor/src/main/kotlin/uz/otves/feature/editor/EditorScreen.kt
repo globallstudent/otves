@@ -281,32 +281,32 @@ internal fun EditorScreen(
     // of a pass over sketched walls or of a typed size, which all move the plan to keep a wall
     // above the keys.
     var fit by remember { mutableIntStateOf(0) }
-    val measuring = state.measure != null
-    val refining = state.entry?.refining == true
-    val sizing = state.entry?.size != null
+    val measuring = state.tools.measure != null
+    val refining = state.panel.entry?.refining == true
+    val sizing = state.panel.entry?.size != null
     LaunchedEffect(measuring, refining, sizing, state.ready) { if (!measuring && !refining && !sizing && state.ready) fit++ }
-    val listOpen = state.takeoffOpen || state.materialOpen || state.kindsOpen || state.roomKindsOpen
+    val listOpen = state.panel.takeoffOpen || state.panel.materialOpen || state.panel.kindsOpen || state.panel.roomKindsOpen
     Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
         Box(modifier = Modifier.safeDrawingPadding()) {
             // The wall whose length is typed is marked as a selected one is.
-            val sized = state.dimensions.find { it.id == state.entry?.wall }
+            val sized = state.plan.dimensions.find { it.id == state.panel.entry?.wall }
             PlanCanvas(
-                plan = state.drawing,
-                outlines = state.outlines,
-                selected = sized?.id ?: state.selected?.id,
-                marked = (state.selected as? Selected.SpacePart)?.space,
-                issues = state.issues,
-                draft = state.draft,
+                plan = state.plan.drawing,
+                outlines = state.plan.outlines,
+                selected = sized?.id ?: state.plan.selected?.id,
+                marked = (state.plan.selected as? Selected.SpacePart)?.space,
+                issues = state.plan.issues,
+                draft = state.tools.draft,
                 draftThickness = state.drawnThickness,
-                drawing = state.tool == Tool.WALL && !state.typing && !listOpen,
-                sketching = state.tool == Tool.PENCIL && !state.typing && !listOpen,
-                sizing = state.tool == Tool.SELECT && !state.typing && !listOpen,
+                drawing = state.tools.tool == Tool.WALL && !state.typing && !listOpen,
+                sketching = state.tools.tool == Tool.PENCIL && !state.typing && !listOpen,
+                sizing = state.tools.tool == Tool.SELECT && !state.typing && !listOpen,
                 fit = fit,
                 // The wall being measured or sized stays in view above the number pad.
                 focus =
                     sized?.let { listOf(it.wall.start, it.wall.end) }
-                        ?: state.draft
-                            ?.takeIf { state.measure != null }
+                        ?: state.tools.draft
+                            ?.takeIf { state.tools.measure != null }
                             ?.let { listOfNotNull(it.start, it.to?.point) }
                         ?: selectedPoints(state),
                 onTap = actions.onTap,
@@ -325,23 +325,23 @@ internal fun EditorScreen(
             ) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RoundButton(OtvesIcons.Back, stringResource(R.string.editor_back), actions.onBack)
-                    if (state.ready) LevelPill(state.levels, state.level, actions.onLevel, actions.onAddLevel)
+                    if (state.ready) LevelPill(state.plan.levels, state.plan.level, actions.onLevel, actions.onAddLevel)
                     Spacer(Modifier.weight(1f))
                     RoundButton(OtvesIcons.Fit, stringResource(R.string.editor_fit), { fit++ })
                     RoundButton(OtvesIcons.List, stringResource(R.string.takeoff_title), { actions.onTakeoff(true) })
                 }
                 Notice(state)
             }
-            val selected = state.selected
-            val entry = state.entry
-            val measure = state.measure
-            val sizeEntry = state.sizeEntry
-            val priceEntry = state.priceEntry
-            val partition = state.partition
-            val room = state.room
-            val layerEntry = state.layerEntry
-            val openingEntry = state.openingEntry
-            val edited = state.kinds.find { it.id == state.kindEdited }
+            val selected = state.plan.selected
+            val entry = state.panel.entry
+            val measure = state.tools.measure
+            val sizeEntry = state.panel.sizeEntry
+            val priceEntry = state.panel.priceEntry
+            val partition = state.panel.partition
+            val room = state.panel.room
+            val layerEntry = state.panel.layerEntry
+            val openingEntry = state.panel.openingEntry
+            val edited = state.plan.kinds.find { it.id == state.panel.kindEdited }
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 when {
                     entry != null -> LengthPad(entry, actions)
@@ -353,18 +353,18 @@ internal fun EditorScreen(
                     priceEntry != null -> PricePad(priceEntry, state, actions)
                     measure != null -> MeasurePad(measure, state, actions)
                     edited != null -> KindLayersPanel(edited, state, actions)
-                    state.kindsOpen -> WallKindsPanel(state, actions)
-                    state.roomKindsOpen -> RoomKindsPanel(state, actions)
-                    state.materialOpen -> MaterialPanel(state, actions)
+                    state.panel.kindsOpen -> WallKindsPanel(state, actions)
+                    state.panel.roomKindsOpen -> RoomKindsPanel(state, actions)
+                    state.panel.materialOpen -> MaterialPanel(state, actions)
                     selected != null -> Inspector(selected, state, actions)
-                    state.takeoffOpen && state.conditionsOpen -> ConditionsPanel(state, actions)
-                    state.takeoffOpen -> TakeoffPanel(state, actions)
+                    state.panel.takeoffOpen && state.panel.conditionsOpen -> ConditionsPanel(state, actions)
+                    state.panel.takeoffOpen -> TakeoffPanel(state, actions)
                     else -> Tools(state, actions)
                 }
             }
             val idle = !state.typing
             val bare = selected == null && !listOpen
-            if (state.ready && idle && bare && hasOptions(state.tool)) ToolOptionsButton(state, actions)
+            if (state.ready && idle && bare && hasOptions(state.tools.tool)) ToolOptionsButton(state, actions)
         }
     }
 }
@@ -372,13 +372,13 @@ internal fun EditorScreen(
 // Where the selected wall or opening lies, so that it stays in view above its panel. An opening
 // is where the drawing has its gap.
 private fun selectedPoints(state: EditorUiState): List<PointMm> =
-    when (val selected = state.selected) {
+    when (val selected = state.plan.selected) {
         is Selected.WallPart -> {
             listOf(selected.wall.start, selected.wall.end)
         }
 
         is Selected.OpeningPart -> {
-            state.drawing.polygons
+            state.plan.drawing.polygons
                 .firstOrNull { it.element == selected.id && it.fill == FillKind.GAP }
                 ?.points
                 .orEmpty()
@@ -396,41 +396,41 @@ private const val MM_PER_METRE = 1000.0
 @Composable
 private fun Notice(state: EditorUiState) {
     // Where walls meet wrongly; what a storey lacks by the norms is said beside its choices.
-    val joinIssue = state.issues.firstOrNull { it.at != null }
-    val drawing = state.tool == Tool.WALL && state.draft != null
+    val joinIssue = state.plan.issues.firstOrNull { it.at != null }
+    val drawing = state.tools.tool == Tool.WALL && state.tools.draft != null
     val text =
         when {
             !state.ready -> stringResource(R.string.editor_loading)
 
             // A stroke too short to be a wall is not a wall whose ends coincide.
-            state.refused == EngineError.ZERO_LENGTH && state.tool == Tool.PENCIL -> stringResource(R.string.sketch_too_short)
+            state.plan.refused == EngineError.ZERO_LENGTH && state.tools.tool == Tool.PENCIL -> stringResource(R.string.sketch_too_short)
 
-            state.refused != null -> refusalText(state.refused)
+            state.plan.refused != null -> refusalText(state.plan.refused)
 
             // The number pad says what is being entered.
             state.typing -> null
 
             drawing -> stringResource(R.string.editor_hint_next)
 
-            state.roomPlacing -> stringResource(R.string.editor_hint_room)
+            state.tools.roomPlacing -> stringResource(R.string.editor_hint_room)
 
             joinIssue != null -> issueText(joinIssue.kind)
 
-            state.tool == Tool.SELECT && state.selected == null -> stringResource(R.string.editor_hint_select)
+            state.tools.tool == Tool.SELECT && state.plan.selected == null -> stringResource(R.string.editor_hint_select)
 
-            state.tool == Tool.PENCIL && state.rough.isNotEmpty() -> stringResource(R.string.sketch_rough)
+            state.tools.tool == Tool.PENCIL && state.rough.isNotEmpty() -> stringResource(R.string.sketch_rough)
 
-            state.tool == Tool.PENCIL -> stringResource(R.string.editor_hint_pencil)
+            state.tools.tool == Tool.PENCIL -> stringResource(R.string.editor_hint_pencil)
 
-            state.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
+            state.tools.tool == Tool.WINDOW -> stringResource(R.string.editor_hint_window)
 
-            state.tool == Tool.DOOR -> stringResource(R.string.editor_hint_door)
+            state.tools.tool == Tool.DOOR -> stringResource(R.string.editor_hint_door)
 
-            state.outlines.isEmpty() -> stringResource(R.string.editor_hint_start)
+            state.plan.outlines.isEmpty() -> stringResource(R.string.editor_hint_start)
 
             else -> null
         } ?: return
-    val warns = state.refused != null || (!drawing && joinIssue != null)
+    val warns = state.plan.refused != null || (!drawing && joinIssue != null)
     val colors = OtvesTheme.colors
     Surface(shape = PanelShape, color = colors.surface, border = BorderStroke(1.dp, colors.border)) {
         Text(
@@ -514,28 +514,34 @@ private fun EditorScreenPreview() {
             state =
                 EditorUiState(
                     ready = true,
-                    levels = listOf(level),
-                    level = level,
-                    drawing =
-                        Drawing(
-                            polygons =
-                                listOf(
-                                    DrawnPolygon(wall, FillKind.WALL, StrokeKind.WALL_EDGE, body),
-                                    DrawnPolygon(window, FillKind.GAP, StrokeKind.NONE, gap),
+                    plan =
+                        PlanState(
+                            levels = listOf(level),
+                            level = level,
+                            drawing =
+                                Drawing(
+                                    polygons =
+                                        listOf(
+                                            DrawnPolygon(wall, FillKind.WALL, StrokeKind.WALL_EDGE, body),
+                                            DrawnPolygon(window, FillKind.GAP, StrokeKind.NONE, gap),
+                                        ),
+                                    lines =
+                                        listOf(
+                                            DrawnLine(window, StrokeKind.WALL_EDGE, gap[0], gap[3]),
+                                            DrawnLine(window, StrokeKind.WALL_EDGE, gap[1], gap[2]),
+                                            DrawnLine(window, StrokeKind.FRAME, PointM(2.25, 0.0), PointM(3.75, 0.0)),
+                                        ),
+                                    texts = listOf(DrawnText(wall, TextKind.LENGTH, 6_400, PointM(3.2, 0.42), PointM(1.0, 0.0))),
                                 ),
-                            lines =
-                                listOf(
-                                    DrawnLine(window, StrokeKind.WALL_EDGE, gap[0], gap[3]),
-                                    DrawnLine(window, StrokeKind.WALL_EDGE, gap[1], gap[2]),
-                                    DrawnLine(window, StrokeKind.FRAME, PointM(2.25, 0.0), PointM(3.75, 0.0)),
-                                ),
-                            texts = listOf(DrawnText(wall, TextKind.LENGTH, 6_400, PointM(3.2, 0.42), PointM(1.0, 0.0))),
+                            outlines = listOf(WallOutline(wall, level, body, length = 6_400.mm)),
+                            dimensions = listOf(Dimension(wall, drawn, 6_400.mm)),
+                            canUndo = true,
                         ),
-                    outlines = listOf(WallOutline(wall, level, body, length = 6_400.mm)),
-                    dimensions = listOf(Dimension(wall, drawn, 6_400.mm)),
-                    draft = Draft(PointMm(6_400.mm, 0.mm), Aimed(PointMm(6_400.mm, 4_200.mm), length = 4_200.mm)),
-                    drawn = wall,
-                    canUndo = true,
+                    tools =
+                        ToolState(
+                            draft = Draft(PointMm(6_400.mm, 0.mm), Aimed(PointMm(6_400.mm, 4_200.mm), length = 4_200.mm)),
+                            drawn = wall,
+                        ),
                 ),
             actions = EditorActions(),
         )

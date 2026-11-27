@@ -587,7 +587,7 @@ class EditorViewModelTest {
         assertThat(start[2]).isInstanceOf(EngineCommand.AddLevel::class.java)
         assertThat(store.recorded).hasSize(1)
         assertThat(viewModel.uiState.value.ready).isTrue()
-        assertThat(viewModel.uiState.value.level).isEqualTo(level)
+        assertThat(viewModel.uiState.value.plan.level).isEqualTo(level)
     }
 
     @Test
@@ -606,10 +606,10 @@ class EditorViewModelTest {
 
         assertThat(engine.sent.single()).containsExactly(content, EngineCommand.OpenModel(saved, clock = 42L)).inOrder()
         val state = viewModel.uiState.value
-        assertThat(state.levels).containsExactly(level, upper).inOrder()
-        assertThat(state.level).isEqualTo(level)
-        assertThat(state.outlines).hasSize(1)
-        assertThat(state.canUndo).isFalse()
+        assertThat(state.plan.levels).containsExactly(level, upper).inOrder()
+        assertThat(state.plan.level).isEqualTo(level)
+        assertThat(state.plan.outlines).hasSize(1)
+        assertThat(state.plan.canUndo).isFalse()
         assertThat(state.name).isEqualTo("Дом на Чиланзаре")
     }
 
@@ -648,7 +648,7 @@ class EditorViewModelTest {
         viewModel.selectThickness(250.mm)
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
+        assertThat(viewModel.uiState.value.tools.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
         engine.aimNext = Aimed(PointMm(6_400.mm, 0.mm), length = 6_400.mm)
         viewModel.tap(PointMm(6_420.mm, 260.mm), reach)
 
@@ -663,24 +663,32 @@ class EditorViewModelTest {
         assertThat(add.wall.end).isEqualTo(PointMm(6_400.mm, 0.mm))
         assertThat(add.wall.thickness).isEqualTo(250.mm)
         val state = viewModel.uiState.value
-        assertThat(state.draft).isEqualTo(Draft(PointMm(6_400.mm, 0.mm)))
-        assertThat(state.drawn).isEqualTo(state.outlines.single().wall)
-        assertThat(state.outlines).hasSize(1)
-        assertThat(state.takeoff.single().amount).isEqualTo(100.0)
-        assertThat(state.canUndo).isTrue()
+        assertThat(state.tools.draft).isEqualTo(Draft(PointMm(6_400.mm, 0.mm)))
+        assertThat(state.tools.drawn).isEqualTo(
+            state.plan.outlines
+                .single()
+                .wall,
+        )
+        assertThat(state.plan.outlines).hasSize(1)
+        assertThat(
+            state.estimate.takeoff
+                .single()
+                .amount,
+        ).isEqualTo(100.0)
+        assertThat(state.plan.canUndo).isTrue()
     }
 
     @Test
     fun undoStopsBeforeTheGroundFloor() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
-        assertThat(viewModel.uiState.value.canUndo).isFalse()
+        assertThat(viewModel.uiState.value.plan.canUndo).isFalse()
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(4_000.mm, 0.mm), reach)
-        assertThat(viewModel.uiState.value.canUndo).isTrue()
+        assertThat(viewModel.uiState.value.plan.canUndo).isTrue()
 
         viewModel.undo()
-        assertThat(viewModel.uiState.value.canUndo).isFalse()
+        assertThat(viewModel.uiState.value.plan.canUndo).isFalse()
     }
 
     @Test
@@ -694,10 +702,10 @@ class EditorViewModelTest {
 
         viewModel.aim(PointMm(4_020.mm, 2_980.mm), reach)
 
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm), aimed))
+        assertThat(viewModel.uiState.value.tools.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm), aimed))
         // Without the 90° lock the engine is asked for a wall at any angle.
         assertThat((engine.sent.last().single() as EngineCommand.Aim).square).isFalse()
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
     }
 
     @Test
@@ -735,8 +743,8 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
         val state = viewModel.uiState.value
-        assertThat(state.outlines).hasSize(4)
-        assertThat(state.draft).isNull()
+        assertThat(state.plan.outlines).hasSize(4)
+        assertThat(state.tools.draft).isNull()
         assertThat((engine.sent.last().single() as EngineCommand.AddWall).wall.end).isEqualTo(PointMm(0.mm, 0.mm))
     }
 
@@ -753,8 +761,8 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(5_060.mm, 450.mm), reach)
 
         assertThat((engine.sent.last().single() as EngineCommand.AddWall).wall.end).isEqualTo(PointMm(5_000.mm, 0.mm))
-        assertThat(viewModel.uiState.value.outlines).hasSize(2)
-        assertThat(viewModel.uiState.value.draft).isNull()
+        assertThat(viewModel.uiState.value.plan.outlines).hasSize(2)
+        assertThat(viewModel.uiState.value.tools.draft).isNull()
     }
 
     @Test
@@ -765,7 +773,7 @@ class EditorViewModelTest {
 
         // 6 400 to the right, then left turns: 4 000 up and 6 400 back.
         listOf(6, 4, 0, 0).forEach(viewModel::typeDigit)
-        assertThat(viewModel.uiState.value.draft)
+        assertThat(viewModel.uiState.value.tools.draft)
             .isEqualTo(Draft(PointMm(0.mm, 0.mm), Aimed(PointMm(6_400.mm, 0.mm), length = 6_400.mm)))
         viewModel.nextMeasured()
         viewModel.setTurn(Turn.LEFT)
@@ -773,8 +781,8 @@ class EditorViewModelTest {
         viewModel.eraseDigit()
         viewModel.typeDigit(0)
         viewModel.nextMeasured()
-        assertThat(viewModel.uiState.value.measure).isEqualTo(Measure(turn = Turn.LEFT))
-        assertThat(viewModel.uiState.value.canCloseRun).isTrue()
+        assertThat(viewModel.uiState.value.tools.measure).isEqualTo(Measure(turn = Turn.LEFT))
+        assertThat(viewModel.uiState.value.tools.canCloseRun).isTrue()
         listOf(6, 4, 0, 0).forEach(viewModel::typeDigit)
         // The engine is told where the wall before started, so it knows which way is left.
         assertThat(engine.sent.last())
@@ -782,7 +790,7 @@ class EditorViewModelTest {
                 EngineCommand.AimMeasured(level, PointMm(6_400.mm, 4_000.mm), before = PointMm(6_400.mm, 0.mm), Turn.LEFT, 6_400.mm),
             )
         assertThat(
-            viewModel.uiState.value.draft
+            viewModel.uiState.value.tools.draft
                 ?.to
                 ?.point,
         ).isEqualTo(PointMm(0.mm, 4_000.mm))
@@ -791,9 +799,9 @@ class EditorViewModelTest {
         viewModel.closeMeasured()
 
         val state = viewModel.uiState.value
-        assertThat(state.outlines).hasSize(4)
-        assertThat(state.measure).isNull()
-        assertThat(state.draft).isNull()
+        assertThat(state.plan.outlines).hasSize(4)
+        assertThat(state.tools.measure).isNull()
+        assertThat(state.tools.draft).isNull()
         val closing = (engine.sent.last().single() as EngineCommand.AddWall).wall
         assertThat(closing.start).isEqualTo(PointMm(0.mm, 4_000.mm))
         assertThat(closing.end).isEqualTo(PointMm(0.mm, 0.mm))
@@ -806,17 +814,17 @@ class EditorViewModelTest {
         viewModel.startMeasure()
 
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
         viewModel.nextMeasured()
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
         // Nor does a touch build the wall whose length is typed.
         viewModel.typeDigit(3)
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
 
         viewModel.stopMeasure()
-        assertThat(viewModel.uiState.value.measure).isNull()
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
+        assertThat(viewModel.uiState.value.tools.measure).isNull()
+        assertThat(viewModel.uiState.value.tools.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
     }
 
     @Test
@@ -826,8 +834,8 @@ class EditorViewModelTest {
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
-        assertThat(viewModel.uiState.value.takeoffOpen).isFalse()
-        assertThat(viewModel.uiState.value.draft).isNull()
+        assertThat(viewModel.uiState.value.panel.takeoffOpen).isFalse()
+        assertThat(viewModel.uiState.value.tools.draft).isNull()
     }
 
     @Test
@@ -836,13 +844,13 @@ class EditorViewModelTest {
 
         viewModel.aim(PointMm(0.mm, 0.mm), reach)
         viewModel.cancelAim()
-        assertThat(viewModel.uiState.value.draft).isNull()
+        assertThat(viewModel.uiState.value.tools.draft).isNull()
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.aim(PointMm(3_000.mm, 0.mm), reach)
         viewModel.cancelAim()
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.tools.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
     }
 
     @Test
@@ -854,8 +862,8 @@ class EditorViewModelTest {
 
         viewModel.undo()
 
-        assertThat(viewModel.uiState.value.outlines).hasSize(1)
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(6_000.mm, 0.mm)))
+        assertThat(viewModel.uiState.value.plan.outlines).hasSize(1)
+        assertThat(viewModel.uiState.value.tools.draft).isEqualTo(Draft(PointMm(6_000.mm, 0.mm)))
     }
 
     @Test
@@ -865,18 +873,18 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 4_000.mm), reach)
         val first =
-            viewModel.uiState.value.outlines
+            viewModel.uiState.value.plan.outlines
                 .first()
                 .wall
 
         viewModel.editLength(first)
-        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(first, was = 6_000.mm))
+        assertThat(viewModel.uiState.value.panel.entry).isEqualTo(LengthEntry(first, was = 6_000.mm))
         listOf(0, 6, 4, 3, 7, 1).forEach(viewModel::typeDigit)
         viewModel.eraseDigit()
         viewModel.confirmLength()
 
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(first, 6_437.mm))
-        assertThat(viewModel.uiState.value.entry).isNull()
+        assertThat(viewModel.uiState.value.panel.entry).isNull()
     }
 
     @Test
@@ -890,15 +898,15 @@ class EditorViewModelTest {
         assertThat(engine.drawn).hasSize(requests + 1)
         assertThat(engine.drawn.last().level).isEqualTo(level)
         val wall =
-            viewModel.uiState.value.outlines
+            viewModel.uiState.value.plan.outlines
                 .single()
                 .wall
         assertThat(
-            viewModel.uiState.value.drawing.polygons
+            viewModel.uiState.value.plan.drawing.polygons
                 .map { it.element },
         ).containsExactly(wall)
         assertThat(
-            viewModel.uiState.value.drawing.texts
+            viewModel.uiState.value.plan.drawing.texts
                 .single()
                 .value,
         ).isEqualTo(6_000L)
@@ -927,7 +935,7 @@ class EditorViewModelTest {
             viewModel.buildWall()
             viewModel.addLevel()
             val upper =
-                viewModel.uiState.value.levels
+                viewModel.uiState.value.plan.levels
                     .last()
             val requests = engine.drawn.size
 
@@ -971,7 +979,7 @@ class EditorViewModelTest {
         viewModel.showKinds(true)
         viewModel.addKind(outside)
         val kind =
-            viewModel.uiState.value.kinds
+            viewModel.uiState.value.plan.kinds
                 .single()
         val (insulation, _) = kind.layers[1]
         val (structure, _) = kind.layers[2]
@@ -979,19 +987,19 @@ class EditorViewModelTest {
         // The type's layers open over the list of types.
         viewModel.showKinds(true)
         viewModel.editKind(kind.id)
-        assertThat(viewModel.uiState.value.kindEdited).isEqualTo(kind.id)
+        assertThat(viewModel.uiState.value.panel.kindEdited).isEqualTo(kind.id)
 
         // Insulation is as thick as the builder types.
         viewModel.editLayer(insulation)
-        assertThat(viewModel.uiState.value.layerEntry).isEqualTo(LayerEntry(insulation, 100.mm))
+        assertThat(viewModel.uiState.value.panel.layerEntry).isEqualTo(LayerEntry(insulation, 100.mm))
         assertThat(viewModel.uiState.value.typing).isTrue()
         "50".forEach { viewModel.typeDigit(it.digitToInt()) }
         viewModel.confirmLayer()
 
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLayer(insulation, 50.mm, null))
-        assertThat(viewModel.uiState.value.layerEntry).isNull()
+        assertThat(viewModel.uiState.value.panel.layerEntry).isNull()
         assertThat(
-            viewModel.uiState.value.kinds
+            viewModel.uiState.value.plan.kinds
                 .single()
                 .thickness,
         ).isEqualTo(360.mm)
@@ -1000,7 +1008,7 @@ class EditorViewModelTest {
         viewModel.setLayerThickness(structure, 390.mm)
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLayer(structure, 390.mm, block))
         assertThat(
-            viewModel.uiState.value.kinds
+            viewModel.uiState.value.plan.kinds
                 .single()
                 .thickness,
         ).isEqualTo(560.mm)
@@ -1013,14 +1021,14 @@ class EditorViewModelTest {
         // Undo takes the type's last change back; the layers stay open.
         viewModel.undo()
         assertThat(
-            viewModel.uiState.value.kinds
+            viewModel.uiState.value.plan.kinds
                 .single()
                 .thickness,
         ).isEqualTo(360.mm)
-        assertThat(viewModel.uiState.value.kindEdited).isEqualTo(kind.id)
+        assertThat(viewModel.uiState.value.panel.kindEdited).isEqualTo(kind.id)
         viewModel.editKind(null)
-        assertThat(viewModel.uiState.value.kindEdited).isNull()
-        assertThat(viewModel.uiState.value.kindsOpen).isTrue()
+        assertThat(viewModel.uiState.value.panel.kindEdited).isNull()
+        assertThat(viewModel.uiState.value.panel.kindsOpen).isTrue()
     }
 
     @Test
@@ -1032,7 +1040,7 @@ class EditorViewModelTest {
 
         assertThat(engine.sent.last()).containsExactly(EngineCommand.AddWallType(WallRole.EXTERIOR, outside.layers))
         val state = viewModel.uiState.value
-        val kind = state.kinds.single()
+        val kind = state.plan.kinds.single()
         assertThat(kind.role).isEqualTo(WallRole.EXTERIOR)
         assertThat(
             kind.layers.map {
@@ -1040,9 +1048,9 @@ class EditorViewModelTest {
             },
         ).containsExactly(LayerFunction.FACING, LayerFunction.INSULATION, LayerFunction.STRUCTURE).inOrder()
         assertThat(kind.thickness).isEqualTo(410.mm)
-        assertThat(state.kind).isEqualTo(kind.id)
+        assertThat(state.tools.kind).isEqualTo(kind.id)
         assertThat(state.drawnThickness).isEqualTo(410.mm)
-        assertThat(state.kindsOpen).isFalse()
+        assertThat(state.panel.kindsOpen).isFalse()
         // The type and its three layers are written to the job.
         assertThat(store.recorded.last().changes).hasSize(4)
 
@@ -1058,14 +1066,14 @@ class EditorViewModelTest {
         val requests = engine.sent.size
         viewModel.addKind(outside)
         assertThat(engine.sent).hasSize(requests)
-        assertThat(viewModel.uiState.value.kinds).hasSize(1)
+        assertThat(viewModel.uiState.value.plan.kinds).hasSize(1)
     }
 
     @Test
     fun aSketchIsBuiltOfTheChosenType() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.addKind(outside)
-        val kind = viewModel.uiState.value.kind
+        val kind = viewModel.uiState.value.tools.kind
         viewModel.selectTool(Tool.PENCIL)
 
         viewModel.sketch(listOf(PointMm(0.mm, 0.mm), PointMm(6_000.mm, 0.mm)), reach)
@@ -1088,19 +1096,19 @@ class EditorViewModelTest {
         viewModel.addKind(outside)
 
         val kind =
-            viewModel.uiState.value.kinds
+            viewModel.uiState.value.plan.kinds
                 .single()
                 .id
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallType(wall, kind))
-        val typed = (viewModel.uiState.value.selected as Selected.WallPart).wall
+        val typed = (viewModel.uiState.value.plan.selected as Selected.WallPart).wall
         assertThat(typed.type).isEqualTo(kind)
         assertThat(typed.thickness).isEqualTo(0.mm)
         // No choice was made for new walls yet, so they are built of this type too.
-        assertThat(viewModel.uiState.value.kind).isEqualTo(kind)
+        assertThat(viewModel.uiState.value.tools.kind).isEqualTo(kind)
 
         viewModel.flipWall()
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallMirrored(wall, mirrored = true))
-        assertThat((viewModel.uiState.value.selected as Selected.WallPart).wall.mirrored).isTrue()
+        assertThat((viewModel.uiState.value.plan.selected as Selected.WallPart).wall.mirrored).isTrue()
 
         viewModel.setLocationLine(LocationLine.LEFT_FACE)
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLocationLine(wall, LocationLine.LEFT_FACE))
@@ -1110,17 +1118,17 @@ class EditorViewModelTest {
     fun wallsGoBackToNoTypeWhenAskedAndWhenUndoTakesTheTypeAway() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.addKind(outside)
-        val kind = viewModel.uiState.value.kind
+        val kind = viewModel.uiState.value.tools.kind
 
         viewModel.chooseKind(null)
-        assertThat(viewModel.uiState.value.kind).isNull()
-        assertThat(viewModel.uiState.value.kinds).hasSize(1)
+        assertThat(viewModel.uiState.value.tools.kind).isNull()
+        assertThat(viewModel.uiState.value.plan.kinds).hasSize(1)
         viewModel.chooseKind(kind)
-        assertThat(viewModel.uiState.value.kind).isEqualTo(kind)
+        assertThat(viewModel.uiState.value.tools.kind).isEqualTo(kind)
 
         viewModel.undo()
-        assertThat(viewModel.uiState.value.kinds).isEmpty()
-        assertThat(viewModel.uiState.value.kind).isNull()
+        assertThat(viewModel.uiState.value.plan.kinds).isEmpty()
+        assertThat(viewModel.uiState.value.tools.kind).isNull()
     }
 
     @Test
@@ -1140,8 +1148,12 @@ class EditorViewModelTest {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
 
         val state = viewModel.uiState.value
-        assertThat(state.kinds.single().thickness).isEqualTo(380.mm)
-        assertThat(state.kind).isEqualTo(type)
+        assertThat(
+            state.plan.kinds
+                .single()
+                .thickness,
+        ).isEqualTo(380.mm)
+        assertThat(state.tools.kind).isEqualTo(type)
         assertThat(state.drawnThickness).isEqualTo(380.mm)
     }
 
@@ -1164,9 +1176,9 @@ class EditorViewModelTest {
 
         viewModel.tap(at, reach)
 
-        assertThat(viewModel.uiState.value.selected).isEqualTo(Selected.SpacePart(at, floor))
+        assertThat(viewModel.uiState.value.plan.selected).isEqualTo(Selected.SpacePart(at, floor))
         assertThat(
-            viewModel.uiState.value.selected
+            viewModel.uiState.value.plan.selected
                 ?.id,
         ).isNull()
 
@@ -1177,10 +1189,10 @@ class EditorViewModelTest {
         assertThat(engine.sent.last()).containsExactly(EngineCommand.AddRoom(Room(level, at, RoomKind.BEDROOM)))
         // The space was looked at again in the same request, and is the room now.
         assertThat(engine.looked.last()).isEqualTo(EngineCommand.Pick(level, at, 0.mm))
-        val named = viewModel.uiState.value.selected as Selected.SpacePart
+        val named = viewModel.uiState.value.plan.selected as Selected.SpacePart
         assertThat(named.space.room).isNotNull()
         assertThat(named.space.kind).isEqualTo(RoomKind.BEDROOM)
-        assertThat(viewModel.uiState.value.roomKindsOpen).isFalse()
+        assertThat(viewModel.uiState.value.panel.roomKindsOpen).isFalse()
         assertThat(
             store.recorded
                 .last()
@@ -1192,7 +1204,7 @@ class EditorViewModelTest {
         // Another name renames the room; it is not named twice.
         viewModel.nameRoom(RoomKind.STUDY)
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetRoomKind(checkNotNull(named.space.room), RoomKind.STUDY))
-        assertThat((viewModel.uiState.value.selected as Selected.SpacePart).space.kind).isEqualTo(RoomKind.STUDY)
+        assertThat((viewModel.uiState.value.plan.selected as Selected.SpacePart).space.kind).isEqualTo(RoomKind.STUDY)
     }
 
     @Test
@@ -1207,20 +1219,20 @@ class EditorViewModelTest {
         viewModel.choosePartitionWall(Hand.LEFT)
         "1500".forEach { viewModel.typeDigit(it.digitToInt()) }
 
-        assertThat(viewModel.uiState.value.partition).isEqualTo(PartitionEntry(at, Hand.LEFT, "1500"))
+        assertThat(viewModel.uiState.value.panel.partition).isEqualTo(PartitionEntry(at, Hand.LEFT, "1500"))
         assertThat(viewModel.uiState.value.typing).isTrue()
 
         // A distance the engine refuses stays on the keys, to be corrected there.
         engine.refuseNext = EngineError.DOES_NOT_FIT
         viewModel.confirmPartition()
-        assertThat(viewModel.uiState.value.partition).isEqualTo(PartitionEntry(at, Hand.LEFT, "1500", refused = true))
-        assertThat(viewModel.uiState.value.refused).isNull()
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.panel.partition).isEqualTo(PartitionEntry(at, Hand.LEFT, "1500", refused = true))
+        assertThat(viewModel.uiState.value.plan.refused).isNull()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
 
         viewModel.eraseDigit()
         viewModel.typeDigit(0)
         assertThat(
-            viewModel.uiState.value.partition
+            viewModel.uiState.value.panel.partition
                 ?.refused,
         ).isFalse()
         viewModel.confirmPartition()
@@ -1231,10 +1243,10 @@ class EditorViewModelTest {
         assertThat(sent.at).isEqualTo(at)
         assertThat(sent.from).isEqualTo(Hand.LEFT)
         assertThat(sent.distance).isEqualTo(1_500.mm)
-        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.thickness)
-        assertThat(viewModel.uiState.value.partition).isNull()
-        assertThat(viewModel.uiState.value.outlines).hasSize(1)
-        assertThat(viewModel.uiState.value.canUndo).isTrue()
+        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.tools.thickness)
+        assertThat(viewModel.uiState.value.panel.partition).isNull()
+        assertThat(viewModel.uiState.value.plan.outlines).hasSize(1)
+        assertThat(viewModel.uiState.value.plan.canUndo).isTrue()
     }
 
     @Test
@@ -1242,22 +1254,22 @@ class EditorViewModelTest {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.selectTool(Tool.WALL)
         viewModel.toggleRoom()
-        assertThat(viewModel.uiState.value.roomPlacing).isTrue()
+        assertThat(viewModel.uiState.value.tools.roomPlacing).isTrue()
         val at = PointMm(300.mm, 350.mm)
 
         viewModel.tap(at, reach)
 
         // The touch gave the room's corner: it started no wall.
-        assertThat(viewModel.uiState.value.room).isEqualTo(RoomEntry(at, reach))
-        assertThat(viewModel.uiState.value.roomPlacing).isFalse()
-        assertThat(viewModel.uiState.value.draft).isNull()
+        assertThat(viewModel.uiState.value.panel.room).isEqualTo(RoomEntry(at, reach))
+        assertThat(viewModel.uiState.value.tools.roomPlacing).isFalse()
+        assertThat(viewModel.uiState.value.tools.draft).isNull()
         assertThat(viewModel.uiState.value.typing).isTrue()
 
         // The width, then the depth.
         "1600".forEach { viewModel.typeDigit(it.digitToInt()) }
         viewModel.confirmRoom()
         assertThat(
-            viewModel.uiState.value.room
+            viewModel.uiState.value.panel.room
                 ?.active,
         ).isEqualTo(1)
         "2000".forEach { viewModel.typeDigit(it.digitToInt()) }
@@ -1267,15 +1279,15 @@ class EditorViewModelTest {
         engine.refuseNext = EngineError.DOES_NOT_FIT
         viewModel.confirmRoom()
         assertThat(
-            viewModel.uiState.value.room
+            viewModel.uiState.value.panel.room
                 ?.refused,
         ).isTrue()
-        assertThat(viewModel.uiState.value.refused).isNull()
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.plan.refused).isNull()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
 
         viewModel.turnRoom(right = true, up = true)
         assertThat(
-            viewModel.uiState.value.room
+            viewModel.uiState.value.panel.room
                 ?.refused,
         ).isFalse()
         viewModel.confirmRoom()
@@ -1289,13 +1301,13 @@ class EditorViewModelTest {
         assertThat(sent.depth).isEqualTo(2_000.mm)
         assertThat(sent.right).isTrue()
         assertThat(sent.up).isTrue()
-        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.thickness)
-        assertThat(viewModel.uiState.value.room).isNull()
-        assertThat(viewModel.uiState.value.outlines).hasSize(2)
+        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.tools.thickness)
+        assertThat(viewModel.uiState.value.panel.room).isNull()
+        assertThat(viewModel.uiState.value.plan.outlines).hasSize(2)
 
         // Both walls are one step to undo.
         viewModel.undo()
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
     }
 
     @Test
@@ -1307,14 +1319,14 @@ class EditorViewModelTest {
         viewModel.nameRoom(RoomKind.KITCHEN)
         val room =
             checkNotNull(
-                viewModel.uiState.value.selected
+                viewModel.uiState.value.plan.selected
                     ?.id,
             )
 
         viewModel.removeSelected()
 
         assertThat(engine.sent.last()).containsExactly(EngineCommand.RemoveRoom(room))
-        val left = viewModel.uiState.value.selected as Selected.SpacePart
+        val left = viewModel.uiState.value.plan.selected as Selected.SpacePart
         assertThat(left.space.room).isNull()
         // With no name there is nothing to take away.
         val requests = engine.sent.size
@@ -1329,18 +1341,18 @@ class EditorViewModelTest {
         viewModel.selectTool(Tool.SELECT)
         engine.floor = floor
         viewModel.tap(PointMm(3_000.mm, 2_000.mm), reach)
-        assertThat(viewModel.uiState.value.selected).isInstanceOf(Selected.SpacePart::class.java)
+        assertThat(viewModel.uiState.value.plan.selected).isInstanceOf(Selected.SpacePart::class.java)
 
         // After a step that opens the walls no floor lies under the point any more.
         engine.floor = null
         viewModel.setRingBeam(150.mm)
-        assertThat(viewModel.uiState.value.selected).isNull()
+        assertThat(viewModel.uiState.value.plan.selected).isNull()
 
         // A tap that finds a wall selects the wall, not the floor beside it.
         engine.floor = floor
         engine.pickNext = wall
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
-        assertThat(viewModel.uiState.value.selected).isInstanceOf(Selected.WallPart::class.java)
+        assertThat(viewModel.uiState.value.plan.selected).isInstanceOf(Selected.WallPart::class.java)
     }
 
     @Test
@@ -1362,7 +1374,7 @@ class EditorViewModelTest {
         viewModel.deselect()
         assertThat(engine.drawn).hasSize(asked + 1)
         assertThat(engine.drawn.last().focus).isNull()
-        assertThat(viewModel.uiState.value.selected).isNull()
+        assertThat(viewModel.uiState.value.plan.selected).isNull()
         // Letting go of nothing asks nothing.
         viewModel.deselect()
         assertThat(engine.drawn).hasSize(asked + 1)
@@ -1375,20 +1387,20 @@ class EditorViewModelTest {
         val pier = DrawnText(window, TextKind.PIER, 1_800, PointM(1.1, 0.6), PointM(1.0, 0.0), from = 200.mm, forward = true)
 
         viewModel.editSize(pier)
-        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(window, was = 1_800.mm, size = pier))
+        assertThat(viewModel.uiState.value.panel.entry).isEqualTo(LengthEntry(window, was = 1_800.mm, size = pier))
         assertThat(viewModel.uiState.value.typing).isTrue()
 
         "1250".forEach { viewModel.typeDigit(it.digitToInt()) }
         viewModel.confirmLength()
 
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetDimension(pier, 1_250.mm))
-        assertThat(viewModel.uiState.value.entry).isNull()
+        assertThat(viewModel.uiState.value.panel.entry).isNull()
 
         // The plan's overall size and a room's name are not sizes to type.
         viewModel.editSize(pier.copy(kind = TextKind.OVERALL))
         viewModel.editSize(pier.copy(kind = TextKind.ROOM_NAME))
         viewModel.editSize(pier.copy(element = null))
-        assertThat(viewModel.uiState.value.entry).isNull()
+        assertThat(viewModel.uiState.value.panel.entry).isNull()
     }
 
     @Test
@@ -1413,7 +1425,7 @@ class EditorViewModelTest {
 
         // A size with no wall at one end is only read.
         viewModel.editSize(across.copy(other = null))
-        assertThat(viewModel.uiState.value.entry).isNull()
+        assertThat(viewModel.uiState.value.panel.entry).isNull()
     }
 
     @Test
@@ -1423,7 +1435,7 @@ class EditorViewModelTest {
         val length = DrawnText(wall, TextKind.LENGTH, 6_000, PointM(3.0, 0.4), PointM(1.0, 0.0))
 
         viewModel.editSize(length)
-        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(wall, was = 6_000.mm))
+        assertThat(viewModel.uiState.value.panel.entry).isEqualTo(LengthEntry(wall, was = 6_000.mm))
 
         "5400".forEach { viewModel.typeDigit(it.digitToInt()) }
         viewModel.confirmLength()
@@ -1438,7 +1450,7 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
         viewModel.tap(PointMm(5_000.mm, 0.mm), reach)
         val door =
-            viewModel.uiState.value.drawing.polygons
+            viewModel.uiState.value.plan.drawing.polygons
                 .last { it.fill == FillKind.GAP }
                 .element!!
         viewModel.selectTool(Tool.SELECT)
@@ -1447,7 +1459,7 @@ class EditorViewModelTest {
 
         // The engine is told which opening is selected: its drawing has the opening's chain.
         assertThat(engine.drawn.last().selected).isEqualTo(door)
-        val picked = viewModel.uiState.value.selected as Selected.OpeningPart
+        val picked = viewModel.uiState.value.plan.selected as Selected.OpeningPart
         assertThat(picked.opening.hinge).isEqualTo(Hinge.NEAR)
         assertThat(picked.opening.swing).isEqualTo(Swing.LEFT)
         // Both doors are of one size: they share a mark.
@@ -1457,7 +1469,7 @@ class EditorViewModelTest {
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetOpeningHinge(door, Hinge.FAR))
         viewModel.flipSwing()
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetOpeningSwing(door, Swing.RIGHT))
-        val hung = (viewModel.uiState.value.selected as Selected.OpeningPart).opening
+        val hung = (viewModel.uiState.value.plan.selected as Selected.OpeningPart).opening
         assertThat(hung.hinge).isEqualTo(Hinge.FAR)
         assertThat(hung.swing).isEqualTo(Swing.RIGHT)
         // Again, and it hangs as it did.
@@ -1485,14 +1497,14 @@ class EditorViewModelTest {
         assertThat(sent.points).isEqualTo(stroke)
         assertThat(sent.reach).isEqualTo(600.mm)
         assertThat(sent.square).isTrue()
-        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.thickness)
+        assertThat(sent.thickness).isEqualTo(viewModel.uiState.value.tools.thickness)
         // What the engine read is written to the job and drawn as walls of about that length.
         assertThat(store.recorded.last().changes).hasSize(2)
         assertThat(viewModel.uiState.value.rough).hasSize(2)
-        assertThat(viewModel.uiState.value.canUndo).isTrue()
+        assertThat(viewModel.uiState.value.plan.canUndo).isTrue()
 
         viewModel.undo()
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
     }
 
     @Test
@@ -1517,19 +1529,19 @@ class EditorViewModelTest {
         val (first, second) = viewModel.uiState.value.rough
 
         viewModel.refine()
-        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(first, was = 6_000.mm, step = 1, of = 2))
+        assertThat(viewModel.uiState.value.panel.entry).isEqualTo(LengthEntry(first, was = 6_000.mm, step = 1, of = 2))
         listOf(6, 4, 0, 0).forEach(viewModel::typeDigit)
         viewModel.confirmLength()
 
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(first, 6_400.mm))
         // The second wall starts where the first one now ends.
-        assertThat(viewModel.uiState.value.entry).isEqualTo(LengthEntry(second, was = 3_600.mm, step = 2, of = 2))
+        assertThat(viewModel.uiState.value.panel.entry).isEqualTo(LengthEntry(second, was = 3_600.mm, step = 2, of = 2))
 
         // No digits keep the length the sketch gave, and the wall is measured all the same.
         viewModel.confirmLength()
 
         assertThat(engine.sent.last()).containsExactly(EngineCommand.SetWallLength(second, 3_600.mm))
-        assertThat(viewModel.uiState.value.entry).isNull()
+        assertThat(viewModel.uiState.value.panel.entry).isNull()
         assertThat(viewModel.uiState.value.rough).isEmpty()
     }
 
@@ -1545,13 +1557,13 @@ class EditorViewModelTest {
         engine.refuseNext = EngineError.BREAKS_JOIN
         viewModel.confirmLength()
 
-        assertThat(viewModel.uiState.value.refused).isEqualTo(EngineError.BREAKS_JOIN)
+        assertThat(viewModel.uiState.value.plan.refused).isEqualTo(EngineError.BREAKS_JOIN)
         assertThat(
-            viewModel.uiState.value.entry
+            viewModel.uiState.value.panel.entry
                 ?.wall,
         ).isEqualTo(second)
         viewModel.cancelLength()
-        assertThat(viewModel.uiState.value.entry).isNull()
+        assertThat(viewModel.uiState.value.panel.entry).isNull()
         assertThat(viewModel.uiState.value.rough).containsExactly(first, second).inOrder()
     }
 
@@ -1560,14 +1572,14 @@ class EditorViewModelTest {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_400.mm, 0.mm), reach)
-        viewModel.editLength(viewModel.uiState.value.drawn!!)
+        viewModel.editLength(viewModel.uiState.value.tools.drawn!!)
         listOf(6, 4, 3, 7).forEach(viewModel::typeDigit)
         viewModel.confirmLength()
 
         viewModel.undo()
 
-        assertThat(viewModel.uiState.value.outlines).hasSize(1)
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(6_400.mm, 0.mm)))
+        assertThat(viewModel.uiState.value.plan.outlines).hasSize(1)
+        assertThat(viewModel.uiState.value.tools.draft).isEqualTo(Draft(PointMm(6_400.mm, 0.mm)))
     }
 
     @Test
@@ -1577,7 +1589,7 @@ class EditorViewModelTest {
 
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
 
-        assertThat(viewModel.uiState.value.draft).isNull()
+        assertThat(viewModel.uiState.value.tools.draft).isNull()
         assertThat(engine.sent.flatten().filterIsInstance<EngineCommand.Aim>()).isEmpty()
     }
 
@@ -1586,13 +1598,13 @@ class EditorViewModelTest {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_400.mm, 0.mm), reach)
-        val drawn = viewModel.uiState.value.drawn!!
+        val drawn = viewModel.uiState.value.tools.drawn!!
 
         viewModel.editLength(drawn)
         listOf(6, 4, 3, 7).forEach(viewModel::typeDigit)
         viewModel.confirmLength()
 
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(6_437.mm, 0.mm)))
+        assertThat(viewModel.uiState.value.tools.draft).isEqualTo(Draft(PointMm(6_437.mm, 0.mm)))
     }
 
     @Test
@@ -1615,10 +1627,10 @@ class EditorViewModelTest {
         assertThat(place.kind).isEqualTo(OpeningKind.WINDOW)
         // The engine draws the window: the plan shows its gap in the wall.
         assertThat(
-            viewModel.uiState.value.drawing.polygons
+            viewModel.uiState.value.plan.drawing.polygons
                 .count { it.fill == FillKind.GAP },
         ).isEqualTo(1)
-        assertThat(viewModel.uiState.value.canUndo).isTrue()
+        assertThat(viewModel.uiState.value.plan.canUndo).isTrue()
     }
 
     @Test
@@ -1641,7 +1653,7 @@ class EditorViewModelTest {
 
         viewModel.selectTool(Tool.WINDOW)
 
-        assertThat(viewModel.uiState.value.draft).isNull()
+        assertThat(viewModel.uiState.value.tools.draft).isNull()
     }
 
     @Test
@@ -1655,13 +1667,16 @@ class EditorViewModelTest {
         val add = engine.sent.last().single() as EngineCommand.AddLevel
         assertThat(add.level).isEqualTo(Level(elevation = 3_000.mm, height = 3_000.mm))
         val state = viewModel.uiState.value
-        assertThat(state.levels).hasSize(2)
-        assertThat(state.levels.first()).isEqualTo(level)
-        assertThat(state.level).isEqualTo(state.levels.last())
-        assertThat(state.outlines).isEmpty()
+        assertThat(state.plan.levels).hasSize(2)
+        assertThat(state.plan.levels.first()).isEqualTo(level)
+        assertThat(state.plan.level).isEqualTo(state.plan.levels.last())
+        assertThat(state.plan.outlines).isEmpty()
         // The wall of the storey under it, in outline.
-        assertThat(state.drawing.polygons.map { it.stroke }).containsExactly(StrokeKind.BELOW)
-        assertThat(state.canUndo).isTrue()
+        assertThat(
+            state.plan.drawing.polygons
+                .map { it.stroke },
+        ).containsExactly(StrokeKind.BELOW)
+        assertThat(state.plan.canUndo).isTrue()
     }
 
     @Test
@@ -1674,9 +1689,12 @@ class EditorViewModelTest {
         viewModel.selectLevel(level)
 
         val state = viewModel.uiState.value
-        assertThat(state.level).isEqualTo(level)
-        assertThat(state.outlines).hasSize(1)
-        assertThat(state.drawing.polygons.map { it.stroke }).containsExactly(StrokeKind.WALL_EDGE)
+        assertThat(state.plan.level).isEqualTo(level)
+        assertThat(state.plan.outlines).hasSize(1)
+        assertThat(
+            state.plan.drawing.polygons
+                .map { it.stroke },
+        ).containsExactly(StrokeKind.WALL_EDGE)
     }
 
     @Test
@@ -1686,16 +1704,16 @@ class EditorViewModelTest {
 
         viewModel.undo()
 
-        assertThat(viewModel.uiState.value.levels).containsExactly(level)
-        assertThat(viewModel.uiState.value.level).isEqualTo(level)
-        assertThat(viewModel.uiState.value.canUndo).isFalse()
+        assertThat(viewModel.uiState.value.plan.levels).containsExactly(level)
+        assertThat(viewModel.uiState.value.plan.level).isEqualTo(level)
+        assertThat(viewModel.uiState.value.plan.canUndo).isFalse()
     }
 
     // A 6 m wall on the ground floor; returns its id.
     private fun EditorViewModel.buildWall(): ElementId {
         tap(PointMm(0.mm, 0.mm), reach)
         tap(PointMm(6_000.mm, 0.mm), reach)
-        return uiState.value.outlines
+        return uiState.value.plan.outlines
             .last()
             .wall
     }
@@ -1710,13 +1728,13 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(3_000.mm, 100.mm), reach)
 
         assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.Pick(level, PointMm(3_000.mm, 100.mm), reach))
-        val selected = viewModel.uiState.value.selected as Selected.WallPart
+        val selected = viewModel.uiState.value.plan.selected as Selected.WallPart
         assertThat(selected.id).isEqualTo(wall)
         assertThat(selected.wall.thickness).isEqualTo(380.mm)
 
         engine.pickNext = null
         viewModel.tap(PointMm(3_000.mm, 3_000.mm), reach)
-        assertThat(viewModel.uiState.value.selected).isNull()
+        assertThat(viewModel.uiState.value.plan.selected).isNull()
     }
 
     @Test
@@ -1730,7 +1748,7 @@ class EditorViewModelTest {
         viewModel.setWallThickness(250.mm)
 
         assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.SetWallThickness(wall, 250.mm))
-        assertThat((viewModel.uiState.value.selected as Selected.WallPart).wall.thickness).isEqualTo(250.mm)
+        assertThat((viewModel.uiState.value.plan.selected as Selected.WallPart).wall.thickness).isEqualTo(250.mm)
     }
 
     @Test
@@ -1741,23 +1759,25 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
         val window =
             checkNotNull(
-                viewModel.uiState.value.drawing.polygons
+                viewModel.uiState.value.plan.drawing.polygons
                     .single { it.fill == FillKind.GAP }
                     .element,
             )
         viewModel.selectTool(Tool.SELECT)
         engine.pickNext = window
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
-        val before = (viewModel.uiState.value.selected as Selected.OpeningPart).opening
+        val before = (viewModel.uiState.value.plan.selected as Selected.OpeningPart).opening
 
         // A window has a width, a height and a height over the floor; each stands until typed.
         viewModel.editOpening()
-        assertThat(viewModel.uiState.value.openingEntry).isEqualTo(OpeningEntry(window, listOf(before.width, before.height, before.sill)))
+        assertThat(
+            viewModel.uiState.value.panel.openingEntry,
+        ).isEqualTo(OpeningEntry(window, listOf(before.width, before.height, before.sill)))
         assertThat(viewModel.uiState.value.typing).isTrue()
 
         // Nothing typed changes nothing.
         viewModel.confirmOpening()
-        assertThat(viewModel.uiState.value.openingEntry).isNull()
+        assertThat(viewModel.uiState.value.panel.openingEntry).isNull()
         assertThat(engine.sent.last()).doesNotContain(EngineCommand.BeginGesture)
 
         // The height, and a window that starts at the floor.
@@ -1767,7 +1787,7 @@ class EditorViewModelTest {
         viewModel.chooseOpeningSize(2)
         viewModel.typeDigit(0)
         assertThat(
-            viewModel.uiState.value.openingEntry
+            viewModel.uiState.value.panel.openingEntry
                 ?.sizes,
         ).containsExactly(before.width, 1_400.mm, 0.mm).inOrder()
         viewModel.confirmOpening()
@@ -1780,7 +1800,7 @@ class EditorViewModelTest {
                 EngineCommand.SetOpeningSill(window, 0.mm),
                 EngineCommand.EndGesture,
             ).inOrder()
-        val after = (viewModel.uiState.value.selected as Selected.OpeningPart).opening
+        val after = (viewModel.uiState.value.plan.selected as Selected.OpeningPart).opening
         assertThat(after.height).isEqualTo(1_400.mm)
         assertThat(after.sill).isEqualTo(0.mm)
 
@@ -1788,7 +1808,7 @@ class EditorViewModelTest {
         viewModel.setOpeningKind(OpeningKind.DOOR)
         viewModel.editOpening()
         assertThat(
-            viewModel.uiState.value.openingEntry
+            viewModel.uiState.value.panel.openingEntry
                 ?.was,
         ).hasSize(2)
     }
@@ -1801,7 +1821,7 @@ class EditorViewModelTest {
         viewModel.tap(PointMm(3_000.mm, 0.mm), reach)
         val window =
             checkNotNull(
-                viewModel.uiState.value.drawing.polygons
+                viewModel.uiState.value.plan.drawing.polygons
                     .single { it.fill == FillKind.GAP }
                     .element,
             )
@@ -1821,7 +1841,7 @@ class EditorViewModelTest {
                 EngineCommand.ResizeOpening(window, 900.mm, 2_100.mm),
                 EngineCommand.EndGesture,
             ).inOrder()
-        val door = (viewModel.uiState.value.selected as Selected.OpeningPart).opening
+        val door = (viewModel.uiState.value.plan.selected as Selected.OpeningPart).opening
         assertThat(door.kind).isEqualTo(OpeningKind.DOOR)
         assertThat(door.width).isEqualTo(900.mm)
     }
@@ -1837,16 +1857,16 @@ class EditorViewModelTest {
         viewModel.removeSelected()
 
         assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.RemoveWall(wall))
-        assertThat(viewModel.uiState.value.selected).isNull()
-        assertThat(viewModel.uiState.value.outlines).isEmpty()
-        assertThat(viewModel.uiState.value.canUndo).isTrue()
+        assertThat(viewModel.uiState.value.plan.selected).isNull()
+        assertThat(viewModel.uiState.value.plan.outlines).isEmpty()
+        assertThat(viewModel.uiState.value.plan.canUndo).isTrue()
     }
 
     @Test
     fun wallsAreDrawnWithoutAMaterialUntilOneIsChosen() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
-        assertThat(viewModel.uiState.value.material).isNull()
-        assertThat(viewModel.uiState.value.thickness).isEqualTo(380.mm)
+        assertThat(viewModel.uiState.value.tools.material).isNull()
+        assertThat(viewModel.uiState.value.tools.thickness).isEqualTo(380.mm)
         viewModel.tap(PointMm(0.mm, 0.mm), reach)
         viewModel.tap(PointMm(6_000.mm, 0.mm), reach)
         assertThat((engine.sent.last().single() as EngineCommand.AddWall).wall.unit).isNull()
@@ -1855,10 +1875,10 @@ class EditorViewModelTest {
         viewModel.chooseMaterial(catalog.units[1])
 
         val state = viewModel.uiState.value
-        assertThat(state.materialOpen).isFalse()
-        assertThat(state.material).isEqualTo(block)
+        assertThat(state.panel.materialOpen).isFalse()
+        assertThat(state.tools.material).isEqualTo(block)
         // 380 mm is not a block wall; 390 mm is the nearest one.
-        assertThat(state.thickness).isEqualTo(390.mm)
+        assertThat(state.tools.thickness).isEqualTo(390.mm)
         viewModel.tap(PointMm(6_000.mm, 4_000.mm), reach)
         val wall = (engine.sent.last().single() as EngineCommand.AddWall).wall
         assertThat(wall.unit).isEqualTo(block)
@@ -1877,7 +1897,7 @@ class EditorViewModelTest {
         listOf(1, 5, 0, 9).forEach(viewModel::typeDigit)
         viewModel.eraseDigit()
         assertThat(
-            viewModel.uiState.value.sizeEntry
+            viewModel.uiState.value.panel.sizeEntry
                 ?.size,
         ).isNull()
         viewModel.selectSizeField(2)
@@ -1886,12 +1906,12 @@ class EditorViewModelTest {
 
         val state = viewModel.uiState.value
         val own = UnitSize(300.mm, 150.mm, 200.mm)
-        assertThat(state.sizeEntry).isNull()
-        assertThat(state.materialOpen).isFalse()
-        assertThat(state.material).isEqualTo(own)
+        assertThat(state.panel.sizeEntry).isNull()
+        assertThat(state.panel.materialOpen).isFalse()
+        assertThat(state.tools.material).isEqualTo(own)
         // Laid along the wall or across it; 380 mm is nearer the 300.
         assertThat(state.thicknessesOf(own)).containsExactly(150.mm, 300.mm).inOrder()
-        assertThat(state.thickness).isEqualTo(300.mm)
+        assertThat(state.tools.thickness).isEqualTo(300.mm)
     }
 
     @Test
@@ -1911,9 +1931,9 @@ class EditorViewModelTest {
                 EngineCommand.SetWallThickness(wall, 390.mm),
                 EngineCommand.EndGesture,
             ).inOrder()
-        assertThat((viewModel.uiState.value.selected as Selected.WallPart).wall.unit).isEqualTo(block)
+        assertThat((viewModel.uiState.value.plan.selected as Selected.WallPart).wall.unit).isEqualTo(block)
         // The builder has chosen nothing for new walls yet, so they go on as this one.
-        assertThat(viewModel.uiState.value.material).isEqualTo(block)
+        assertThat(viewModel.uiState.value.tools.material).isEqualTo(block)
     }
 
     @Test
@@ -1927,15 +1947,15 @@ class EditorViewModelTest {
 
         viewModel.chooseMaterial(catalog.units[1])
 
-        assertThat((viewModel.uiState.value.selected as Selected.WallPart).wall.unit).isEqualTo(block)
-        assertThat(viewModel.uiState.value.material).isEqualTo(brick)
-        assertThat(viewModel.uiState.value.thickness).isEqualTo(380.mm)
+        assertThat((viewModel.uiState.value.plan.selected as Selected.WallPart).wall.unit).isEqualTo(block)
+        assertThat(viewModel.uiState.value.tools.material).isEqualTo(brick)
+        assertThat(viewModel.uiState.value.tools.thickness).isEqualTo(380.mm)
     }
 
     @Test
     fun theStoreyGetsTheRingBeamAndMeshesTheBuilderAsksFor() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
-        assertThat(viewModel.uiState.value.ringBeam).isEqualTo(0.mm)
+        assertThat(viewModel.uiState.value.estimate.ringBeam).isEqualTo(0.mm)
 
         viewModel.setRingBeam(150.mm)
         viewModel.setJunctionMeshes(true)
@@ -1943,8 +1963,8 @@ class EditorViewModelTest {
         assertThat(engine.sent.takeLast(2).map { it.single() })
             .containsExactly(EngineCommand.SetLevelRingBeam(level, 150.mm), EngineCommand.SetLevelJunctionMeshes(level, true))
             .inOrder()
-        assertThat(viewModel.uiState.value.ringBeam).isEqualTo(150.mm)
-        assertThat(viewModel.uiState.value.junctionMeshes).isTrue()
+        assertThat(viewModel.uiState.value.estimate.ringBeam).isEqualTo(150.mm)
+        assertThat(viewModel.uiState.value.estimate.junctionMeshes).isTrue()
     }
 
     @Test
@@ -1955,17 +1975,17 @@ class EditorViewModelTest {
         viewModel.startFooting()
         listOf(5, 0, 0).forEach(viewModel::typeDigit)
         viewModel.confirmSize()
-        assertThat(viewModel.uiState.value.sizeEntry).isNotNull()
+        assertThat(viewModel.uiState.value.panel.sizeEntry).isNotNull()
         viewModel.selectSizeField(1)
         listOf(8, 0, 0).forEach(viewModel::typeDigit)
         viewModel.confirmSize()
 
         assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.SetLevelFooting(level, Footing(500.mm, 800.mm)))
-        assertThat(viewModel.uiState.value.sizeEntry).isNull()
-        assertThat(viewModel.uiState.value.footing).isEqualTo(Footing(500.mm, 800.mm))
+        assertThat(viewModel.uiState.value.panel.sizeEntry).isNull()
+        assertThat(viewModel.uiState.value.estimate.footing).isEqualTo(Footing(500.mm, 800.mm))
 
         viewModel.setFooting(null)
-        assertThat(viewModel.uiState.value.footing).isNull()
+        assertThat(viewModel.uiState.value.estimate.footing).isNull()
     }
 
     @Test
@@ -1980,25 +2000,25 @@ class EditorViewModelTest {
 
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
 
-        assertThat(viewModel.uiState.value.material).isEqualTo(block)
-        assertThat(viewModel.uiState.value.thickness).isEqualTo(390.mm)
+        assertThat(viewModel.uiState.value.tools.material).isEqualTo(block)
+        assertThat(viewModel.uiState.value.tools.thickness).isEqualTo(390.mm)
     }
 
     @Test
     fun theJobsConditionsFollowTheEngineAndGoWhenUndone() {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
-        assertThat(viewModel.uiState.value.conditions).isEqualTo(Conditions())
+        assertThat(viewModel.uiState.value.estimate.conditions).isEqualTo(Conditions())
         viewModel.showTakeoff(true)
         viewModel.showConditions(true)
 
         viewModel.setCondition(Condition.CEMENT_GRADE, 500)
 
         assertThat(engine.sent.last().single()).isEqualTo(EngineCommand.SetCondition(Condition.CEMENT_GRADE, 500))
-        assertThat(viewModel.uiState.value.conditions.cementGrade).isEqualTo(500)
-        assertThat(viewModel.uiState.value.conditionsOpen).isTrue()
+        assertThat(viewModel.uiState.value.estimate.conditions.cementGrade).isEqualTo(500)
+        assertThat(viewModel.uiState.value.panel.conditionsOpen).isTrue()
 
         viewModel.undo()
-        assertThat(viewModel.uiState.value.conditions).isEqualTo(Conditions())
+        assertThat(viewModel.uiState.value.estimate.conditions).isEqualTo(Conditions())
     }
 
     @Test
@@ -2006,7 +2026,7 @@ class EditorViewModelTest {
         val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
         viewModel.buildWall()
         val line =
-            viewModel.uiState.value.takeoff
+            viewModel.uiState.value.estimate.takeoff
                 .single()
 
         viewModel.editPrice(line)
@@ -2015,17 +2035,17 @@ class EditorViewModelTest {
         viewModel.confirmPrice()
 
         val state = viewModel.uiState.value
-        assertThat(state.priceEntry).isNull()
+        assertThat(state.panel.priceEntry).isNull()
         // 1 450 sum a piece, in tiyin.
-        assertThat(state.prices).containsExactly("masonry_unit", Money(145_000, Currency.UZS))
+        assertThat(state.estimate.prices).containsExactly("masonry_unit", Money(145_000, Currency.UZS))
         // 100 pieces.
-        assertThat(cost(line, state.prices)).isEqualTo(Money(14_500_000, Currency.UZS))
-        assertThat(total(state.takeoff, state.prices)).isEqualTo(Money(14_500_000, Currency.UZS))
+        assertThat(cost(line, state.estimate.prices)).isEqualTo(Money(14_500_000, Currency.UZS))
+        assertThat(total(state.estimate.takeoff, state.estimate.prices)).isEqualTo(Money(14_500_000, Currency.UZS))
 
         viewModel.editPrice(line)
         viewModel.confirmPrice()
-        assertThat(viewModel.uiState.value.prices).isEmpty()
-        assertThat(total(state.takeoff, viewModel.uiState.value.prices)).isNull()
+        assertThat(viewModel.uiState.value.estimate.prices).isEmpty()
+        assertThat(total(state.estimate.takeoff, viewModel.uiState.value.estimate.prices)).isNull()
     }
 
     @Test
@@ -2079,7 +2099,7 @@ class EditorViewModelTest {
         viewModel.buildWall()
 
         val dimension =
-            viewModel.uiState.value.dimensions
+            viewModel.uiState.value.plan.dimensions
                 .single()
         assertThat(dimension.wall.end).isEqualTo(PointMm(6_000.mm, 0.mm))
         assertThat(dimension.length).isEqualTo(6_000.mm)
@@ -2094,7 +2114,7 @@ class EditorViewModelTest {
 
         viewModel.buildWall()
 
-        assertThat(viewModel.uiState.value.issues).containsExactly(here)
+        assertThat(viewModel.uiState.value.plan.issues).containsExactly(here)
     }
 
     @Test
@@ -2105,13 +2125,13 @@ class EditorViewModelTest {
         viewModel.aim(PointMm(4_000.mm, 0.mm), reach)
         engine.refuseNext = EngineError.OFF_PLAN
         viewModel.commit()
-        assertThat(viewModel.uiState.value.refused).isEqualTo(EngineError.OFF_PLAN)
+        assertThat(viewModel.uiState.value.plan.refused).isEqualTo(EngineError.OFF_PLAN)
         // The wall was not built, so the next one still starts where this one did.
-        assertThat(viewModel.uiState.value.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
+        assertThat(viewModel.uiState.value.tools.draft).isEqualTo(Draft(PointMm(0.mm, 0.mm)))
 
         engine.refuseNext = EngineError.RULE_FAILED
         viewModel.undo()
-        assertThat(viewModel.uiState.value.takeoffFailed).isTrue()
-        assertThat(viewModel.uiState.value.takeoff).isEmpty()
+        assertThat(viewModel.uiState.value.estimate.takeoffFailed).isTrue()
+        assertThat(viewModel.uiState.value.estimate.takeoff).isEmpty()
     }
 }

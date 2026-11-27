@@ -45,14 +45,14 @@ internal fun TakeoffPanel(
 ) {
     val onClose = { actions.onTakeoff(false) }
     Panel {
-        val lines = state.takeoff.filter { it.amount != 0.0 }
+        val lines = state.estimate.takeoff.filter { it.amount != 0.0 }
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
-        val shared = takeoffText(state.name, lines, state.catalog.units, state.prices)
+        val shared = takeoffText(state.name, lines, state.catalog.units, state.estimate.prices)
         PanelHeader(stringResource(R.string.takeoff_title)) {
             ShareMenu(
-                materials = lines.isNotEmpty() && !state.takeoffFailed,
-                plans = state.catalog.sheet != null && state.storeys.any { it.outlines.isNotEmpty() },
+                materials = lines.isNotEmpty() && !state.estimate.takeoffFailed,
+                plans = state.catalog.sheet != null && state.plan.storeys.any { it.outlines.isNotEmpty() },
                 onText = { context.share(shared) },
                 onPdf = { scope.launch { context.shareEstimate(state) { actions.onSheets(it, false) } } },
                 onPlans = { scope.launch { context.sharePlans(state) { actions.onSheets(it, true) } } },
@@ -60,12 +60,12 @@ internal fun TakeoffPanel(
             PanelAction(stringResource(R.string.takeoff_close), onClose)
         }
         when {
-            state.takeoffFailed -> {
+            state.estimate.takeoffFailed -> {
                 Text(stringResource(R.string.takeoff_failed), color = OtvesTheme.colors.warning)
             }
 
             // The take-off is the whole job's, whichever storey is shown.
-            state.storeys.all { it.outlines.isEmpty() } -> {
+            state.plan.storeys.all { it.outlines.isEmpty() } -> {
                 Text(stringResource(R.string.takeoff_empty), color = OtvesTheme.colors.inkSecondary)
             }
 
@@ -76,7 +76,7 @@ internal fun TakeoffPanel(
                     item { StoreyChoices(state, actions) }
                     items(lines) { line -> if (line in bought) TakeoffLine(line, state, actions.onPrice) else MixLine(line, state) }
                 }
-                Total(lines, state.prices)
+                Total(lines, state.estimate.prices)
                 PanelAction(stringResource(R.string.conditions_title), { actions.onConditions(true) })
             }
         }
@@ -152,7 +152,7 @@ private fun TakeoffLine(
     onPrice: (QuantityLine) -> Unit,
 ) {
     val colors = OtvesTheme.colors
-    val price = state.prices[line.item]
+    val price = state.estimate.prices[line.item]
     Surface(onClick = { onPrice(line) }, color = colors.surface) {
         Column {
             Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
@@ -171,7 +171,7 @@ private fun TakeoffLine(
                     color = if (price == null) colors.inkTertiary else colors.inkSecondary,
                     modifier = Modifier.weight(1f),
                 )
-                cost(line, state.prices)?.let { Text(moneyText(it), style = MaterialTheme.typography.bodyMedium) }
+                cost(line, state.estimate.prices)?.let { Text(moneyText(it), style = MaterialTheme.typography.bodyMedium) }
             }
             HorizontalDivider(color = colors.divider)
         }

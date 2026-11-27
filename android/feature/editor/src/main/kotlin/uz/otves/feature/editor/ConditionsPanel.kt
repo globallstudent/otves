@@ -29,7 +29,7 @@ internal fun ConditionsPanel(
             PanelAction(stringResource(R.string.inspector_done), { actions.onConditions(false) })
         }
         state.catalog.conditions.forEach { (condition, choices) ->
-            val chosen = state.conditions[condition] ?: choices.default
+            val chosen = state.estimate.conditions[condition] ?: choices.default
             InspectorRow(conditionName(condition)) {
                 choices.values.forEach { value ->
                     Pill(conditionValue(condition, value), value == chosen, { actions.onCondition(condition, value) })
@@ -81,7 +81,7 @@ internal fun StoreyChoices(
             )
         }
         InspectorRow(stringResource(R.string.level_footing)) {
-            val footing = state.footing
+            val footing = state.estimate.footing
             Pill(stringResource(R.string.option_none), footing == null, actions.onNoFooting)
             Pill(
                 label =
@@ -95,15 +95,15 @@ internal fun StoreyChoices(
             )
         }
         InspectorRow(stringResource(R.string.level_ring_beam)) {
-            Pill(stringResource(R.string.option_none), state.ringBeam.value == 0L, { actions.onRingBeam(0.mm) })
+            Pill(stringResource(R.string.option_none), state.estimate.ringBeam.value == 0L, { actions.onRingBeam(0.mm) })
             state.catalog.ringBeamHeights.forEach { height ->
-                Pill(grouped(height), state.ringBeam == height, { actions.onRingBeam(height) })
+                Pill(grouped(height), state.estimate.ringBeam == height, { actions.onRingBeam(height) })
             }
         }
         Advice(state, IssueKind.RING_BEAM_MISSING)
         InspectorRow(stringResource(R.string.level_meshes)) {
-            Pill(stringResource(R.string.option_none), !state.junctionMeshes, { actions.onJunctionMeshes(false) })
-            Pill(stringResource(R.string.option_yes), state.junctionMeshes, { actions.onJunctionMeshes(true) })
+            Pill(stringResource(R.string.option_none), !state.estimate.junctionMeshes, { actions.onJunctionMeshes(false) })
+            Pill(stringResource(R.string.option_yes), state.estimate.junctionMeshes, { actions.onJunctionMeshes(true) })
         }
         Advice(state, IssueKind.JUNCTION_MESHES_MISSING)
         Spacer(Modifier.height(8.dp))
@@ -116,7 +116,7 @@ private fun Advice(
     state: EditorUiState,
     kind: IssueKind,
 ) {
-    if (state.issues.none { it.kind == kind }) return
+    if (state.plan.issues.none { it.kind == kind }) return
     Text(issueText(kind), style = MaterialTheme.typography.bodyMedium, color = OtvesTheme.colors.warning)
 }
 

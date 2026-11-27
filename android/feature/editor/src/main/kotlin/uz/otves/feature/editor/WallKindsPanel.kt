@@ -51,16 +51,16 @@ internal fun WallKindsPanel(
     actions: EditorActions,
 ) {
     val colors = OtvesTheme.colors
-    val wall = state.selected as? Selected.WallPart
-    val current = if (wall != null) wall.wall.type else state.kind
-    val fresh = state.catalog.wallTypes.filter { template -> state.kinds.none { it.matches(template) } }
+    val wall = state.plan.selected as? Selected.WallPart
+    val current = if (wall != null) wall.wall.type else state.tools.kind
+    val fresh = state.catalog.wallTypes.filter { template -> state.plan.kinds.none { it.matches(template) } }
     val units = state.catalog.units
     Panel {
         PanelHeader(stringResource(R.string.wall_kind_title)) {
             PanelAction(stringResource(R.string.takeoff_close), { actions.onKinds(false) })
         }
         Column(modifier = Modifier.heightIn(max = ListHeight).verticalScroll(rememberScrollState()).selectableGroup()) {
-            state.kinds.forEach { kind ->
+            state.plan.kinds.forEach { kind ->
                 KindRow(
                     name = wallKindName(kind.role, kind.thickness),
                     made = layersText(kind.layers.map { (_, layer) -> LayerSpec(layer.function, layer.thickness, layer.unit) }, units),
@@ -174,7 +174,14 @@ private fun WallKindsPanelPreview() {
         )
     OtvesTheme {
         EditorScreen(
-            state = EditorUiState(ready = true, catalog = catalog, kinds = listOf(outside), kind = type, kindsOpen = true),
+            state =
+                EditorUiState(
+                    ready = true,
+                    catalog = catalog,
+                    plan = PlanState(kinds = listOf(outside)),
+                    tools = ToolState(kind = type),
+                    panel = PanelState(kindsOpen = true),
+                ),
             actions = EditorActions(),
         )
     }

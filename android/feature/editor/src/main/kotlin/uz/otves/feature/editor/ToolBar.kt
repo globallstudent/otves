@@ -42,10 +42,10 @@ internal fun Tools(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            RoundButton(OtvesIcons.Undo, stringResource(R.string.editor_undo), actions.onUndo, enabled = state.canUndo)
-            RoundButton(OtvesIcons.Redo, stringResource(R.string.editor_redo), actions.onRedo, enabled = state.canRedo)
+            RoundButton(OtvesIcons.Undo, stringResource(R.string.editor_undo), actions.onUndo, enabled = state.plan.canUndo)
+            RoundButton(OtvesIcons.Redo, stringResource(R.string.editor_redo), actions.onRedo, enabled = state.plan.canRedo)
             Spacer(Modifier.weight(1f))
-            ToolPill(state.tool, actions.onTool)
+            ToolPill(state.tools.tool, actions.onTool)
         }
     }
 }
@@ -98,7 +98,7 @@ private fun RunActions(
     state: EditorUiState,
     actions: EditorActions,
 ) {
-    if (state.tool != Tool.WALL && state.tool != Tool.PENCIL) return
+    if (state.tools.tool != Tool.WALL && state.tools.tool != Tool.PENCIL) return
     // Wraps, so no command hides past the edge of the screen.
     FlowRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = OtvesDimens.gutter),
@@ -107,19 +107,19 @@ private fun RunActions(
     ) {
         // Sketched walls have lengths nobody gave: this asks them one after another.
         val rough = state.rough.size
-        if (state.tool == Tool.PENCIL && rough > 0) {
+        if (state.tools.tool == Tool.PENCIL && rough > 0) {
             Pill(stringResource(R.string.sketch_refine, rough), false, actions.onRefine)
         }
         // The wall just drawn: its length is typed here, as read off the tape.
-        state.dimensions.find { it.id == state.drawn }?.let { drawn ->
+        state.plan.dimensions.find { it.id == state.tools.drawn }?.let { drawn ->
             Pill(stringResource(R.string.length_value, grouped(drawn.length)), false, { actions.onEditLength(drawn.id) })
         }
-        if (state.draft != null) {
+        if (state.tools.draft != null) {
             Pill(stringResource(R.string.measure_start), false, actions.onMeasure)
             Pill(stringResource(R.string.inspector_done), false, actions.onFinishWall)
-        } else if (state.tool == Tool.WALL) {
+        } else if (state.tools.tool == Tool.WALL) {
             // A room is entered by its clear size from a corner the next touch gives.
-            Pill(stringResource(R.string.room_by_size), state.roomPlacing, actions.onRoom)
+            Pill(stringResource(R.string.room_by_size), state.tools.roomPlacing, actions.onRoom)
         }
     }
 }

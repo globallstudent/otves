@@ -35,7 +35,8 @@ internal fun MaterialPanel(
     actions: EditorActions,
 ) {
     val colors = OtvesTheme.colors
-    val current = (state.selected as? Selected.WallPart)?.let { it.wall.unit } ?: state.material.takeIf { state.selected == null }
+    val current =
+        (state.plan.selected as? Selected.WallPart)?.let { it.wall.unit } ?: state.tools.material.takeIf { state.plan.selected == null }
     Panel {
         PanelHeader(stringResource(R.string.material_title)) {
             PanelAction(stringResource(R.string.takeoff_close), { actions.onMaterials(false) })

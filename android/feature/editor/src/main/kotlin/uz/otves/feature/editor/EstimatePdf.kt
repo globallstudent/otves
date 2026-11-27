@@ -93,7 +93,8 @@ internal class EstimatePdf(
      * How big the sheet's label text is on each storey's plan, from the bottom up; null for a
      * storey with no walls. The engine draws each storey for its size.
      */
-    fun labels(state: EditorUiState): List<LabelSize?> = state.storeys.map { storey -> place(storey)?.let { painter.labelSize(it.scale) } }
+    fun labels(state: EditorUiState): List<LabelSize?> =
+        state.plan.storeys.map { storey -> place(storey)?.let { painter.labelSize(it.scale) } }
 
     /** [drawings] are the storeys' drawings, asked with [labels]. */
     fun write(
@@ -155,7 +156,7 @@ internal class EstimatePdf(
             state: EditorUiState,
             drawings: List<Drawing?>,
         ) {
-            state.storeys.forEachIndexed { index, storey ->
+            state.plan.storeys.forEachIndexed { index, storey ->
                 val placed = place(storey)
                 val drawing = drawings.getOrNull(index)
                 if (placed != null && drawing != null) plan(placed, drawing, resources.getString(R.string.level_name, index + 1))
@@ -181,7 +182,7 @@ internal class EstimatePdf(
         }
 
         fun table(state: EditorUiState) {
-            val lines = state.takeoff.filter { it.amount != 0.0 }
+            val lines = state.estimate.takeoff.filter { it.amount != 0.0 }
             val bought = bought(lines)
             canvas.drawText(resources.getString(R.string.estimate_material), MARGIN, y + TEXT_SIZE, heading)
             y += TEXT_SIZE
@@ -194,12 +195,12 @@ internal class EstimatePdf(
                 room(ROW)
                 row(line, state, priced = line in bought)
             }
-            val sum = total(lines, state.prices) ?: return
+            val sum = total(lines, state.estimate.prices) ?: return
             room(ROW + LINE)
             y += TOTAL_SIZE + ROW_GAP
             canvas.drawText(resources.getString(R.string.takeoff_total), MARGIN, y, strong)
             right(moneyText(resources, sum), RIGHT, strong)
-            val unpriced = bought.count { it.item !in state.prices }
+            val unpriced = bought.count { it.item !in state.estimate.prices }
             if (unpriced > 0) {
                 y += LINE
                 canvas.drawText(resources.getString(R.string.takeoff_unpriced, unpriced), MARGIN, y, quiet)
@@ -217,8 +218,8 @@ internal class EstimatePdf(
             canvas.drawText(fit(itemName(resources, line.item, state.catalog.units), paint, NAME_WIDTH), MARGIN, y, paint)
             right("${amountText(line)} ${unitName(resources, line.unit)}", AMOUNT_RIGHT, paint)
             if (priced) {
-                state.prices[line.item]?.let { right(moneyText(resources, it), PRICE_RIGHT, paint) }
-                cost(line, state.prices)?.let { right(moneyText(resources, it), RIGHT, paint) }
+                state.estimate.prices[line.item]?.let { right(moneyText(resources, it), PRICE_RIGHT, paint) }
+                cost(line, state.estimate.prices)?.let { right(moneyText(resources, it), RIGHT, paint) }
             }
             y += ROW_GAP
             line()
