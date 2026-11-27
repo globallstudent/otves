@@ -97,17 +97,22 @@ jobs:
           echo "VERSION_CODE=$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$badging")" >> "$GITHUB_ENV"
 
       - name: Write the release files
+        env:
+          APK_LIMIT_BYTES: "20000000"
         run: |
           out="$RUNNER_TEMP/release"
           apk="otves-$VERSION.apk"
           mkdir -p "$out"
           cp app/build/outputs/apk/release/app-release.apk "$out/$apk"
+          # 0.1.0 went out at 49 MB with an unstripped engine; builders pay for every megabyte.
+          size="$(stat -c %s "$out/$apk")"
+          [ "$size" -le "$APK_LIMIT_BYTES" ] || { echo "::error::the APK is $size bytes, over $APK_LIMIT_BYTES"; exit 1; }
           jq -n \
             --argjson code "$VERSION_CODE" \
             --arg name "$VERSION" \
             --arg url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$apk" \
             --arg sha "$(sha256sum "$out/$apk" | cut -d' ' -f1)" \
-            --argjson size "$(stat -c %s "$out/$apk")" \
+            --argjson size "$size" \
             --slurpfile notes "release-notes/$VERSION.json" \
             '{schema: 1, versionCode: $code, versionName: $name, apk: {url: $url, sha256: $sha, size: $size}, notes: $notes[0].notes}' \
             > "$out/update.json"
