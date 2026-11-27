@@ -17,9 +17,17 @@ val keystore = providers.environmentVariable("OTVES_KEYSTORE").orNull
 
 android {
     namespace = "uz.otves.app"
+    // The app strips libdesign.so of its debug symbols as it packages it, with this NDK's tools.
+    // Without it a machine that has only this NDK ships the library whole: 41 MB in place of 2.
+    ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
         applicationId = "uz.otves.app"
+        // The engine is built for arm64 only; a library of another ABI from a dependency would
+        // let the app install on a phone where it cannot start.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
         // Grows with every release, as Android needs to take one as an update.
         versionCode = major * 10_000 + minor * 100 + patch
         versionName = appVersion
@@ -55,6 +63,11 @@ android {
 
     androidResources {
         generateLocaleConfig = true
+    }
+
+    lint {
+        // The app targets arm64-v8a phones only; x86_64 ChromeOS devices are not a target.
+        disable += "ChromeOsAbiSupport"
     }
 }
 
