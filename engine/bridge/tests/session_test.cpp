@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <span>
 #include <string>
@@ -274,6 +275,25 @@ class Request {
     const auto wall = schema::CreateWall(builder_, &on, nullptr, nullptr, 120, 2800);
     return add(Command::AddWallAcross,
                schema::CreateAddWallAcross(builder_, wall, &at, from, distance).Union());
+  }
+
+  // A wall of blocks 600 mm long and 200 mm high, laid as thick as the block is wide.
+  Request& add_block_wall(ElementId level, schema::PointMm start, schema::PointMm end,
+                          std::int64_t thickness) {
+    const schema::Uuid on = key(level);
+    const auto wall = schema::CreateWall(builder_, &on, &start, &end, thickness, 2800,
+                                         schema::LocationLine::Center, 600, thickness, 200);
+    return add(Command::AddWall, schema::CreateAddWall(builder_, wall).Union());
+  }
+
+  // A window 1 500 high over a 900 sill, or a door or an open way 2 100 high from the floor.
+  Request& add_opening(ElementId wall, std::int64_t offset, std::int64_t width,
+                       schema::OpeningKind kind = schema::OpeningKind::Window) {
+    const schema::Uuid in = key(wall);
+    const bool window = kind == schema::OpeningKind::Window;
+    const auto opening = schema::CreateOpening(builder_, &in, offset, width, window ? 1500 : 2100,
+                                               window ? 900 : 0, kind);
+    return add(Command::AddOpening, schema::CreateAddOpening(builder_, opening).Union());
   }
 
   // A room `width` by `depth` clear, right of the touch and above it, of partitions 120 mm
@@ -2119,6 +2139,92 @@ TEST(Session, ARoomIsBuiltFromItsClearSizeWithTheWallsAlreadyThere) {
   const auto& undone = respond(session, Request{}.undo().bytes());
   EXPECT_EQ(undone.changes()->size(), 2U);
   EXPECT_EQ(undone.changes()->Get(0)->element_type(), schema::Element::NONE);
+}
+
+// «План3», one of the architects' sheets the editor is to match (docs/roadmap-drawing.md), laid
+// from aerated blocks 600 by 200 on face: outer walls 400 thick, the bearing wall 300 and
+// partitions 150, as the sheet has them. Returns the walls in the order they are drawn.
+std::vector<ElementId> draw_plan3(Session& session, ElementId level) {
+  const auto& built = respond(session, Request{}
+                                           .add_block_wall(level, {200, 200}, {8100, 200}, 400)
+                                           .add_block_wall(level, {8100, 200}, {8100, 12600}, 400)
+                                           .add_block_wall(level, {8100, 12600}, {200, 12600}, 400)
+                                           .add_block_wall(level, {200, 12600}, {200, 200}, 400)
+                                           .add_block_wall(level, {3650, 12600}, {3650, 200}, 300)
+                                           .add_block_wall(level, {200, 4225}, {3650, 4225}, 150)
+                                           .add_block_wall(level, {200, 2075}, {3650, 2075}, 150)
+                                           .add_block_wall(level, {3650, 9025}, {8100, 9025}, 150)
+                                           .add_block_wall(level, {5025, 9025}, {5025, 1725}, 150)
+                                           .add_block_wall(level, {5025, 4875}, {8100, 4875}, 150)
+                                           .add_block_wall(level, {5025, 1725}, {5625, 1725}, 150)
+                                           .add_block_wall(level, {5625, 1725}, {5625, 200}, 150)
+                                           .bytes());
+  std::vector<ElementId> walls;
+  for (const schema::CommandResult* result : *built.results()) {
+    EXPECT_EQ(result->error(), schema::ErrorCode::None);
+    walls.push_back(to_id(result->created()));
+  }
+  return walls;
+}
+
+// The plan's windows, doors and the open way from the kitchen-living room to the corridor.
+std::vector<std::uint8_t> cut_plan3(const std::vector<ElementId>& walls) {
+  return Request{}
+      .add_opening(walls[0], 675, 1250)
+      .add_opening(walls[0], 3750, 1040, schema::OpeningKind::Door)
+      .add_opening(walls[0], 5975, 1250)
+      .add_opening(walls[1], 5950, 1600)
+      .add_opening(walls[2], 950, 1600)
+      .add_opening(walls[2], 5350, 1600)
+      .add_opening(walls[3], 1700, 1800)
+      .add_opening(walls[3], 5200, 1600)
+      .add_opening(walls[3], 9150, 600)
+      .add_opening(walls[4], 3600, 3200, schema::OpeningKind::Empty)
+      .add_opening(walls[4], 9400, 900, schema::OpeningKind::Door)
+      .add_opening(walls[4], 10750, 800, schema::OpeningKind::Door)
+      .add_opening(walls[7], 300, 900, schema::OpeningKind::Door)
+      .add_opening(walls[8], 3025, 900, schema::OpeningKind::Door)
+      .add_opening(walls[8], 4375, 900, schema::OpeningKind::Door)
+      .bytes();
+}
+
+// The face that lintels of these lengths take, in m²: a bar lintel is 140 mm high.
+double lintel_face(std::initializer_list<double> lengths) {
+  double face = 0.0;
+  for (const double length : lengths) {
+    face += length * 0.14;
+  }
+  return face;
+}
+
+TEST(Session, TheReferencePlanCountsTheBlocksItsWallsTake) {
+  Session session{kDevice};
+  ASSERT_EQ(respond(session, load_all_content()).results()->Get(0)->error(),
+            schema::ErrorCode::None);
+  const std::vector<ElementId> walls = draw_plan3(session, add_level(session));
+  ASSERT_EQ(walls.size(), 12U);
+  const auto& cut = respond(session, cut_plan3(walls));
+  ASSERT_NE(cut.takeoff(), nullptr);
+  ASSERT_EQ(cut.takeoff_error(), schema::ErrorCode::None);
+
+  // By hand, from the sheet. The walls stand on what the rooms leave of 8.3 by 12.8 m: the
+  // outer ones on 106.24 - 7.5 * 12.0 m², the bearing wall on 0.3 * 12.0 m², the partitions on
+  // the rest of the 23.1775 m². They are 2.8 m high. Each opening comes off the face, and over
+  // it a lintel that bears 350 mm on each side, or 250 mm over an opening of up to 1 500 mm
+  // (КМК 2.01.03-19, 3.5.10). A block takes 0.61 by 0.212 m of face with its joints, and 3 %
+  // more are bought.
+  const double cell = 0.610 * 0.212;
+  const double outer = (16.24 * 2.8 / 0.4) - 16.95 - 2.184 -
+                       lintel_face({1.75, 1.75, 2.3, 2.3, 2.3, 2.3, 2.5, 1.1, 1.54});
+  const double bearing = (3.6 * 2.8 / 0.3) - 6.72 - 1.89 - 1.68 - lintel_face({3.9, 1.4, 1.3});
+  const double partitions = (3.3375 * 2.8 / 0.15) - (3 * 1.89) - lintel_face({1.4, 1.4, 1.4});
+  EXPECT_NEAR(amount(cut, "masonry_unit.600x400x200"), outer / cell * 1.03, 1.0);
+  EXPECT_NEAR(amount(cut, "masonry_unit.600x300x200"), bearing / cell * 1.03, 1.0);
+  EXPECT_NEAR(amount(cut, "masonry_unit.600x150x200"), partitions / cell * 1.03, 1.0);
+  // The count is rounded up to a whole block.
+  EXPECT_EQ(amount(cut, "masonry_unit.600x400x200"), 734.0);
+  EXPECT_EQ(amount(cut, "masonry_unit.600x300x200"), 179.0);
+  EXPECT_EQ(amount(cut, "masonry_unit.600x150x200"), 447.0);
 }
 
 }  // namespace

@@ -14,7 +14,7 @@ The goal, the reference plans and the designs are described in [research/Chizma 
 | Dimensions | The plan's overall size outside; the selected room's clear sizes and a chain along each side with openings; a tap on a number types a new value; a partition goes across a room at a typed distance from one of its walls; a room is built from its clear size at a touched corner (ADR 0016) | A room built against an outer corner is not flush with it; a room cannot be turned off the plan's axes |
 | Openings | A door hangs on either edge and opens to either side; openings of one size share a mark; a selected opening has its chain and can be centred; an opening takes a width, a height and a height over the floor of the builder's own; a sheet lists the marks with their sizes and counts (ADR 0017) | No two-leaf doors |
 | Editor | `JobSession` talks to the engine, writes the job file and mirrors the model. `EditorViewModel` keeps the conversation with the builder and maps the model to an `EditorUiState` of four parts: the plan, the tools, the open panel and the estimate. The screen is split into tool bar, panels and number pads | The view model is still one class of about 1 700 lines |
-| Tests | GoogleTest units with seeded random plans and strokes, Kotlin unit tests, three instrumented suites, one of the reference plans as a golden test of the drawing | No golden take-off, no screenshot tests; the benchmark is not run in CI |
+| Tests | GoogleTest units with seeded random plans and strokes, Kotlin unit tests, three instrumented suites, one of the reference plans as a golden test of the drawing, of the take-off and of the job file | No screenshot tests; the benchmark is not run in CI |
 
 ## Target shape
 
@@ -170,7 +170,7 @@ A new element type touches the model tuple, the op variant, `Document::plan` and
 
 | Gate | What it adds to today's CI |
 |---|---|
-| Golden jobs | `testdata/` holds the reference plans as jobs with expected wall lengths, room areas and take-off lines. `План3` must give 25,1, 13,5, 11,2 and 11,5 m². Built for `План3` as `drafting/tests/golden_plan3_test.cpp`: its walls, rooms and openings give those areas, the sheet's sizes and its opening schedule. Jobs in `testdata/` and take-off lines are open |
+| Golden jobs | `testdata/` holds the reference plans as jobs with expected wall lengths, room areas and take-off lines. `План3` must give 25,1, 13,5, 11,2 and 11,5 m². Built for `План3` as `drafting/tests/golden_plan3_test.cpp`: its walls, rooms and openings give those areas, the sheet's sizes and its opening schedule. Its take-off is checked in `bridge/tests/session_test.cpp`: laid from aerated blocks, the plan takes 734, 179 and 447 blocks, as counted by hand from the sheet with its openings and lintels. Jobs in `testdata/` are open |
 | Property tests | Seeded random plans in GoogleTest: footprints and rooms tile the outline; `straighten` returns the walls a noisy stroke was drawn along. Built: `FindSpaces.WallsAndFloorsTileAnyGridOfRooms`, `Straighten.ShakyRoomsComeBackAsDrawn` |
 | Bridge | Every new command and result in `session_test.cpp`, valid and corrupt |
 | Job file | A migration test per version; an instrumented test that saves and reopens a golden job. Built: `GoldenJobTest` draws `План3` in the real engine on a device, reopens its file in another engine and gets the same model and the same sheet, number for number |
