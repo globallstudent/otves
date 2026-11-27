@@ -427,8 +427,10 @@ internal class EditorViewModel(
     engine: Engine,
     loadContent: suspend () -> EngineCommand.LoadContent,
     loadCatalog: suspend () -> Catalog,
-    job: JobStore,
+    private val job: JobStore,
     private val prices: Prices,
+    /** Paints a storey as the PNG the jobs list shows; null for one with no walls. */
+    private val preview: suspend (Drawing) -> ByteArray? = { null },
 ) : ViewModel() {
     private val state = MutableStateFlow(EditorUiState())
     val uiState: StateFlow<EditorUiState> = state.asStateFlow()
@@ -497,6 +499,23 @@ internal class EditorViewModel(
     }
 
     override fun onCleared() = session.close()
+
+    /**
+     * Writes what the jobs list shows of the job as it is now: the floor area of every storey's
+     * rooms, the estimate at the builder's prices and a picture of the shown storey. The screen
+     * asks for it when it is left.
+     */
+    suspend fun keepCard() {
+        val current = state.value
+        if (!current.ready) return
+        val area =
+            session.inTurn {
+                session
+                    .ask(model.levelsFromBottom().map { EngineCommand.Draw(it, label.height, label.digit) })
+                    .sumOf { answer -> (answer as? CommandResult.Done)?.drawing?.rooms?.sumOf { it.area } ?: 0.0 }
+            }
+        job.keepCard(area, total(current.estimate.takeoff, current.estimate.prices), preview(current.plan.drawing))
+    }
 
     /**
      * A tap on the plan. The select tool picks what is under it; with the wall tool it is a point

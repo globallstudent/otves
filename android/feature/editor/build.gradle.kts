@@ -14,6 +14,7 @@ dependencies {
     implementation(projects.data.catalog)
     implementation(projects.data.project)
     implementation(projects.engineBridge)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)

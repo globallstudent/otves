@@ -1,5 +1,6 @@
 package uz.otves.feature.editor
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,9 +27,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -36,8 +39,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import uz.otves.core.designsystem.OtvesDimens
 import uz.otves.core.designsystem.OtvesIcons
 import uz.otves.core.designsystem.OtvesTheme
@@ -89,13 +97,35 @@ fun EditorRoute(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val viewModel = viewModel { EditorViewModel(engine, loadContent, loadCatalog, openJob(), prices) }
+    val resources = LocalResources.current
+    val viewModel =
+        viewModel {
+            val picture = PlanPreview(RoomLabels(resources))
+            EditorViewModel(engine, loadContent, loadCatalog, openJob(), prices) { drawing ->
+                withContext(Dispatchers.Default) { picture.png(drawing) }
+            }
+        }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // The jobs list shows the job as it was left, so its card is written on the way out, and
+    // when the app goes to the back, where it may be stopped for good.
+    val scope = rememberCoroutineScope()
+    var leaving by remember { mutableStateOf(false) }
+    val leave = {
+        if (!leaving) {
+            leaving = true
+            scope.launch {
+                viewModel.keepCard()
+                onBack()
+            }
+        }
+    }
+    BackHandler { leave() }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { scope.launch { viewModel.keepCard() } }
     EditorScreen(
         state = state,
         actions =
             EditorActions(
-                onBack = onBack,
+                onBack = { leave() },
                 onTap = viewModel::tap,
                 onAim = viewModel::aim,
                 onAimCancel = viewModel::cancelAim,

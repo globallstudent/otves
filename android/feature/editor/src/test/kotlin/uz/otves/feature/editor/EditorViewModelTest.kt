@@ -49,6 +49,7 @@ import uz.otves.engine.IssueKind
 import uz.otves.engine.LayerFunction
 import uz.otves.engine.LayerSpec
 import uz.otves.engine.Level
+import uz.otves.engine.ListedRoom
 import uz.otves.engine.LocationLine
 import uz.otves.engine.LogEntry
 import uz.otves.engine.MasonryUnitKind
@@ -123,6 +124,9 @@ class EditorViewModelTest {
 
         /** What the next aim answers instead of the finger's own point. */
         var aimNext: Aimed? = null
+
+        /** The floor of each storey's one room in m², for a job whose walls close rooms. */
+        var roomArea: Double? = null
 
         /** Requests wait for it, as they wait for the engine thread. */
         var hold: CompletableDeferred<Unit>? = null
@@ -518,6 +522,7 @@ class EditorViewModelTest {
                             nowhere,
                         )
                     },
+                rooms = roomArea?.let { listOf(ListedRoom(null, RoomKind.ROOM, it)) }.orEmpty(),
             )
         }
 
@@ -544,7 +549,18 @@ class EditorViewModelTest {
         val recorded = mutableListOf<EngineResponse>()
         var closed = false
 
+        /** The card kept last: the area, the cost and the picture. */
+        var card: Triple<Double, Money?, ByteArray?>? = null
+
         override suspend fun load(): SavedJob = saved
+
+        override suspend fun keepCard(
+            area: Double,
+            cost: Money?,
+            preview: ByteArray?,
+        ) {
+            card = Triple(area, cost, preview)
+        }
 
         override suspend fun record(response: EngineResponse) {
             recorded += response
@@ -2020,6 +2036,32 @@ class EditorViewModelTest {
         viewModel.undo()
         assertThat(viewModel.uiState.value.estimate.conditions).isEqualTo(Conditions())
     }
+
+    @Test
+    fun theJobsCardSumsTheStoreysAndTheEstimate() =
+        runTest {
+            val picture = byteArrayOf(7)
+            val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices) { picture }
+            viewModel.buildWall()
+            viewModel.addLevel()
+            prices.set("masonry_unit", Money(145_000, Currency.UZS))
+            engine.roomArea = 24.5
+
+            viewModel.keepCard()
+
+            // Two storeys with a room each; 100 pieces at 1 450 sum.
+            assertThat(store.card).isEqualTo(Triple(49.0, Money(14_500_000, Currency.UZS), picture))
+        }
+
+    @Test
+    fun aJobWithNothingPricedKeepsACardWithoutACost() =
+        runTest {
+            val viewModel = EditorViewModel(engine, { content }, { catalog }, store, prices)
+
+            viewModel.keepCard()
+
+            assertThat(store.card).isEqualTo(Triple(0.0, null, null))
+        }
 
     @Test
     fun aTypedPriceGoesToThePriceListAndPricesTheLine() {
