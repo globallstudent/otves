@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uz.otves.core.model.ElementId
+import uz.otves.core.model.Money
 import uz.otves.engine.Conditions
 import uz.otves.engine.EngineElement
 import uz.otves.engine.EngineResponse
@@ -16,6 +17,7 @@ import uz.otves.engine.Wall
 import uz.otves.engine.WallLayer
 import uz.otves.engine.WallType
 import java.io.File
+import java.io.IOException
 import kotlin.random.Random
 import kotlin.uuid.Uuid
 import uz.otves.engine.Room as RoomName
@@ -26,6 +28,8 @@ public data class JobSummary(
     public val name: String,
     /** Unix milliseconds of the last change. */
     public val updatedAt: Long,
+    /** Null until the job has been edited by a version that keeps cards. */
+    public val card: JobCard? = null,
 )
 
 /** A saved job as the editor opens it: its name, its elements and the newest stamp of its log. */
@@ -41,6 +45,14 @@ public interface JobStore : AutoCloseable {
 
     /** Writes the response's element changes and log groups in one transaction. */
     public suspend fun record(response: EngineResponse)
+
+    /** Keeps what the jobs list shows of this job (see [JobCard]); [preview] is a PNG of its plan. */
+    public suspend fun keepCard(
+        area: Double,
+        cost: Money?,
+        preview: ByteArray?,
+    ) {
+    }
 }
 
 /** The jobs on this phone. */
@@ -105,11 +117,14 @@ public class JobFiles(
             directory.listFiles { file -> file.name.startsWith(name) }.orEmpty().forEach { it.delete() }
         }
 
-    override fun open(id: Uuid): OpenJob = OpenJob(database(file(id.toString())), now)
+    override fun open(id: Uuid): OpenJob {
+        val file = file(id.toString())
+        return OpenJob(database(file), now, JobCardFiles(file), io)
+    }
 
     private suspend fun summary(file: File): JobSummary? =
         database(file).using { database ->
-            database.jobs().job()?.let { JobSummary(Uuid.parse(it.id), it.name, it.updatedAt) }
+            database.jobs().job()?.let { JobSummary(Uuid.parse(it.id), it.name, it.updatedAt, JobCardFiles(file).read()) }
         }
 
     private fun file(id: String): File = File(directory, "$id.$EXTENSION")
@@ -153,6 +168,8 @@ private const val VARIANT = Long.MIN_VALUE
 public class OpenJob internal constructor(
     private val database: ProjectDatabase,
     private val now: () -> Long,
+    private val card: JobCardFiles,
+    private val io: CoroutineDispatcher,
 ) : JobStore {
     override suspend fun load(): SavedJob {
         val jobs = database.jobs()
@@ -188,6 +205,19 @@ public class OpenJob internal constructor(
             )
         database.jobs().record(recorded, now())
     }
+
+    override suspend fun keepCard(
+        area: Double,
+        cost: Money?,
+        preview: ByteArray?,
+    ): Unit =
+        withContext(io) {
+            try {
+                card.write(area, cost, preview)
+            } catch (_: IOException) {
+                // A full phone must not stop the builder leaving the job; the list shows it without a card.
+            }
+        }
 
     internal suspend fun groups(): List<OpGroupRow> = database.jobs().groups()
 
