@@ -1,25 +1,22 @@
 package uz.otves.feature.projects
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -29,30 +26,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import uz.otves.core.designsystem.OtvesDimens
+import uz.otves.core.designsystem.OtvesIcons
 import uz.otves.core.designsystem.OtvesTheme
+import uz.otves.core.model.Currency
+import uz.otves.core.model.Money
+import uz.otves.data.project.JobCard
 import uz.otves.data.project.JobSummary
 import uz.otves.data.project.Jobs
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.util.Locale
 import kotlin.uuid.Uuid
-import uz.otves.core.designsystem.R as DesignR
 
 /** The jobs on this phone; [onOpen] opens one in the editor, also right after it is created. */
 @Composable
@@ -92,14 +83,16 @@ internal fun ProjectsScreen(
 ) {
     var naming by rememberSaveable { mutableStateOf(false) }
     // Ids as text, so they survive recreation.
+    var actionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var renaming by rememberSaveable { mutableStateOf<String?>(null) }
     var deleting by rememberSaveable { mutableStateOf<String?>(null) }
-    Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.canvas) {
+    Surface(modifier = modifier.fillMaxSize(), color = OtvesTheme.colors.surface) {
         Column(modifier = Modifier.safeDrawingPadding()) {
             Text(
                 text = stringResource(R.string.projects_title),
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(horizontal = OtvesDimens.gutter, vertical = 12.dp),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = OtvesDimens.gutter, end = OtvesDimens.gutter, top = 20.dp, bottom = 12.dp),
             )
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when {
@@ -108,32 +101,44 @@ internal fun ProjectsScreen(
                     }
 
                     state.jobs.isEmpty() -> {
-                        EmptyProjects(modifier = Modifier.align(Alignment.Center))
+                        EmptyProjects()
                     }
 
                     else -> {
-                        JobList(
-                            jobs = state.jobs,
-                            onOpen = onOpen,
-                            onRename = { renaming = it.toString() },
-                            onDelete = { deleting = it.toString() },
-                        )
+                        JobList(jobs = state.jobs, onOpen = onOpen, onActions = { actionsFor = it.toString() })
                     }
                 }
             }
+            HorizontalDivider(color = OtvesTheme.colors.divider)
             Button(
                 onClick = { naming = true },
                 enabled = !state.loading,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(OtvesDimens.gutter)
+                        .padding(start = OtvesDimens.gutter, end = OtvesDimens.gutter, top = 12.dp, bottom = OtvesDimens.gutter)
                         .height(OtvesDimens.primaryTarget),
             ) {
+                Icon(OtvesIcons.Plus, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.size(10.dp))
                 Text(stringResource(R.string.projects_new), style = MaterialTheme.typography.titleMedium)
             }
         }
+    }
+    state.jobs.find { it.id.toString() == actionsFor }?.let { job ->
+        JobActionsSheet(
+            job = job,
+            onRename = {
+                actionsFor = null
+                renaming = job.id.toString()
+            },
+            onDelete = {
+                actionsFor = null
+                deleting = job.id.toString()
+            },
+            onDismiss = { actionsFor = null },
+        )
     }
     if (naming) {
         NameDialog(
@@ -178,91 +183,37 @@ internal fun ProjectsScreen(
     }
 }
 
-@Composable
-private fun EmptyProjects(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.padding(OtvesDimens.gutter),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Image(painter = painterResource(DesignR.drawable.ic_otves_mark), contentDescription = null)
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = stringResource(R.string.projects_empty_title),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.projects_empty_body),
-            style = MaterialTheme.typography.bodyLarge,
-            color = OtvesTheme.colors.inkSecondary,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-// A tap opens a job; a long press offers to rename or delete it.
+// The job worked on last stands first, as a card with its plan; the others follow as rows.
 @Composable
 private fun JobList(
     jobs: List<JobSummary>,
     onOpen: (Uuid) -> Unit,
-    onRename: (Uuid) -> Unit,
-    onDelete: (Uuid) -> Unit,
+    onActions: (Uuid) -> Unit,
 ) {
-    // The language of the strings, not of the phone: Russian text gets a Russian date.
-    val locale = Locale.forLanguageTag(stringResource(R.string.projects_date_locale))
-    val dates = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale)
-    var menuFor by remember { mutableStateOf<Uuid?>(null) }
-    LazyColumn {
-        items(jobs, key = { it.id.toString() }) { job ->
-            Box {
-                JobRow(job, dates, onOpen = { onOpen(job.id) }, onMenu = { menuFor = job.id })
-                DropdownMenu(expanded = menuFor == job.id, onDismissRequest = { menuFor = null }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.projects_rename)) },
-                        onClick = {
-                            menuFor = null
-                            onRename(job.id)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.projects_delete)) },
-                        onClick = {
-                            menuFor = null
-                            onDelete(job.id)
-                        },
-                    )
-                }
-            }
-            HorizontalDivider(color = OtvesTheme.colors.divider, modifier = Modifier.padding(horizontal = OtvesDimens.gutter))
+    val latest = jobs.first()
+    val others = jobs.drop(1)
+    LazyColumn(contentPadding = PaddingValues(bottom = 12.dp)) {
+        item(key = latest.id.toString()) {
+            LatestJobCard(
+                job = latest,
+                onOpen = { onOpen(latest.id) },
+                onActions = { onActions(latest.id) },
+                modifier = Modifier.padding(horizontal = OtvesDimens.gutter),
+            )
         }
-    }
-}
-
-@Composable
-private fun JobRow(
-    job: JobSummary,
-    dates: DateTimeFormatter,
-    onOpen: () -> Unit,
-    onMenu: () -> Unit,
-) {
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = RowHeight)
-                .combinedClickable(onClick = onOpen, onLongClick = onMenu)
-                .padding(horizontal = OtvesDimens.gutter, vertical = 12.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(job.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        val changed = Instant.ofEpochMilli(job.updatedAt).atZone(ZoneId.systemDefault()).format(dates)
-        Text(
-            text = stringResource(R.string.projects_changed, changed),
-            style = MaterialTheme.typography.bodyMedium,
-            color = OtvesTheme.colors.inkSecondary,
-        )
+        if (others.isNotEmpty()) {
+            item(key = "all") {
+                Text(
+                    text = stringResource(R.string.projects_all),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = OtvesTheme.colors.inkSecondary,
+                    modifier = Modifier.padding(start = OtvesDimens.gutter, end = OtvesDimens.gutter, top = 24.dp, bottom = 4.dp),
+                )
+            }
+            items(others, key = { it.id.toString() }) { job ->
+                JobRow(job = job, onOpen = { onOpen(job.id) }, onActions = { onActions(job.id) })
+            }
+        }
     }
 }
 
@@ -298,9 +249,14 @@ private fun NameDialog(
     )
 }
 
-private val RowHeight = 64.dp
+private fun previewJob(
+    number: Long,
+    name: String,
+    updatedAt: Long,
+    card: JobCard? = null,
+) = JobSummary(Uuid.fromLongs(0x019a5f00_0000_7000L, number), name, updatedAt, card)
 
-@Preview(widthDp = 400, heightDp = 760)
+@Preview(widthDp = 390, heightDp = 844)
 @Composable
 private fun ProjectsScreenPreview() {
     OtvesTheme {
@@ -310,8 +266,10 @@ private fun ProjectsScreenPreview() {
                     loading = false,
                     jobs =
                         listOf(
-                            JobSummary(Uuid.parse("019a5f00-0000-7000-8000-000000000001"), "Дом на Чиланзаре", 1_762_600_000_000),
-                            JobSummary(Uuid.parse("019a5f00-0000-7000-8000-000000000002"), "Баня", 1_762_400_000_000),
+                            previewJob(1, "Дом на Чиланзаре", 1_762_600_000_000, JobCard(138.6, Money(4_860_000_000, Currency.UZS), null)),
+                            previewJob(2, "Баня в Кибрае", 1_762_400_000_000, JobCard(24.0, Money(980_000_000, Currency.UZS), null)),
+                            previewJob(3, "Объект 5", 1_762_300_000_000),
+                            previewJob(4, "Забор у Рустама", 1_762_100_000_000, JobCard(0.0, Money(1_840_000_000, Currency.UZS), null)),
                         ),
                 ),
             onOpen = {},
@@ -322,7 +280,7 @@ private fun ProjectsScreenPreview() {
     }
 }
 
-@Preview(widthDp = 400, heightDp = 760)
+@Preview(widthDp = 390, heightDp = 844)
 @Composable
 private fun EmptyProjectsPreview() {
     OtvesTheme {

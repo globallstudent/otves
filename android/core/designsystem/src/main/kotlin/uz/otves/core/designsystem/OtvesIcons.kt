@@ -29,6 +29,9 @@ public object OtvesIcons {
     public val Sheet: ImageVector = icon("Sheet", "M6 3h12v18H6zM9.5 8h5M9.5 12h3")
     public val Ruler: ImageVector = icon("Ruler", "M3 8h18v8H3zM7 8v3M11 8v4M15 8v3M19 8v4")
     public val Dot: ImageVector = icon("Dot", "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6")
+    public val More: ImageVector =
+        icon("More", "M12 4.5a.5.5 0 1 0 0 1a.5.5 0 1 0 0-1M12 11.5a.5.5 0 1 0 0 1a.5.5 0 1 0 0-1M12 18.5a.5.5 0 1 0 0 1a.5.5 0 1 0 0-1")
+    public val Trash: ImageVector = icon("Trash", "M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13")
 
     private fun icon(
         name: String,

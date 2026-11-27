@@ -14,6 +14,25 @@
     <string name="projects_save">Сохранить</string>
     <string name="projects_delete_title">Удалить «%1$s»?</string>
     <string name="projects_delete_body">Объект и все его данные будут удалены с телефона.</string>
+    <string name="projects_all">Все объекты</string>
+    <string name="projects_actions">Действия: %1$s</string>
+    <string name="projects_plan_empty">План пока пустой</string>
+    <string name="projects_area">%1$s\u00A0м²</string>
+    <string name="projects_money">%1$s\u00A0сум</string>
+    <string name="projects_money_millions">%1$s\u00A0млн\u00A0сум</string>
+    <string name="projects_changed_today">Изменён сегодня в %1$s</string>
+    <string name="projects_changed_yesterday">Изменён вчера в %1$s</string>
+    <string name="projects_today">Сегодня в %1$s</string>
+    <string name="projects_yesterday">Вчера в %1$s</string>
+    <string name="projects_summary_two">%1$s, %2$s. %3$s</string>
+    <string name="projects_summary_one">%1$s. %2$s</string>
+    <string name="projects_step_plan">Нарисуйте план</string>
+    <string name="projects_step_plan_text">Пальцем или по замерам с рулетки</string>
+    <string name="projects_step_materials">Выберите материалы</string>
+    <string name="projects_step_materials_text">Кирпич или блок и свои цены на них</string>
+    <string name="projects_step_estimate">Получите смету</string>
+    <string name="projects_step_estimate_text">Отвес сам посчитает количество и сумму</string>
+    <string name="projects_empty_picture">Начатый план: первая стена длиной 12 700</string>
     <!-- The locale these strings are in, so dates match the text. -->
     <string name="projects_date_locale">ru</string>
 </resources>

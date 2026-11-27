@@ -14,6 +14,25 @@
     <string name="projects_save">Сақлаш</string>
     <string name="projects_delete_title">«%1$s» ўчирилсинми?</string>
     <string name="projects_delete_body">Объект ва унинг барча маълумотлари телефондан ўчирилади.</string>
+    <string name="projects_all">Барча объектлар</string>
+    <string name="projects_actions">Амаллар: %1$s</string>
+    <string name="projects_plan_empty">Режа ҳали бўш</string>
+    <string name="projects_area">%1$s\u00A0м²</string>
+    <string name="projects_money">%1$s\u00A0сўм</string>
+    <string name="projects_money_millions">%1$s\u00A0млн\u00A0сўм</string>
+    <string name="projects_changed_today">Бугун %1$s да ўзгартирилган</string>
+    <string name="projects_changed_yesterday">Кеча %1$s да ўзгартирилган</string>
+    <string name="projects_today">Бугун %1$s да</string>
+    <string name="projects_yesterday">Кеча %1$s да</string>
+    <string name="projects_summary_two">%1$s, %2$s. %3$s</string>
+    <string name="projects_summary_one">%1$s. %2$s</string>
+    <string name="projects_step_plan">Режани чизинг</string>
+    <string name="projects_step_plan_text">Бармоқ билан ёки рулетка ўлчамлари бўйича</string>
+    <string name="projects_step_materials">Материалларни танланг</string>
+    <string name="projects_step_materials_text">Ғишт ёки блок ва уларнинг ўз нархларингиз</string>
+    <string name="projects_step_estimate">Сметани олинг</string>
+    <string name="projects_step_estimate_text">Отвес миқдор ва суммани ўзи ҳисоблайди</string>
+    <string name="projects_empty_picture">Бошланган режа: узунлиги 12 700 бўлган биринчи девор</string>
     <!-- The locale these strings are in, so dates match the text. -->
     <string name="projects_date_locale">uz-Cyrl</string>
 </resources>
